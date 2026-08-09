@@ -67,6 +67,15 @@ CREATE INDEX idx_title_id ON games(title_id);
 CREATE INDEX idx_sort ON games(sort_title);
 CREATE INDEX idx_genre ON genres(genre);
 CREATE INDEX idx_media ON media(nsuid);
+-- Под остальные сортировки из ORDER_BY[] в app/source/catalog.cpp. Без них
+-- «сначала новые» и «по размеру» строили временное B-дерево на 3489 строк при
+-- каждом движении фильтра. Вторым ключом всюду sort_title — он же идёт вторым
+-- в самих запросах, поэтому индекс покрывает порядок целиком.
+CREATE INDEX idx_year ON games(release_year DESC, sort_title);
+-- Индекс по выражению, а не по колонке: ведущий член сортировки —
+-- `rom_size_bytes IS NULL` (игры с неизвестным размером уходят в конец), и по
+-- обычному индексу такой порядок не берётся.
+CREATE INDEX idx_size ON games(rom_size_bytes IS NULL, rom_size_bytes, sort_title);
 
 CREATE VIRTUAL TABLE games_fts USING fts5(
   title, nsuid UNINDEXED, tokenize='unicode61'

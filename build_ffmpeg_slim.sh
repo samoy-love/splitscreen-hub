@@ -40,7 +40,10 @@ cd "ffmpeg-$VER"
 source /opt/devkitpro/switchvars.sh
 
 if [ ! -f config.h ]; then
-  ./configure --prefix="$PREFIX" --enable-gpl --disable-shared --enable-static \
+  # Без --enable-gpl: ни один включённый ниже компонент (h264, aac, mp3,
+  # pcm_s16le, swscale, swresample) не является GPL-only, а флаг переводил бы
+  # статически слинкованные libav* в GPLv2+ и тянул бы это на весь .nro.
+  ./configure --prefix="$PREFIX" --disable-shared --enable-static \
     --cross-prefix=aarch64-none-elf- --enable-cross-compile \
     --arch=aarch64 --cpu=cortex-a57 --target-os=horizon --enable-pic \
     --extra-cflags='-D__SWITCH__ -D_GNU_SOURCE -O2 -march=armv8-a -mtune=cortex-a57 -mtp=soft -fPIC -ftls-model=local-exec' \
