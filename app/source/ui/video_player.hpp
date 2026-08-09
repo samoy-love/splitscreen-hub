@@ -20,17 +20,20 @@
 /// среде за разумное время. switch-ffmpeg — готовый пакет из pacman, поэтому
 /// плеер написан поверх него напрямую (avformat/avcodec/swscale/swresample).
 ///
-/// Ролик сначала докачивается целиком в файловый кэш на SD (тот же кэш, что
-/// у скриншотов), а затем воспроизводится с диска — это проще и надёжнее,
-/// чем стриминг чанками поверх нестабильного Wi-Fi.
+/// Ролик воспроизводится потоком: показ начинается, как только разобран
+/// заголовок, а байты попутно оседают в файловом кэше на SD (тот же кэш, что у
+/// скриншотов). Второй просмотр идёт уже с диска и без сети — см. http_stream.hpp.
 class VideoDecoder
 {
   public:
     VideoDecoder();
     ~VideoDecoder();
 
-    /// Открывает локальный файл и запускает декодирование в фоновом потоке.
-    void start(const std::string& localPath);
+    /// Запускает декодирование в фоновом потоке.
+    /// Если файл уже в кэше — читается с диска, иначе тянется из сети
+    /// потоком, который попутно наполняет кэш (см. http_stream.hpp).
+    void start(const std::string& url, const std::string& cachePath,
+               std::atomic_bool* alive);
 
     /// Останавливает поток и освобождает все ресурсы. Безопасно вызывать
     /// многократно.
@@ -49,11 +52,13 @@ class VideoDecoder
     bool isReady() const { return firstFrameDecoded; }
     bool hasError() const { return error; }
 
-    /// Текущая позиция в секундах — от неё отсчитывается перемотка.
-    double position() const { return currentPts; }
+    /// Связь оборвалась посреди ролика и идёт попытка продолжить.
+    bool isReconnecting() const { return reconnecting; }
+    int reconnectAttempt() const { return reconnectTry; }
+
 
   private:
-    void decodeLoop(std::string path);
+    void decodeLoop(std::string url, std::string cachePath, std::atomic_bool* alive);
 
     std::thread worker;
     std::atomic_bool running { false };
@@ -65,6 +70,12 @@ class VideoDecoder
     std::atomic<double> seekTargetSeconds { 0.0 };
     std::atomic_bool seekRequested { false };
     std::atomic<double> currentPts { 0.0 };
+    /// Активный сетевой поток, если ролик не из кэша. Нужен, чтобы
+    /// сообщить ему о паузе: иначе соединение умирает по таймауту, пока
+    /// зритель стоит на паузе.
+    std::atomic<class HttpStream*> activeStream { nullptr };
+    std::atomic_bool reconnecting { false };
+    std::atomic_int reconnectTry { 0 };
 
     /// Сон между кадрами прерываемый: иначе stop() из UI-потока ждал бы
     /// до конца текущей задержки, и выход из трейлера подвисал бы.
@@ -95,9 +106,17 @@ class VideoSurface : public brls::View
 
     /// Вызывается из draw() с текущим состоянием декодера — по нему activity
     /// показывает или прячет надписи: буферизацию, ошибку и паузу.
-    std::function<void(bool loading, bool failed, bool paused)> onState;
+    std::function<void(bool loading, bool failed, bool paused,
+                       bool reconnecting, int attempt)> onState;
 
   private:
+    /// Прошлое состояние: колбэк зовём только когда что-то изменилось.
+    bool lastLoading      = false;
+    bool lastFailed       = false;
+    bool lastPaused       = false;
+    bool lastReconnecting = false;
+    int lastAttempt       = -1;
+
     VideoDecoder* decoder;
     std::vector<uint8_t> scratch;
     int nvgImage = -1;
@@ -107,7 +126,7 @@ class VideoSurface : public brls::View
 
 /// Полноэкранный просмотр видео-трейлера.
 ///
-/// Скачивание идёт через brls::async, декодирование — в собственном потоке
+/// Загрузка идёт в потоке HttpStream, декодирование — в собственном потоке
 /// внутри VideoDecoder; в UI-поток кадры попадают через takeFrame(),
 /// опрашиваемый из VideoSurface::draw(), так что borealis никогда не
 /// блокируется. Флаг alive (тот же паттерн, что в remote_image.cpp)
@@ -119,7 +138,8 @@ class VideoPlayerActivity : public brls::Activity
     explicit VideoPlayerActivity(const std::string& url);
     ~VideoPlayerActivity() override;
 
-    CONTENT_FROM_XML_RES("xml/activity/video_player.xml");
+    // «xml/» подставляет сама borealis, см. main.cpp
+    CONTENT_FROM_XML_RES("activity/video_player.xml");
 
     void onContentAvailable() override;
 

@@ -1,22 +1,24 @@
 #include "ui/video_player.hpp"
 
+#include "http_stream.hpp"
 #include "net.hpp"
 #include "tasks.hpp"
 
 #include <borealis.hpp>
 
+#include <algorithm>
 #include <cstdio>
 #include <cstring>
 #include <chrono>
 #include <thread>
 #include <fstream>
-
-#include <curl/curl.h>
+#include <memory>
 
 extern "C"
 {
 #include <libavcodec/avcodec.h>
 #include <libavformat/avformat.h>
+#include <libavutil/error.h>
 #include <libavutil/imgutils.h>
 #include <libavutil/opt.h>
 #include <libavutil/time.h>
@@ -29,121 +31,21 @@ extern "C"
 namespace
 {
 
-/// Видео заметно больше скриншота, поэтому у него свой таймаут — общий
-/// net::fetch() режет соединение через 20с, ролику на 30-60с этого мало.
-size_t writeToFile(void* chunk, size_t size, size_t count, void* userdata)
+/// Числовой код FFmpeg сам по себе ничего не сообщает: без расшифровки в логе
+/// остаётся вроде «-1094995529», по которому причину не понять.
+std::string avErr(int code)
 {
-    auto* out           = static_cast<std::ofstream*>(userdata);
-    const size_t total  = size * count;
-    out->write(static_cast<char*>(chunk), static_cast<std::streamsize>(total));
-    return out->good() ? total : 0;
+    char buf[AV_ERROR_MAX_STRING_SIZE] = {};
+    av_strerror(code, buf, sizeof(buf));
+    return std::string(buf) + " (" + std::to_string(code) + ")";
 }
 
-struct Progress
-{
-    std::atomic_bool* alive;
-    std::function<void(long long done, long long total)> report;
-    int64_t lastReportUs = 0;
-};
-
-/// curl зовёт это по ходу скачивания. Заодно единственное место, где можно
-/// оборвать закачку: раньше уход с экрана не останавливал её, и тяжёлый поток
-/// оставался занят до конца файла.
-int onProgress(void* userdata, curl_off_t total, curl_off_t done, curl_off_t, curl_off_t)
-{
-    auto* p = static_cast<Progress*>(userdata);
-    if (!p->alive->load())
-        return 1;  // ненулевое значение прерывает передачу
-
-    // не чаще пяти раз в секунду: каждый отчёт идёт через brls::sync
-    const int64_t now = av_gettime();
-    if (now - p->lastReportUs < 200000)
-        return 0;
-    p->lastReportUs = now;
-
-    if (p->report)
-        p->report(static_cast<long long>(done), static_cast<long long>(total));
-    return 0;
-}
-
-/// Есть ли ролик уже в кэше — тогда показывать «загрузку» незачем.
+/// Есть ли ролик уже в кэше — тогда буферизация не понадобится и надпись
+/// должна быть другой.
 bool isCached(const std::string& url)
 {
-    std::ifstream probe(net::cachePath(url), std::ios::binary | std::ios::ate);
+    std::ifstream probe(net::cachePath(url, ".mp4"), std::ios::binary | std::ios::ate);
     return probe.good() && probe.tellg() > 0;
-}
-
-/// Качает файл целиком в кэш на SD (тот же каталог, что у скриншотов).
-/// Возвращает путь к готовому файлу или пустую строку при неудаче.
-enum class Failure
-{
-    None,
-    Network,    // обрыв, таймаут — повтор имеет смысл
-    Server,     // 4xx — ролика нет, повторять бесполезно
-    Cancelled,  // пользователь ушёл с экрана
-};
-
-std::string downloadVideo(const std::string& url, std::atomic_bool* alive,
-                          std::function<void(long long, long long)> report,
-                          Failure* failure = nullptr)
-{
-    const std::string path = net::cachePath(url);
-
-    if (isCached(url))
-        return path;
-
-    // сеть могла ещё не подняться: она инициализируется в фоне
-    if (!net::isReady() && !net::waitReady(5000))
-        return {};
-
-    const std::string tmp = path + ".part";
-    std::ofstream out(tmp, std::ios::binary | std::ios::trunc);
-    if (!out.good())
-        return {};
-
-    CURL* curl = curl_easy_init();
-    if (!curl)
-        return {};
-
-    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writeToFile);
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &out);
-    curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
-    curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 15L);
-    // жёсткого лимита на всё соединение нет — ролик докачивается, сколько
-    // потребуется, а не обрывается на середине как скриншот
-    curl_easy_setopt(curl, CURLOPT_LOW_SPEED_LIMIT, 1024L);
-    curl_easy_setopt(curl, CURLOPT_LOW_SPEED_TIME, 20L);
-    curl_easy_setopt(curl, CURLOPT_USERAGENT, "couch-coop/1.0");
-    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
-
-    Progress progress { alive, std::move(report), 0 };
-    curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 0L);
-    curl_easy_setopt(curl, CURLOPT_XFERINFOFUNCTION, onProgress);
-    curl_easy_setopt(curl, CURLOPT_XFERINFODATA, &progress);
-
-    CURLcode result = curl_easy_perform(curl);
-    long status     = 0;
-    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &status);
-    curl_easy_cleanup(curl);
-    out.close();
-
-    if (!alive->load() || result != CURLE_OK || status != 200)
-    {
-        std::remove(tmp.c_str());
-        // «сервер отказал» и «связь оборвалась» — разные случаи: первый
-        // повторять незачем, второй почти всегда лечится повтором
-        if (failure)
-            *failure = (result == CURLE_ABORTED_BY_CALLBACK || !alive->load())
-                ? Failure::Cancelled
-                : (status >= 400 && status < 500 ? Failure::Server : Failure::Network);
-        return {};
-    }
-
-    std::remove(path.c_str());
-    std::rename(tmp.c_str(), path.c_str());
-    net::trimCache();
-    return path;
 }
 
 }  // namespace
@@ -159,11 +61,12 @@ VideoDecoder::~VideoDecoder()
     stop();
 }
 
-void VideoDecoder::start(const std::string& localPath)
+void VideoDecoder::start(const std::string& url, const std::string& cachePath,
+                         std::atomic_bool* alive)
 {
     stop();
     running = true;
-    worker  = std::thread(&VideoDecoder::decodeLoop, this, localPath);
+    worker  = std::thread(&VideoDecoder::decodeLoop, this, url, cachePath, alive);
 }
 
 void VideoDecoder::stop()
@@ -186,6 +89,11 @@ void VideoDecoder::interruptibleSleep(int64_t microseconds)
 void VideoDecoder::togglePause()
 {
     paused = !paused.load();
+
+    // на паузе читатель перестаёт забирать данные, и сетевой поток должен
+    // знать об этом, иначе примет затор за обрыв связи
+    if (HttpStream* stream = activeStream.load())
+        stream->setReaderPaused(paused.load());
 }
 
 void VideoDecoder::seekBy(double seconds)
@@ -212,16 +120,76 @@ bool VideoDecoder::takeFrame(std::vector<uint8_t>& outRgba, int& outW, int& outH
     return true;
 }
 
-void VideoDecoder::decodeLoop(std::string path)
+void VideoDecoder::decodeLoop(std::string url, std::string cachePath,
+                              std::atomic_bool* alive)
 {
+    // Готовый файл в кэше читаем напрямую — это и быстрее, и работает без
+    // сети. Иначе открываем сетевой поток, который попутно наполняет кэш.
+    std::unique_ptr<HttpStream> stream;
+
+    // Обнуляет указатель на любом пути выхода, включая ранние возвраты по
+    // ошибке. Объявлен после stream, поэтому разрушается раньше него —
+    // togglePause() из UI-потока не застанет висячий указатель.
+    struct StreamGuard
+    {
+        std::atomic<HttpStream*>* slot;
+        ~StreamGuard() { *slot = nullptr; }
+    } guard { &activeStream };
+
     AVFormatContext* fmt = nullptr;
-    if (avformat_open_input(&fmt, path.c_str(), nullptr, nullptr) < 0)
+
+    std::ifstream probe(cachePath, std::ios::binary | std::ios::ate);
+    const bool haveFile = probe.good() && probe.tellg() > 0;
+    probe.close();
+
+    if (haveFile)
     {
-        error = true;
-        return;
+        brls::Logger::info("плеер: играем из кеша {}", cachePath);
+        int rc = avformat_open_input(&fmt, cachePath.c_str(), nullptr, nullptr);
+        if (rc < 0)
+        {
+            brls::Logger::error("плеер: кешированный файл не открылся ({}): {}", avErr(rc),
+                                cachePath);
+            error = true;
+            return;
+        }
     }
-    if (avformat_find_stream_info(fmt, nullptr) < 0)
+    else
     {
+        brls::Logger::info("плеер: потоковое воспроизведение {}", url);
+        stream = std::make_unique<HttpStream>(url, cachePath, alive);
+        // замерший кадр надо объяснить: без этого обрыв неотличим от
+        // зависшего приложения
+        activeStream        = stream.get();
+        stream->onReconnect = [this](bool active, int attempt) {
+            reconnecting = active;
+            reconnectTry = attempt;
+            if (active)
+                brls::Logger::warning("плеер: обрыв, переподключение, попытка {}", attempt);
+            else
+                brls::Logger::info("плеер: соединение восстановлено");
+        };
+        fmt    = avformat_alloc_context();
+        if (!fmt)
+        {
+            brls::Logger::error("плеер: не хватило памяти на AVFormatContext");
+            error = true;
+            return;
+        }
+        fmt->pb = stream->avio();
+        // без имени файла: источник целиком за AVIOContext
+        int rc = avformat_open_input(&fmt, nullptr, nullptr, nullptr);
+        if (rc < 0)
+        {
+            brls::Logger::error("плеер: поток не открылся ({}): {}", avErr(rc), url);
+            error = true;
+            return;
+        }
+    }
+    int rc = avformat_find_stream_info(fmt, nullptr);
+    if (rc < 0)
+    {
+        brls::Logger::error("плеер: не разобрать дорожки ({})", avErr(rc));
         avformat_close_input(&fmt);
         error = true;
         return;
@@ -236,8 +204,12 @@ void VideoDecoder::decodeLoop(std::string path)
             audioIdx = static_cast<int>(i);
     }
 
+    brls::Logger::debug("плеер: дорожек {}, видео #{}, звук #{}", fmt->nb_streams, videoIdx,
+                        audioIdx);
+
     if (videoIdx < 0)
     {
+        brls::Logger::error("плеер: в файле нет видеодорожки");
         avformat_close_input(&fmt);
         error = true;
         return;
@@ -246,8 +218,14 @@ void VideoDecoder::decodeLoop(std::string path)
     AVCodecParameters* vpar = fmt->streams[videoIdx]->codecpar;
     const AVCodec* vcodec   = avcodec_find_decoder(vpar->codec_id);
     AVCodecContext* vctx    = vcodec ? avcodec_alloc_context3(vcodec) : nullptr;
+    if (!vcodec)
+        brls::Logger::error("плеер: нет декодера для codec_id {} — возможно, вырезан из сборки",
+                            (int)vpar->codec_id);
+
     if (!vctx || avcodec_parameters_to_context(vctx, vpar) < 0 || avcodec_open2(vctx, vcodec, nullptr) < 0)
     {
+        brls::Logger::error("плеер: видеодекодер «{}» не запустился, кадр {}x{}",
+                            vcodec ? vcodec->name : "?", vpar->width, vpar->height);
         if (vctx)
             avcodec_free_context(&vctx);
         avformat_close_input(&fmt);
@@ -502,15 +480,39 @@ void VideoSurface::draw(NVGcontext* vg, float x, float y, float width, float hei
         bool loading = decoder && !decoder->isReady() && !decoder->hasError();
         bool failed  = decoder && decoder->hasError();
         bool paused  = decoder && decoder->isPaused();
-        onState(loading, failed, paused);
+        bool recon   = decoder && decoder->isReconnecting();
+        int attempt  = decoder ? decoder->reconnectAttempt() : 0;
+
+        // Только на изменение. Раньше колбэк дёргался каждый кадр, а он зовёт
+        // Label::setText, и тот помечает узел раскладки грязным — пересчёт
+        // шестьдесят раз в секунду всё время буферизации и паузы.
+        if (loading != lastLoading || failed != lastFailed || paused != lastPaused
+            || recon != lastReconnecting || attempt != lastAttempt)
+        {
+            lastLoading      = loading;
+            lastFailed       = failed;
+            lastPaused       = paused;
+            lastReconnecting = recon;
+            lastAttempt      = attempt;
+            onState(loading, failed, paused, recon, attempt);
+        }
     }
 
     if (nvgImage < 0)
         return;  // ещё ничего не декодировано — статус-лейбл показывает индикатор поверх
 
-    NVGpaint paint = nvgImagePattern(vg, x, y, width, height, 0, nvgImage, 1.0f);
+    // Вписываем кадр целиком, сохраняя пропорции: раньше картинка растягивалась
+    // на всю выделенную область, и при несовпадении сторон ролик выглядел
+    // сплющенным. Поля по краям остаются чёрными — как в обычном плеере.
+    const float scale = std::min(width / (float)imageW, height / (float)imageH);
+    const float fitW  = imageW * scale;
+    const float fitH  = imageH * scale;
+    const float fx    = x + (width - fitW) / 2.0f;
+    const float fy    = y + (height - fitH) / 2.0f;
+
+    NVGpaint paint = nvgImagePattern(vg, fx, fy, fitW, fitH, 0, nvgImage, 1.0f);
     nvgBeginPath(vg);
-    nvgRect(vg, x, y, width, height);
+    nvgRect(vg, fx, fy, fitW, fitH);
     nvgFillPaint(vg, paint);
     nvgFill(vg);
 }
@@ -534,7 +536,7 @@ VideoPlayerActivity::~VideoPlayerActivity()
 
 void VideoPlayerActivity::onContentAvailable()
 {
-    statusLabel->setText(isCached(url) ? "Открываем трейлер…" : "Загрузка трейлера…");
+    statusLabel->setText(isCached(url) ? "Открываем трейлер…" : "Буферизация…");
     statusLabel->setVisibility(brls::Visibility::VISIBLE);
 
     this->registerAction("Закрыть", brls::BUTTON_B, [this](brls::View*) {
@@ -562,97 +564,54 @@ void VideoPlayerActivity::onContentAvailable()
 
 void VideoPlayerActivity::beginDownload()
 {
-    auto flag    = alive;
-    std::string u = url;
+    // Ждать полной закачки больше не нужно: декодер сам решает, читать ли
+    // готовый файл из кэша или тянуть поток из сети. Показ начинается, как
+    // только разобран заголовок, а кэш наполняется попутно.
+    decoder = std::make_unique<VideoDecoder>();
+    decoder->start(url, net::cachePath(url, ".mp4"), alive.get());
 
-    tasks::heavy([this, flag, u]() {
-        // отчёт о прогрессе идёт в UI-поток: без него на весь файл висела
-        // одна неподвижная строка, неотличимая от зависания
-        auto report = [this, flag](long long done, long long total) {
-            brls::sync([this, flag, done, total]() {
-                if (!*flag || !statusLabel)
-                    return;
-                char text[64];
-                if (total > 0)
-                    std::snprintf(text, sizeof(text), "Загрузка трейлера… %lld%%",
-                                  done * 100 / total);
-                else
-                    std::snprintf(text, sizeof(text), "Загрузка трейлера… %.1f МБ",
-                                  static_cast<double>(done) / (1024.0 * 1024.0));
-                statusLabel->setText(text);
-            });
-        };
+    surface = new VideoSurface(decoder.get());
 
-        // три попытки: обрыв Wi-Fi на середине ролика — обычное дело
-        Failure failure = Failure::None;
-        std::string path;
-        for (int attempt = 0; attempt < 3; attempt++)
+    // Без явного размера yoga отдаёт поверхности ширину по содержимому, а его у
+    // неё нет — кадр рисовался вертикальной полоской посреди чёрного экрана.
+    surface->setWidthPercentage(100.0f);
+    surface->setHeightPercentage(100.0f);
+
+    // Единственная фокусируемая вещь на экране — сама поверхность. Иначе фокус
+    // уходил на невидимую надпись во всю ширину, и стик выделял пустоту.
+    // Рамку прячем: подсвечивать видео не нужно, а действия висят на активности.
+    surface->setFocusable(true);
+    surface->setHideHighlight(true);
+
+    surface->onState = [this](bool loading, bool failed, bool paused,
+                              bool reconnecting, int attempt) {
+        if (reconnecting)
         {
-            if (attempt > 0)
-            {
-                // повторяем только обрывы: 4xx и уход с экрана бессмысленны
-                if (failure != Failure::Network)
-                    break;
-                brls::sync([this, flag, attempt]() {
-                    if (*flag && statusLabel)
-                        statusLabel->setText("Связь оборвалась, попытка "
-                                             + std::to_string(attempt + 1) + " из 3…");
-                });
-                std::this_thread::sleep_for(std::chrono::milliseconds(700 * attempt));
-            }
-            failure = Failure::None;
-            path    = downloadVideo(u, flag.get(), report, &failure);
-            if (!path.empty())
-                break;
+            statusLabel->setText("Связь оборвалась, продолжаем… ("
+                                 + std::to_string(attempt) + " из 5)");
+            statusLabel->setVisibility(brls::Visibility::VISIBLE);
+        }
+        else if (failed)
+        {
+            statusLabel->setText(net::isReady()
+                                     ? "Не удалось воспроизвести трейлер"
+                                     : "Не удалось загрузить трейлер — нет сети");
+            statusLabel->setVisibility(brls::Visibility::VISIBLE);
+        }
+        else if (loading)
+        {
+            statusLabel->setText("Буферизация…");
+            statusLabel->setVisibility(brls::Visibility::VISIBLE);
+        }
+        else
+        {
+            statusLabel->setVisibility(brls::Visibility::GONE);
         }
 
-        if (!*flag)
-            return;
-
-        brls::sync([this, flag, path, failure]() {
-            if (!*flag)
-                return;
-
-            if (path.empty())
-            {
-                statusLabel->setText(
-                    failure == Failure::Server
-                        ? "Трейлер недоступен на сервере"
-                        : (net::isReady() ? "Не удалось загрузить трейлер — связь оборвалась"
-                                          : "Не удалось загрузить трейлер — нет сети"));
-                return;
-            }
-
-            decoder = std::make_unique<VideoDecoder>();
-            decoder->start(path);
-
-            statusLabel->setText("Буферизация…");
-
-            surface = new VideoSurface(decoder.get());
-            surface->onState = [this](bool loading, bool failed, bool paused) {
-                if (failed)
-                {
-                    statusLabel->setText("Ошибка воспроизведения ролика");
-                    statusLabel->setVisibility(brls::Visibility::VISIBLE);
-                }
-                else if (loading)
-                {
-                    statusLabel->setText("Буферизация…");
-                    statusLabel->setVisibility(brls::Visibility::VISIBLE);
-                }
-                else
-                {
-                    statusLabel->setVisibility(brls::Visibility::GONE);
-                }
-
-                // пауза — отдельная надпись по центру: иначе непонятно, ролик
-                // встал по нажатию или завис
-                pauseLabel->setVisibility(paused && !failed ? brls::Visibility::VISIBLE
-                                                            : brls::Visibility::GONE);
-            };
-            videoBox->addView(surface);
-        });
-    });
+        pauseLabel->setVisibility(paused && !failed ? brls::Visibility::VISIBLE
+                                                    : brls::Visibility::GONE);
+    };
+    videoBox->addView(surface);
 }
 
 void VideoPlayerActivity::closeSelf()
