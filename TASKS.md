@@ -120,7 +120,7 @@ pacman и минимальный проигрыватель поверх нег�
 DEVKITPRO задаётся в POSIX-виде и из PowerShell):
   $env:DEVKITPRO = "/opt/devkitpro"
   cmake -B build -G Ninja -DPLATFORM_SWITCH=ON -DUSE_SDL2=ON -DCMAKE_BUILD_TYPE=Release
-  cmake --build build --target CouchCoop.nro
+  cmake --build build --target SplitScreenHub.nro
 
 Не трогай catalog.db, build_db.py и make_overrides.py — с ними параллельно
 работают другие сессии.

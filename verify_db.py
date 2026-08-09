@@ -11,11 +11,28 @@ import sqlite3
 import sys
 
 DB = "catalog.db"
-# ровно то, что выбирает приложение (см. app/source/catalog.cpp)
-FIELDS = ("nsuid, title, title_id, same_screen_min, same_screen_max, players_note,"
-          " box_art_file, background_color, headline, description, publisher,"
-          " release_year, languages, rom_size_bytes, has_online, no_tabletop,"
-          " has_demo, has_russian")
+
+# Ровно то, что выбирает приложение: SELECT_FIELDS из app/source/catalog.cpp,
+# вместе с джойном подборок. Джойна ratings здесь нет намеренно — таблица пуста,
+# и приложение к ней больше не обращается.
+FROM_JOIN = " FROM games g LEFT JOIN toplists tl ON tl.nsuid = g.nsuid"
+
+FIELDS = ("g.nsuid, g.title, g.title_id, g.same_screen_min, g.same_screen_max,"
+          " g.players_note, g.box_art_file, g.background_color, g.headline,"
+          " g.description, g.publisher, g.release_year, g.languages,"
+          " g.rom_size_bytes, g.has_online, g.no_tabletop, g.has_demo,"
+          " g.has_russian, tl.mentions")
+
+# ORDER_BY[] из app/source/catalog.cpp, в том же порядке, что SORT_NAMES.
+ORDER_BY = (
+    " ORDER BY tl.mentions IS NULL, tl.mentions DESC, tl.best_pos, g.sort_title",
+    " ORDER BY g.sort_title",
+    " ORDER BY g.sort_title DESC",
+    " ORDER BY g.same_screen_max DESC, g.sort_title",
+    " ORDER BY g.release_year DESC, g.sort_title",
+    " ORDER BY g.rom_size_bytes IS NULL, g.rom_size_bytes, g.sort_title",
+    " ORDER BY g.sort_title",
+)
 
 failures = []
 
@@ -28,13 +45,15 @@ def check(label, condition, detail=""):
 
 
 def where(min_players, genre=None, russian=False, search=None):
-    w = f" WHERE same_screen_max >= {min_players}"
+    """Повторяет Catalog::buildWhere. Псевдоним g — как в запросах приложения."""
+    w = f" WHERE g.same_screen_max >= {min_players}"
     if genre:
-        w += f" AND nsuid IN (SELECT nsuid FROM genres WHERE genre = '{genre}')"
+        w += f" AND g.nsuid IN (SELECT nsuid FROM genres WHERE genre = '{genre}')"
     if russian:
-        w += " AND has_russian = 1"
+        w += " AND g.has_russian = 1"
     if search:
-        w += f" AND nsuid IN (SELECT nsuid FROM games_fts WHERE games_fts MATCH '\"{search}\"*')"
+        w += (" AND g.nsuid IN (SELECT nsuid FROM games_fts"
+              f" WHERE games_fts MATCH '\"{search}\"*')")
     return w
 
 
@@ -44,15 +63,24 @@ def main():
     print("Фильтр «от N игроков» — пороги должны убывать, но не обнуляться:")
     prev = None
     for n in (2, 3, 4, 6, 8):
-        c = db.execute("SELECT count(*) FROM games" + where(n)).fetchone()[0]
+        c = db.execute("SELECT count(*)" + FROM_JOIN + where(n)).fetchone()[0]
         check(f"от {n}: {c} игр", c > 0 and (prev is None or c <= prev))
         prev = c
 
     print("\nВыборка отдаёт заполненные поля:")
-    row = db.execute(f"SELECT {FIELDS} FROM games" + where(4) + " ORDER BY sort_title LIMIT 1").fetchone()
+    row = db.execute(f"SELECT {FIELDS}" + FROM_JOIN + where(4) + ORDER_BY[1]
+                     + " LIMIT 1").fetchone()
     check("строка читается", row is not None)
     check("есть nsuid и название", bool(row[0]) and bool(row[1]))
     check("min <= max", row[3] <= row[4], f"{row[3]}–{row[4]}")
+
+    print("\nВсе сортировки из ORDER_BY выполняются:")
+    for i, order in enumerate(ORDER_BY):
+        try:
+            rows = db.execute(f"SELECT g.nsuid{FROM_JOIN}{where(2)}{order} LIMIT 5").fetchall()
+            check(f"сортировка #{i}", len(rows) == 5)
+        except sqlite3.Error as exc:
+            check(f"сортировка #{i}", False, str(exc))
 
     print("\nКонкретные игры на своих местах:")
     for title, expect in (("Mario Kart 8 Deluxe", 4), ("Overcooked! 2", 4),
@@ -75,15 +103,15 @@ def main():
           db.execute("SELECT count(*) FROM games WHERE same_screen_max < 2").fetchone()[0] == 0)
 
     print("\nОстальные фильтры сужают выборку:")
-    base = db.execute("SELECT count(*) FROM games" + where(2)).fetchone()[0]
-    ru = db.execute("SELECT count(*) FROM games" + where(2, russian=True)).fetchone()[0]
+    base = db.execute("SELECT count(*)" + FROM_JOIN + where(2)).fetchone()[0]
+    ru = db.execute("SELECT count(*)" + FROM_JOIN + where(2, russian=True)).fetchone()[0]
     check(f"есть русский: {ru}", 0 < ru < base)
-    party = db.execute("SELECT count(*) FROM games" + where(2, genre="Party")).fetchone()[0]
+    party = db.execute("SELECT count(*)" + FROM_JOIN + where(2, genre="Party")).fetchone()[0]
     check(f"жанр Party: {party}", 0 < party < base)
 
     print("\nПоиск по названию:")
     for term, expect in (("mario", True), ("overcook", True), ("zzzqqq", False)):
-        c = db.execute("SELECT count(*) FROM games" + where(2, search=term)).fetchone()[0]
+        c = db.execute("SELECT count(*)" + FROM_JOIN + where(2, search=term)).fetchone()[0]
         check(f"«{term}»: {c}", (c > 0) == expect)
 
     print("\nОбложки на диске совпадают с базой:")

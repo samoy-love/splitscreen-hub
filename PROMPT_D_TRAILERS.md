@@ -84,7 +84,7 @@ git-bash до msys2-cmake не доходят.
 ```powershell
 $env:DEVKITPRO = "/opt/devkitpro"
 cmake -B build -G Ninja -DPLATFORM_SWITCH=ON -DUSE_SDL2=ON -DCMAKE_BUILD_TYPE=Release
-cmake --build build --target CouchCoop.nro
+cmake --build build --target SplitScreenHub.nro
 ```
 
 Проверить работу на железе без консоли нельзя — это честно скажи в отчёте.

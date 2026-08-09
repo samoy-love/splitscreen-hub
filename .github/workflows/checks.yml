@@ -1,0 +1,39 @@
+# Быстрые проверки, которые не требуют консоли и тулчейна devkitPro.
+#
+# Смысл в том, чтобы ловить до заливки на железо ровно те поломки, которые уже
+# случались: неизвестный атрибут в разметке роняет borealis при открытии экрана,
+# а рассинхрон запросов с базой виден только когда каталог оказывается пустым.
+name: checks
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Разметка понятна borealis
+        working-directory: app
+        run: python tools/check_xml.py
+
+      - name: Тесты чистых функций
+        working-directory: app
+        run: bash tools/run_tests.sh
+
+      # catalog.db весит 11 МБ и в репозиторий не коммитится, поэтому проверку
+      # запросов гоняем, только если база оказалась рядом.
+      - name: Запросы к каталогу
+        run: |
+          if [ -f catalog.db ]; then
+            python verify_db.py
+          else
+            echo "catalog.db нет — пропускаю (собирается build_db.py)"
+          fi

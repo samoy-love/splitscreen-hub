@@ -110,5 +110,5 @@ g.players_note)`, `COALESCE(t.description_ru, g.description)` — тогда
 
 ```powershell
 $env:DEVKITPRO = "/opt/devkitpro"
-cmake --build build --target CouchCoop.nro
+cmake --build build --target SplitScreenHub.nro
 ```

@@ -66,7 +66,7 @@ python -c "from PIL import Image; im=Image.open('app/resources/icon.jpg'); print
 
 ```powershell
 $env:DEVKITPRO = "/opt/devkitpro"
-cmake --build build --target CouchCoop.nro
+cmake --build build --target SplitScreenHub.nro
 ```
 
 Ninja и POSIX-путь в `DEVKITPRO` обязательны — с Makefiles сборка ломается на
