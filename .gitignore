@@ -24,3 +24,6 @@ local_multiplayer.json
 .translate_tmp/
 
 __pycache__/
+
+# бинарники тестов, собираются tools/run_tests.sh
+app/build-tests/
