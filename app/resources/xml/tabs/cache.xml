@@ -1,0 +1,60 @@
+<brls:Box
+    axis="column"
+    width="auto"
+    height="auto"
+    paddingTop="30"
+    paddingRight="60"
+    paddingBottom="30"
+    paddingLeft="60">
+
+    <brls:Label
+        text="Кэш загрузок"
+        fontSize="28"
+        marginBottom="6" />
+
+    <brls:Label
+        text="Скриншоты и трейлеры, скачанные при просмотре карточек"
+        fontSize="16"
+        marginBottom="24"
+        textColor="@theme/brls/text_disabled" />
+
+    <brls:Label
+        id="cache/summary"
+        text="Считаем…"
+        fontSize="34"
+        marginBottom="14" />
+
+    <brls:Label
+        id="cache/breakdown"
+        text=""
+        fontSize="18"
+        marginBottom="20"
+        textColor="@theme/brls/text_disabled" />
+
+    <WrapBox
+        axis="row"
+        marginBottom="20">
+
+        <brls:Button
+            id="cache/clear_videos"
+            width="auto"
+            height="auto"
+            marginRight="12"
+            text="Удалить трейлеры" />
+
+        <brls:Button
+            id="cache/clear_all"
+            width="auto"
+            height="auto"
+            style="highlight"
+            text="Очистить весь кэш" />
+
+    </WrapBox>
+
+    <brls:Label
+        id="cache/hint"
+        text=""
+        fontSize="16"
+        textColor="@theme/brls/text_disabled" />
+
+</brls:Box>

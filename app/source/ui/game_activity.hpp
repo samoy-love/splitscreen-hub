@@ -11,7 +11,8 @@ class GameActivity : public brls::Activity
   public:
     explicit GameActivity(const std::string& nsuid);
 
-    CONTENT_FROM_XML_RES("xml/activity/game.xml");
+    // «xml/» подставляет сама borealis, см. main.cpp
+    CONTENT_FROM_XML_RES("activity/game.xml");
 
     void onContentAvailable() override;
 
@@ -49,7 +50,9 @@ class GameActivity : public brls::Activity
     BRLS_BIND(brls::Label, genres, "game/genres");
     BRLS_BIND(brls::Box, shotsBox, "game/shots");
     BRLS_BIND(brls::Label, shotsHint, "game/shots_hint");
-    BRLS_BIND(brls::Button, trailerButton, "game/trailer_button");
+    /// Кнопка трейлера создаётся кодом и встаёт первой в полосе медиа рядом со
+    /// скриншотами, поэтому её нет в разметке.
+    brls::Button* trailerButton = nullptr;
 
     void fillTrailerButton();
     void openTrailer();

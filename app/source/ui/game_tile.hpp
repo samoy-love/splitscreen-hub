@@ -25,7 +25,9 @@ class GameTile : public brls::Box
     /// вектора после этого повиснет.
     void setOnSelect(std::function<void(const std::string&)> callback);
 
-    static brls::View* create();
+    /// Кто получил фокус. Библиотеке это нужно, чтобы понимать, к чему
+    /// относится «убрать»: к игре под курсором или к папке в списке слева.
+    void setOnFocus(std::function<void(const std::string&)> callback);
 
   private:
     /// Обложка читается с romfs в фоновом потоке, а в UI-поток отдаются
@@ -39,6 +41,7 @@ class GameTile : public brls::Box
 
     std::string nsuid;
     std::function<void(const std::string&)> onSelect;
+    std::function<void(const std::string&)> onFocus;
 
     BRLS_BIND(brls::Image, cover, "tile/cover");
     BRLS_BIND(brls::Label, players, "tile/players");

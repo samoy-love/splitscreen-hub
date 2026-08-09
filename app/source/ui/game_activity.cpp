@@ -3,7 +3,9 @@
 #include <cstdlib>
 
 #include "app_state.hpp"
+#include "format.hpp"
 #include "net.hpp"
+#include "tasks.hpp"
 #include "ui/remote_image.hpp"
 #include "ui/video_player.hpp"
 
@@ -13,13 +15,8 @@ namespace
 /// Фирменный цвет игры приходит из eShop строкой вида "0f336f".
 NVGcolor parseColor(const std::string& hex, NVGcolor fallback)
 {
-    if (hex.size() != 6)
-        return fallback;
-    char* end     = nullptr;
-    long value    = std::strtol(hex.c_str(), &end, 16);
-    if (end != hex.c_str() + 6)
-        return fallback;
-    return nvgRGB((value >> 16) & 0xFF, (value >> 8) & 0xFF, value & 0xFF);
+    unsigned char r = 0, g = 0, b = 0;
+    return fmtx::parseHexColor(hex, r, g, b) ? nvgRGB(r, g, b) : fallback;
 }
 
 brls::Box* statTile(const std::string& caption, const std::string& value)
@@ -68,12 +65,22 @@ void GameActivity::onContentAvailable()
     game            = state.catalog.byNsuid(nsuid);
     state.decorate(game);
 
+    if (game.nsuid.empty())
+        brls::Logger::error("карточка: игра {} не найдена в каталоге", nsuid);
+    else
+        brls::Logger::info("карточка: открыта «{}» ({}), игроков до {}", game.title, nsuid,
+                           game.sameScreenMax);
+
     fillHeader();
     fillStats();
     fillTags();
     fillGenres();
-    fillScreenshots();
+
+    // Порядок важен: полоса медиа очищается один раз здесь, затем в неё встаёт
+    // кнопка трейлера, и только после — скриншоты.
+    shotsBox->clearViews();
     fillTrailerButton();
+    fillScreenshots();
 
     headline->setText(game.headline);
     headline->setVisibility(game.headline.empty() ? brls::Visibility::GONE
@@ -109,16 +116,6 @@ void GameActivity::fillHeader()
     std::string sub = game.publisher;
     if (game.releaseYear)
         sub += " · " + std::to_string(game.releaseYear);
-    // Оценка и согласие обзоров: без источника и числа голосов цифра ничего
-    // не значит, поэтому показываем их вместе.
-    if (game.rating > 0)
-    {
-        sub += " · " + std::to_string(game.rating) + "%";
-        if (game.ratingVotes > 0)
-            sub += " из " + std::to_string(game.ratingVotes);
-        if (!game.ratingSource.empty())
-            sub += ", " + game.ratingSource;
-    }
     if (game.topMentions > 0)
         sub += " · в подборках: " + std::to_string(game.topMentions);
     subtitle->setText(sub);
@@ -184,7 +181,8 @@ void GameActivity::fillTags()
 
 void GameActivity::fillScreenshots()
 {
-    shotsBox->clearViews();
+    // Полосу очищает onContentAvailable до вызова fillTrailerButton(), чтобы
+    // кнопка трейлера встала первой и не была снесена этой очисткой.
 
     // Скриншотов в каталоге 20 тысяч — в romfs они не влезут, поэтому грузятся
     // из сети и оседают в кэше на SD. Первые четыре: остальные всё равно не
@@ -207,8 +205,8 @@ void GameActivity::fillScreenshots()
     for (const std::string& url : urls)
     {
         auto* shot = new RemoteImage();
-        shot->setWidth(230);
-        shot->setHeight(130);
+        shot->setWidth(228);
+        shot->setHeight(128);
         shot->setCornerRadius(6);
         shot->setMarginRight(10);
         shot->setScalingType(brls::ImageScalingType::FILL);
@@ -232,27 +230,34 @@ void GameActivity::fillScreenshots()
 
 void GameActivity::fillTrailerButton()
 {
-    // Ролики есть у 61% игр (2139 из 3480), у остальных кнопка не должна
+    // Ролики есть у 61% игр (2139 из 3489), у остальных кнопка не должна
     // появляться вовсе — но по ТЗ просят именно disabled с подписью, так
     // понятнее, что раздел вообще существует.
     std::vector<std::string> videos = AppState::get().catalog.videos(game.nsuid);
     trailerUrl = videos.empty() ? std::string() : videos.front();
 
-    if (!net::isReady())
-    {
-        trailerButton->setText("Трейлер недоступен (нет сети)");
-        trailerButton->setState(brls::ButtonState::DISABLED);
-        return;
-    }
+    trailerButton = new brls::Button();
+    trailerButton->setFontSize(14);
+    trailerButton->setWidth(190);
+    trailerButton->setHeight(128);
+    trailerButton->setMarginRight(10);
+    trailerButton->setStyle(&brls::BUTTONSTYLE_PRIMARY);
+    shotsBox->addView(trailerButton);
+
+    // Состояние сети здесь не спрашиваем: net::init() идёт в фоне, и карточка,
+    // открытая в первые секунды после запуска, навсегда получала «нет сети» —
+    // до самого закрытия, хотя сеть успевала подняться. Проверка перенесена в
+    // момент нажатия, где можно и подождать.
 
     if (trailerUrl.empty())
     {
-        trailerButton->setText("Трейлер недоступен");
+        trailerButton->setText("Трейлера нет");
+        trailerButton->setStyle(&brls::BUTTONSTYLE_BORDERLESS);
         trailerButton->setState(brls::ButtonState::DISABLED);
         return;
     }
 
-    trailerButton->setText("▶ Смотреть трейлер");
+    trailerButton->setText("▶ Трейлер");
     trailerButton->setState(brls::ButtonState::ENABLED);
     trailerButton->registerClickAction([this](brls::View*) {
         openTrailer();
@@ -264,7 +269,26 @@ void GameActivity::openTrailer()
 {
     if (trailerUrl.empty())
         return;
-    brls::Application::pushActivity(new VideoPlayerActivity(trailerUrl));
+
+    // Сеть могла ещё не подняться, если нажали сразу после запуска. Ждём её
+    // короткое время в рабочем потоке — блокировать UI ради этого нельзя.
+    if (net::isReady())
+    {
+        brls::Application::pushActivity(new VideoPlayerActivity(trailerUrl));
+        return;
+    }
+
+    trailerButton->setText("Подключаемся…");
+    std::string url = trailerUrl;
+    tasks::io([url]() {
+        const bool ok = net::waitReady(5000);
+        brls::sync([url, ok]() {
+            if (ok)
+                brls::Application::pushActivity(new VideoPlayerActivity(url));
+            else
+                brls::Application::notify("Нет сети — трейлер не открыть");
+        });
+    });
 }
 
 void GameActivity::toggleFavorite()

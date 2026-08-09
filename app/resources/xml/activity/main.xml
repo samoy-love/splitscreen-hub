@@ -1,19 +1,10 @@
+<!-- Шапка AppletFrame скрыта: она занимала около 88 точек по высоте ради одного
+     названия, которое теперь стоит в строке вкладок. Нижняя строка подсказок
+     остаётся — она объясняет, что делают кнопки. -->
 <brls:AppletFrame
-    iconInterpolation="linear"
+    headerHidden="true"
     footerHidden="false">
 
-    <brls:TabFrame
-        title="Couch co-op"
-        icon="@res/icon.jpg">
-
-        <brls:Tab label="Каталог">
-            <CatalogTab />
-        </brls:Tab>
-
-        <brls:Tab label="Моя библиотека">
-            <LibraryTab />
-        </brls:Tab>
-
-    </brls:TabFrame>
+    <MainTabs />
 
 </brls:AppletFrame>

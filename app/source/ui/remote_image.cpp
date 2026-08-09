@@ -1,5 +1,7 @@
 #include "ui/remote_image.hpp"
 
+#include <borealis.hpp>
+
 #include "net.hpp"
 #include "tasks.hpp"
 
@@ -19,10 +21,17 @@ void RemoteImage::load(const std::string& url)
     auto flag = alive;
     auto self = this;
 
+    brls::Logger::debug("image: запрошено {}", url);
+
     tasks::io([flag, self, url]() {
         std::vector<unsigned char> data = net::fetch(url);
         if (!*flag)
+        {
+            brls::Logger::verbose("image: получатель закрылся, бросаем {}", url);
             return;
+        }
+        if (data.empty())
+            brls::Logger::warning("image: пусто после загрузки {}", url);
 
         brls::sync([flag, self, data = std::move(data)]() {
             if (!*flag)

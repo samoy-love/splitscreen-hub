@@ -1,54 +1,29 @@
+<!-- Фильтры уложены в одну строку. Раньше их было две по 44 точки плюс отступы,
+     и вместе с шапкой AppletFrame на сетку оставалось меньше двух рядов. -->
 <brls:Box
     axis="column"
     width="auto"
     height="auto"
-    paddingTop="20"
+    paddingTop="4"
     paddingRight="30"
-    paddingBottom="10"
-    paddingLeft="20">
+    paddingBottom="4"
+    paddingLeft="30">
 
-    <brls:Box
-        axis="row"
-        alignItems="center"
-        marginBottom="10">
-
-        <brls:Label
-            text="Игроков"
-            fontSize="17"
-            textColor="@theme/brls/text_disabled"
-            marginRight="14" />
-
-        <brls:Box
-            id="catalog/players"
-            axis="row"
-            alignItems="center" />
-
-        <brls:Label
-            id="catalog/count"
-            text=""
-            fontSize="17"
-            textColor="@theme/brls/text_disabled"
-            grow="1.0"
-            horizontalAlign="right" />
-
-    </brls:Box>
-
-    <!-- wrap: если подписей всё же станет больше или жанр окажется длинным,
-         чипы перенесутся на вторую строку, а не уедут за край экрана. -->
-    <brls:Box
+    <!-- WrapBox: если жанр окажется длинным, чипы перенесутся на вторую строку,
+         а не уедут за край экрана. -->
+    <WrapBox
         id="catalog/toggles"
         axis="row"
-        wrap="wrap"
         alignItems="center"
-        marginBottom="10" />
+        marginBottom="6" />
 
     <brls:Label
         id="catalog/empty"
-        text="Ничего не нашлось. Ослабьте фильтр — например, снимите «только установленные»."
-        fontSize="20"
+        text="Ничего не нашлось. Ослабьте фильтр — например, снимите «только мои»."
+        fontSize="16"
         textColor="@theme/brls/text_disabled"
         visibility="gone"
-        marginTop="60"
+        marginTop="40"
         horizontalAlign="center" />
 
     <brls:RecyclerFrame

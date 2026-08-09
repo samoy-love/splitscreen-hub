@@ -3,6 +3,7 @@
 #include <algorithm>
 
 #include "app_state.hpp"
+#include "tasks.hpp"
 #include "ui/game_activity.hpp"
 #include "ui/game_tile.hpp"
 
@@ -13,83 +14,15 @@ namespace
 // четверо, игра на шестерых тоже подходит.
 const std::vector<int> THRESHOLDS = { 2, 3, 4, 6, 8 };
 
+/// Размер шрифта чипов фильтра. Со штатным подписи вроде «Жанр: приключения» не
+/// помещались в кнопку и переносились на вторую строку прямо внутри неё.
+constexpr float CHIP_FONT_SIZE = 15.0f;
+
 // индекс «сначала мои» в Catalog::SORT_NAMES
-constexpr int SORT_INSTALLED_FIRST = 7;
+constexpr int SORT_INSTALLED_FIRST = 6;
 
-std::vector<Game>* rowsSource = nullptr;
-std::function<void(const std::string&)> rowsOnSelect;
-
-}  // namespace
-
-// --------------------------------------------------------------------------
-// строка сетки
-// --------------------------------------------------------------------------
-
-GameRow::GameRow()
-{
-    this->setAxis(brls::Axis::ROW);
-    this->setJustifyContent(brls::JustifyContent::FLEX_START);
-    this->setHeight(222);
-    this->setPaddingBottom(8);
-
-    for (int i = 0; i < COLUMNS; i++)
-    {
-        auto* tile = new GameTile();
-        tile->setMarginRight(12);
-        this->addView(tile);
-        slots.push_back(tile);
-    }
-}
-
-void GameRow::setGames(const std::vector<Game>& games, size_t from,
-                       const std::function<void(const std::string&)>& onSelect)
-{
-    for (int i = 0; i < COLUMNS; i++)
-    {
-        size_t idx = from + i;
-        auto* tile = static_cast<GameTile*>(slots[i]);
-
-        if (idx >= games.size())
-        {
-            // хвост последней строки: место занимаем, но фокус туда не пускаем
-            tile->setVisibility(brls::Visibility::INVISIBLE);
-            tile->setFocusable(false);
-            continue;
-        }
-
-        tile->setVisibility(brls::Visibility::VISIBLE);
-        tile->setGame(games[idx]);
-        tile->setFocusable(true);
-        tile->setOnSelect(onSelect);
-    }
-}
-
-// --------------------------------------------------------------------------
-// источник данных
-// --------------------------------------------------------------------------
-
-namespace
-{
-
-class GridDataSource : public brls::RecyclerDataSource
-{
-  public:
-    int numberOfRows(brls::RecyclerFrame*, int) override
-    {
-        if (!rowsSource || rowsSource->empty())
-            return 0;
-        return static_cast<int>((rowsSource->size() + GameRow::COLUMNS - 1) / GameRow::COLUMNS);
-    }
-
-    brls::RecyclerCell* cellForRow(brls::RecyclerFrame* recycler,
-                                   brls::IndexPath indexPath) override
-    {
-        auto* row = static_cast<GameRow*>(recycler->dequeueReusableCell("Row"));
-        row->setGames(*rowsSource, static_cast<size_t>(indexPath.row) * GameRow::COLUMNS,
-                      rowsOnSelect);
-        return row;
-    }
-};
+/// Ширина под сетку: 1280 экрана минус боковые отступы catalog.xml по 30.
+constexpr int CONTENT_WIDTH = 1280 - 60;
 
 }  // namespace
 
@@ -104,15 +37,18 @@ CatalogTab::CatalogTab()
     buildPlayerFilter();
     buildToggles();
 
-    recycler->estimatedRowHeight = 222;
-    recycler->registerCell("Row", []() { return new GameRow(); });
-    recycler->setDataSource(new GridDataSource());
+    // Сайдбара больше нет, под сетку идёт вся ширина экрана минус боковые
+    // отступы из catalog.xml.
+    model = attachGameGrid(recycler, GameRow::columnsFor(CONTENT_WIDTH));
+    model->onSelect = [](const std::string& nsuid) {
+        brls::Application::pushActivity(new GameActivity(nsuid));
+    };
 
-    // ZL/ZR листают сетку страницами — с 3468 играми стик утомляет
     this->registerAction("Поиск", brls::BUTTON_BACK, [this](brls::View*) {
         promptSearch();
         return true;
     });
+    // ZL/ZR листают сетку страницами — с 3489 играми стик утомляет
     this->registerAction("Страница вверх", brls::BUTTON_LT, [this](brls::View*) {
         recycler->setContentOffsetY(recycler->getContentOffsetY() - 666, true);
         return true;
@@ -129,26 +65,33 @@ void CatalogTab::buildPlayerFilter()
 {
     AppState& state = AppState::get();
 
+    auto* caption = new brls::Label();
+    caption->setText("Игроков");
+    caption->setFontSize(CHIP_FONT_SIZE);
+    caption->setMarginRight(8);
+    caption->setTextColor(brls::Application::getTheme()["brls/text_disabled"]);
+    togglesBox->addView(caption);
+
     for (int threshold : THRESHOLDS)
     {
         auto* button = new brls::Button();
         button->setText("от " + std::to_string(threshold));
-        button->setMarginRight(10);
+        button->setFontSize(CHIP_FONT_SIZE);
+        button->setMarginRight(6);
         button->setStyle(state.filter.minPlayers == threshold ? &brls::BUTTONSTYLE_PRIMARY
                                                               : &brls::BUTTONSTYLE_BORDERLESS);
         button->registerClickAction([this, threshold](brls::View*) {
             AppState::get().filter.minPlayers = threshold;
             // перерисовываем подсветку выбранного порога
-            for (size_t i = 0; i < THRESHOLDS.size(); i++)
-            {
-                auto* b = static_cast<brls::Button*>(playersBox->getChildren()[i]);
-                b->setStyle(THRESHOLDS[i] == threshold ? &brls::BUTTONSTYLE_PRIMARY
-                                                       : &brls::BUTTONSTYLE_BORDERLESS);
-            }
+            for (size_t i = 0; i < thresholdButtons.size(); i++)
+                thresholdButtons[i]->setStyle(THRESHOLDS[i] == threshold
+                                                  ? &brls::BUTTONSTYLE_PRIMARY
+                                                  : &brls::BUTTONSTYLE_BORDERLESS);
             reload();
             return true;
         });
-        playersBox->addView(button);
+        togglesBox->addView(button);
+        thresholdButtons.push_back(button);
     }
 }
 
@@ -157,7 +100,8 @@ void CatalogTab::buildToggles()
     auto addToggle = [this](const std::string& label, bool Filter::*flag) -> brls::Button* {
         auto* button = new brls::Button();
         button->setText(label);
-        button->setMarginRight(10);
+        button->setFontSize(CHIP_FONT_SIZE);
+        button->setMarginRight(6);
         button->setStyle(AppState::get().filter.*flag ? &brls::BUTTONSTYLE_PRIMARY
                                                       : &brls::BUTTONSTYLE_BORDERLESS);
         button->registerClickAction([this, button, flag](brls::View*) {
@@ -175,7 +119,8 @@ void CatalogTab::buildToggles()
     addToggle("Русский", &Filter::onlyRussian);
 
     genreButton = new brls::Button();
-    genreButton->setMarginRight(10);
+    genreButton->setFontSize(CHIP_FONT_SIZE);
+    genreButton->setMarginRight(6);
     genreButton->setStyle(&brls::BUTTONSTYLE_BORDERLESS);
     genreButton->registerClickAction([this](brls::View*) {
         chooseGenre();
@@ -184,7 +129,8 @@ void CatalogTab::buildToggles()
     togglesBox->addView(genreButton);
 
     searchButton = new brls::Button();
-    searchButton->setMarginRight(10);
+    searchButton->setFontSize(CHIP_FONT_SIZE);
+    searchButton->setMarginRight(6);
     searchButton->setStyle(&brls::BUTTONSTYLE_BORDERLESS);
     searchButton->registerClickAction([this](brls::View*) {
         promptSearch();
@@ -193,12 +139,22 @@ void CatalogTab::buildToggles()
     togglesBox->addView(searchButton);
 
     sortButton = new brls::Button();
+    sortButton->setFontSize(CHIP_FONT_SIZE);
+    sortButton->setMarginRight(6);
     sortButton->setStyle(&brls::BUTTONSTYLE_BORDERLESS);
     sortButton->registerClickAction([this](brls::View*) {
         cycleSort();
         return true;
     });
     togglesBox->addView(sortButton);
+
+    // Счётчик найденного — в конце той же строки: отдельная строка ради двух
+    // чисел стоила бы ряда игр.
+    countLabel = new brls::Label();
+    countLabel->setFontSize(CHIP_FONT_SIZE);
+    countLabel->setMarginLeft(8);
+    countLabel->setTextColor(brls::Application::getTheme()["brls/text_disabled"]);
+    togglesBox->addView(countLabel);
 
     refreshToggleLabels();
 }
@@ -268,33 +224,48 @@ void CatalogTab::cycleSort()
 
 void CatalogTab::reload()
 {
-    AppState& state = AppState::get();
+    // Выборка идёт в рабочем потоке: по 3489 игр это сотни миллисекунд с
+    // чтением из romfs, а reload() зовётся из обработчика каждой кнопки
+    // фильтра — раньше весь этот запрос выполнялся прямо в кадре.
+    auto model      = this->model;  // переживёт вкладку, если её закроют
+    auto alive      = this->alive;
+    Filter filter   = AppState::get().filter;
+    auto* self      = this;
 
-    // сетке хватает краткой выборки: описания нужны только в карточке
-    games = state.catalog.queryBrief(state.filter);
-    state.decorate(games);
+    tasks::io([self, alive, model, filter]() {
+        AppState& state         = AppState::get();
+        std::vector<Game> games = state.catalog.queryBrief(filter);
+        state.decorate(games);
 
-    // фильтр по установленным делаем уже здесь: каталог в romfs ничего не знает
-    // о том, что стоит на конкретной консоли
-    if (state.filter.onlyInstalled)
-    {
-        std::vector<Game> only;
-        for (const Game& g : games)
-            if (g.installed)
-                only.push_back(g);
-        games = std::move(only);
-    }
+        // фильтр по установленным делаем уже здесь: каталог в romfs ничего не
+        // знает о том, что стоит на конкретной консоли
+        if (filter.onlyInstalled)
+        {
+            std::vector<Game> only;
+            for (const Game& g : games)
+                if (g.installed)
+                    only.push_back(g);
+            games = std::move(only);
+        }
 
-    // «сначала мои» доупорядочивается здесь, а не в SQL: о том, что установлено
-    // на консоли, знает только приложение
-    if (state.filter.sort == SORT_INSTALLED_FIRST)
-        std::stable_partition(games.begin(), games.end(),
-                              [](const Game& g) { return g.installed; });
+        // «сначала мои» доупорядочивается здесь, а не в SQL: о том, что
+        // установлено на консоли, знает только приложение
+        if (filter.sort == SORT_INSTALLED_FIRST)
+            std::stable_partition(games.begin(), games.end(),
+                                  [](const Game& g) { return g.installed; });
 
-    rowsSource   = &games;
-    rowsOnSelect = [](const std::string& nsuid) {
-        brls::Application::pushActivity(new GameActivity(nsuid));
-    };
+        brls::sync([self, alive, model, games = std::move(games)]() mutable {
+            model->games = std::move(games);
+            if (*alive)
+                self->applyRows();
+        });
+    });
+}
+
+void CatalogTab::applyRows()
+{
+    AppState& state          = AppState::get();
+    std::vector<Game>& games = model->games;
 
     int installed = state.installedCount(games);
     // коротко: полная фраза не помещалась рядом с кнопками порогов
@@ -306,7 +277,20 @@ void CatalogTab::reload()
     recycler->setVisibility(empty ? brls::Visibility::GONE : brls::Visibility::VISIBLE);
 
     if (!empty)
-        recycler->reloadData();
+        refreshGameGrid(recycler);
+
+    brls::Logger::info("каталог: показано {} игр (ваших {}), фильтр: игроков >= {}, жанр «{}», "
+                       "поиск «{}», только установленные {}, только с русским {}",
+                       games.size(), installed, state.filter.minPlayers, state.filter.genre,
+                       state.filter.search, state.filter.onlyInstalled,
+                       state.filter.onlyRussian);
+}
+
+CatalogTab::~CatalogTab()
+{
+    // Запрос мог остаться в работе: без флага его возврат через brls::sync
+    // обратился бы к уничтоженной вкладке.
+    *alive = false;
 }
 
 brls::View* CatalogTab::create()

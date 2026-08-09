@@ -7,11 +7,21 @@
 namespace
 {
 const char* FAVORITES = "";  // пустое имя = избранное
+
+/// Ширина под сетку: 1280 экрана минус отступы library.xml (20 слева, 30
+/// справа), минус список папок с его правым полем.
+constexpr int CONTENT_WIDTH = 1280 - 20 - 30 - 200 - 20;
 }
 
 LibraryTab::LibraryTab()
 {
     this->inflateFromXMLRes("xml/tabs/library.xml");
+
+    model = attachGameGrid(grid, GameRow::columnsFor(CONTENT_WIDTH));
+    model->onSelect = [](const std::string& nsuid) {
+        brls::Application::pushActivity(new GameActivity(nsuid));
+    };
+    model->onFocus = [this](const std::string& nsuid) { focusedNsuid = nsuid; };
 
     rebuildSidebar();
     showSelection();
@@ -45,7 +55,8 @@ void LibraryTab::rebuildSidebar()
     auto addEntry = [this](const std::string& name, const std::string& label, size_t count) {
         auto* button = new brls::Button();
         button->setText(label + "  " + std::to_string(count));
-        button->setMarginBottom(6);
+        button->setFontSize(15);
+        button->setMarginBottom(4);
         button->setStyle(selected == name ? &brls::BUTTONSTYLE_PRIMARY
                                           : &brls::BUTTONSTYLE_BORDERLESS);
         button->registerClickAction([this, name](brls::View*) {
@@ -54,6 +65,12 @@ void LibraryTab::rebuildSidebar()
             showSelection();
             return true;
         });
+
+        // Пока фокус на списке папок, «убрать» относится к папке, а не к игре.
+        // Без этого сброса X, нажатый на папке после того как курсор побывал на
+        // плитке, тихо выкидывал ту игру из списка, а папка оставалась.
+        button->getFocusEvent()->subscribe([this](brls::View*) { focusedNsuid.clear(); });
+
         sidebar->addView(button);
     };
 
@@ -62,12 +79,14 @@ void LibraryTab::rebuildSidebar()
         addEntry(name, name, state.library.folder(name).size());
 
     auto* add = new brls::Button();
-    add->setText("+ Новая папка");
+    add->setText("Новая папка");
+    add->setFontSize(15);
     add->setStyle(&brls::BUTTONSTYLE_BORDERLESS);
     add->registerClickAction([this](brls::View*) {
         promptNewFolder();
         return true;
     });
+    add->getFocusEvent()->subscribe([this](brls::View*) { focusedNsuid.clear(); });
     sidebar->addView(add);
 }
 
@@ -77,37 +96,29 @@ void LibraryTab::showSelection()
     const std::vector<std::string>& ids =
         selected.empty() ? state.library.favorites() : state.library.folder(selected);
 
-    current.clear();
+    std::vector<Game>& games = model->games;
+    games.clear();
     for (const std::string& nsuid : ids)
     {
         Game g = state.catalog.byNsuid(nsuid);
         if (g.nsuid.empty())
             continue;  // игра выпала из каталога при обновлении базы
         state.decorate(g);
-        current.push_back(g);
+        games.push_back(g);
     }
 
     focusedNsuid.clear();
-    grid->clearViews();
-    for (const Game& game : current)
-    {
-        auto* tile = new GameTile();
-        tile->setGame(game);
-        tile->setMarginRight(12);
-        tile->setMarginBottom(12);
-        tile->setOnSelect([](const std::string& nsuid) {
-            brls::Application::pushActivity(new GameActivity(nsuid));
-        });
-        std::string nsuid = game.nsuid;
-        tile->getFocusEvent()->subscribe([this, nsuid](brls::View*) { focusedNsuid = nsuid; });
-        grid->addView(tile);
-    }
+    refreshGameGrid(grid);
 
-    bool empty = current.empty();
+    bool empty = games.empty();
     emptyLabel->setText(selected.empty()
                             ? "Избранное пустое. Отметьте игру кнопкой X в каталоге."
                             : "Папка пустая. Добавьте игру кнопкой Y в её карточке.");
     emptyLabel->setVisibility(empty ? brls::Visibility::VISIBLE : brls::Visibility::GONE);
+    grid->setVisibility(empty ? brls::Visibility::GONE : brls::Visibility::VISIBLE);
+
+    brls::Logger::info("библиотека: «{}» — игр {}", selected.empty() ? "Избранное" : selected,
+                       games.size());
 }
 
 void LibraryTab::removeFocused()

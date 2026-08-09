@@ -2,28 +2,11 @@
 
 #include <borealis.hpp>
 
+#include <atomic>
+#include <memory>
+
 #include "catalog.hpp"
-
-/// Строка сетки: несколько плиток в ряд. RecyclerFrame в borealis умеет
-/// переиспользовать только строки, поэтому сетка собирается как список строк —
-/// иначе 3468 обложек оказались бы в памяти одновременно.
-class GameRow : public brls::RecyclerCell
-{
-  public:
-    GameRow();
-
-    /// Четыре, а не шесть: слева у TabFrame постоянный сайдбар шириной 410,
-    /// так что контенту остаётся 870 минус паддинги — около 820 точек.
-    /// Плитка занимает 192 плюс 12 отступа, шесть колонок требовали 1152 и
-    /// две последние уезжали за экран вместе с фокусом.
-    static constexpr int COLUMNS = 4;
-
-    void setGames(const std::vector<Game>& games, size_t from,
-                  const std::function<void(const std::string&)>& onSelect);
-
-  private:
-    std::vector<brls::Box*> slots;
-};
+#include "ui/game_grid.hpp"
 
 /// Вкладка каталога: фильтр «от N игроков» и сетка обложек.
 class CatalogTab : public brls::Box
@@ -32,11 +15,20 @@ class CatalogTab : public brls::Box
     CatalogTab();
     static brls::View* create();
 
-    /// Перечитывает выборку из базы и обновляет сетку.
+    /// Перечитывает выборку из базы и обновляет сетку. Сам запрос уходит в
+    /// рабочий поток, результат возвращается в UI через applyRows().
     void reload();
 
+    ~CatalogTab() override;
+
   private:
-    std::vector<Game> games;
+    /// Показывает уже готовую выборку. Только из UI-потока.
+    void applyRows();
+
+    /// Вкладка может закрыться, пока запрос в работе.
+    std::shared_ptr<std::atomic_bool> alive = std::make_shared<std::atomic_bool>(true);
+
+    std::shared_ptr<GridModel> model;
 
     void buildPlayerFilter();
     void buildToggles();
@@ -50,9 +42,13 @@ class CatalogTab : public brls::Box
     brls::Button* searchButton = nullptr;
     brls::Button* installedButton = nullptr;
 
-    BRLS_BIND(brls::Box, playersBox, "catalog/players");
+    /// Кнопки порогов «от N». Держим списком, чтобы подсвечивать выбранный, не
+    /// полагаясь на порядок детей контейнера — рядом с ними теперь и остальные
+    /// чипы фильтра.
+    std::vector<brls::Button*> thresholdButtons;
+    brls::Label* countLabel = nullptr;
+
     BRLS_BIND(brls::Box, togglesBox, "catalog/toggles");
-    BRLS_BIND(brls::Label, countLabel, "catalog/count");
     BRLS_BIND(brls::RecyclerFrame, recycler, "catalog/recycler");
     BRLS_BIND(brls::Label, emptyLabel, "catalog/empty");
 };

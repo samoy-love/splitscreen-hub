@@ -1,62 +1,73 @@
+<!-- Размер плитки подобран под ширину экрана: восемь штук по 140 с зазором 12
+     занимают 1204 из 1220 доступных точек, то есть сетка идёт во всю ширину.
+     Обложки в базе квадратные (256×256), поэтому и картинка квадратная. -->
 <brls:Box
     axis="column"
-    width="192"
-    height="212"
+    width="140"
+    height="166"
     focusable="true"
-    cornerRadius="8">
+    cornerRadius="6">
 
     <brls:Box
-        width="192"
-        height="160">
+        width="140"
+        height="140">
 
         <brls:Image
             id="tile/cover"
-            width="192"
-            height="160"
-            cornerRadius="8"
+            width="140"
+            height="140"
+            cornerRadius="6"
             scalingType="fill" />
 
         <brls:Label
             id="tile/star"
             text="★"
-            fontSize="20"
+            fontSize="15"
             positionType="absolute"
-            positionTop="6"
-            positionLeft="8"
+            positionTop="4"
+            positionLeft="6"
             textColor="#FFFFFF"
             visibility="gone" />
 
         <brls:Box
             id="tile/installed"
-            width="10"
-            height="10"
-            cornerRadius="5"
+            width="8"
+            height="8"
+            cornerRadius="4"
             positionType="absolute"
-            positionTop="10"
-            positionRight="10"
+            positionTop="7"
+            positionRight="7"
             backgroundColor="#4CD964"
             visibility="gone" />
 
-        <brls:Label
-            id="tile/players"
-            text=""
-            fontSize="16"
+        <!-- Отступы внутри умеет только Box, поэтому подложка счётчика игроков
+             вынесена в отдельный контейнер, а Label внутри остался чистым. -->
+        <brls:Box
+            width="auto"
+            height="auto"
             positionType="absolute"
-            positionBottom="6"
-            positionRight="8"
-            paddingLeft="8"
-            paddingRight="8"
-            cornerRadius="10"
-            backgroundColor="#000000B0"
-            textColor="#FFFFFF" />
+            positionBottom="4"
+            positionRight="5"
+            paddingLeft="6"
+            paddingRight="6"
+            cornerRadius="8"
+            backgroundColor="#000000B0">
+
+            <brls:Label
+                id="tile/players"
+                text=""
+                fontSize="13"
+                textColor="#FFFFFF" />
+
+        </brls:Box>
 
     </brls:Box>
 
     <brls:Label
         id="tile/name"
         text=""
-        fontSize="16"
-        marginTop="6"
+        fontSize="13"
+        marginTop="4"
         singleLine="true" />
 
 </brls:Box>

@@ -2,7 +2,10 @@
 
 #include <borealis.hpp>
 
+#include <memory>
+
 #include "catalog.hpp"
+#include "ui/game_grid.hpp"
 
 /// Моя библиотека: слева избранное и папки, справа сетка игр выбранного списка.
 /// Всё хранится на SD-карте и переживает перезапуск.
@@ -30,9 +33,9 @@ class LibraryTab : public brls::Box
     void onFolderNamed(const std::string& name);
     void onFolderRenamed(const std::string& name);
 
-    std::vector<Game> current;
+    std::shared_ptr<GridModel> model;
 
     BRLS_BIND(brls::Box, sidebar, "library/sidebar");
-    BRLS_BIND(brls::Box, grid, "library/grid");
+    BRLS_BIND(brls::RecyclerFrame, grid, "library/grid");
     BRLS_BIND(brls::Label, emptyLabel, "library/empty");
 };

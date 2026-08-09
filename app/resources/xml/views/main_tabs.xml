@@ -1,0 +1,37 @@
+<!-- Верхняя строка вкладок вместо левого сайдбара TabFrame. Сайдбар занимал
+     410 точек по ширине — треть экрана под три пункта, — и из-за него в сетку
+     помещалось вдвое меньше игр. Здесь на вкладки уходит только высота строки. -->
+<brls:Box
+    axis="column"
+    width="auto"
+    height="auto">
+
+    <brls:Box
+        axis="row"
+        alignItems="center"
+        height="44"
+        paddingLeft="30"
+        paddingRight="30">
+
+        <brls:Label
+            text="Split Screen Hub"
+            fontSize="17"
+            marginRight="24"
+            textColor="@theme/brls/text_disabled" />
+
+        <brls:Box
+            id="main/tabs"
+            axis="row"
+            alignItems="center"
+            grow="1.0" />
+
+    </brls:Box>
+
+    <brls:Box
+        id="main/content"
+        axis="column"
+        width="auto"
+        height="auto"
+        grow="1.0" />
+
+</brls:Box>

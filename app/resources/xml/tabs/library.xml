@@ -2,7 +2,7 @@
     axis="row"
     width="auto"
     height="auto"
-    paddingTop="20"
+    paddingTop="8"
     paddingRight="30"
     paddingBottom="10"
     paddingLeft="20">
@@ -10,7 +10,7 @@
     <brls:Box
         id="library/sidebar"
         axis="column"
-        width="220"
+        width="200"
         marginRight="20" />
 
     <brls:Box
@@ -20,24 +20,18 @@
         <brls:Label
             id="library/empty"
             text=""
-            fontSize="19"
+            fontSize="15"
             textColor="@theme/brls/text_disabled"
             visibility="gone"
             marginTop="40" />
 
-        <brls:ScrollingFrame
+        <!-- RecyclerFrame, а не список плиток в WrapBox: без переиспользования
+             сотня избранного держала бы сотню текстур сразу. -->
+        <brls:RecyclerFrame
+            id="library/grid"
             width="auto"
             height="auto"
-            grow="1.0">
-
-            <brls:Box
-                id="library/grid"
-                axis="row"
-                wrap="wrap"
-                width="auto"
-                height="auto" />
-
-        </brls:ScrollingFrame>
+            grow="1.0" />
 
     </brls:Box>
 
