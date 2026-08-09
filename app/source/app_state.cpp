@@ -1,6 +1,6 @@
 #include "app_state.hpp"
 
-#include <cstdio>
+#include "format.hpp"
 
 AppState& AppState::get()
 {
@@ -30,24 +30,10 @@ int AppState::installedCount(const std::vector<Game>& games) const
 
 std::string formatSize(long long bytes)
 {
-    if (bytes <= 0)
-        return "";
-
-    char buf[32];
-    double gb = static_cast<double>(bytes) / (1024.0 * 1024.0 * 1024.0);
-    if (gb >= 1.0)
-        std::snprintf(buf, sizeof(buf), "%.1f ГБ", gb);
-    else
-        std::snprintf(buf, sizeof(buf), "%.0f МБ", static_cast<double>(bytes) / (1024.0 * 1024.0));
-    return buf;
+    return fmtx::formatSize(bytes);
 }
 
 int languageCount(const std::string& languages)
 {
-    if (languages.empty())
-        return 0;
-    int n = 1;
-    for (char c : languages)
-        n += c == ',';
-    return n;
+    return fmtx::languageCount(languages);
 }

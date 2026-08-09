@@ -17,7 +17,7 @@ namespace
 {
 
 /// Создаёт все каталоги пути, кроме последнего элемента.
-/// При первом запуске sdmc:/switch/couch-coop/ ещё не существует.
+/// При первом запуске sdmc:/switch/splitscreen-hub/ ещё не существует.
 void ensureParentDir(const std::string& path)
 {
     size_t pos = 0;
@@ -69,6 +69,9 @@ bool Library::load(const std::string& path)
         folders.clear();
         return false;
     }
+
+    brls::Logger::info("библиотека: загружена из {} — избранного {}, папок {}", file, favs.size(),
+                       folders.size());
     return true;
 }
 

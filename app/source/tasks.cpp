@@ -1,5 +1,7 @@
 #include "tasks.hpp"
 
+#include <borealis.hpp>
+
 #include <atomic>
 #include <condition_variable>
 #include <deque>
@@ -16,6 +18,7 @@ constexpr int IO_WORKERS = 3;
 
 struct Queue
 {
+    const char* name = "";
     std::deque<std::function<void()>> items;
     std::mutex mutex;
     std::condition_variable cv;
@@ -23,10 +26,13 @@ struct Queue
 
     void push(std::function<void()> task)
     {
+        size_t depth;
         {
             std::lock_guard<std::mutex> lock(mutex);
             items.push_back(std::move(task));
+            depth = items.size();
         }
+        brls::Logger::debug("tasks[{}]: +задача, в очереди {}", name, depth);
         cv.notify_one();
     }
 
@@ -48,18 +54,41 @@ struct Queue
     }
 };
 
-Queue ioQueue;
-Queue heavyQueue;
+/// Отдельно от Queue::running: очереди можно остановить и заново запустить, а
+/// этот флаг означает именно завершение работы приложения.
+std::atomic_bool stopping { false };
+
+Queue ioQueue { "io" };
+Queue heavyQueue { "heavy" };
 std::vector<std::thread> workers;
 
 void run(Queue& queue)
 {
+    brls::Logger::debug("tasks[{}]: рабочий поток запущен", queue.name);
+
     while (true)
     {
         std::function<void()> task = queue.pop();
         if (!task)
+        {
+            brls::Logger::debug("tasks[{}]: рабочий поток завершён", queue.name);
             return;
-        task();
+        }
+
+        // Без перехвата брошенное задание уносит весь рабочий поток, и очередь
+        // после этого просто перестаёт разбираться — молча, без единого следа.
+        try
+        {
+            task();
+        }
+        catch (const std::exception& e)
+        {
+            brls::Logger::error("tasks[{}]: задание бросило исключение: {}", queue.name, e.what());
+        }
+        catch (...)
+        {
+            brls::Logger::error("tasks[{}]: задание бросило неизвестное исключение", queue.name);
+        }
     }
 }
 
@@ -73,16 +102,35 @@ void start()
     if (!workers.empty())
         return;
 
+    stopping           = false;
     ioQueue.running    = true;
     heavyQueue.running = true;
 
     for (int i = 0; i < IO_WORKERS; i++)
         workers.emplace_back([] { run(ioQueue); });
     workers.emplace_back([] { run(heavyQueue); });
+
+    brls::Logger::info("tasks: запущено потоков: {} (io {} + heavy 1)", workers.size(), IO_WORKERS);
+}
+
+bool shuttingDown()
+{
+    return stopping.load();
+}
+
+void requestStop()
+{
+    stopping = true;
 }
 
 void stop()
 {
+    stopping = true;
+
+    if (workers.empty())
+        return;
+
+    brls::Logger::info("tasks: остановка {} потоков", workers.size());
     ioQueue.running    = false;
     heavyQueue.running = false;
     ioQueue.wake();
@@ -92,6 +140,7 @@ void stop()
         if (worker.joinable())
             worker.join();
     workers.clear();
+    brls::Logger::info("tasks: все потоки остановлены");
 }
 
 void io(std::function<void()> task)

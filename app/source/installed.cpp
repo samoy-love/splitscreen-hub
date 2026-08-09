@@ -29,8 +29,15 @@ std::set<std::string> titleIds()
 
     while (true)
     {
-        int count = 0;
-        if (R_FAILED(nsListApplicationRecord(records, BATCH, offset, &count)) || count <= 0)
+        int count  = 0;
+        Result res = nsListApplicationRecord(records, BATCH, offset, &count);
+        if (R_FAILED(res))
+        {
+            brls::Logger::warning("ns:am: чтение с позиции {} не удалось (0x{:x})", offset,
+                                  (unsigned)res);
+            break;
+        }
+        if (count <= 0)
             break;
 
         for (int i = 0; i < count; i++)
