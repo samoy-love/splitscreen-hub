@@ -1,0 +1,100 @@
+"""
+Качает обложки игр в app/romfs/art/<nsuid>.jpg размером 256px.
+
+Ячейка сетки в доке 1080p ~280px, в портативе ~230px, поэтому 128px заметно мылит,
+а 320px раздувает релиз без видимой пользы. На 256px весь каталог занимает ~55 МБ.
+
+Cloudinary отдаёт нужный размер трансформацией в URL, но URL бывают двух видов —
+/image/upload/... и /image/fetch/... — и подстановка должна учитывать оба. Иначе
+трансформация молча игнорируется и качаются полноразмерные файлы по 90 КБ.
+"""
+
+import concurrent.futures
+import json
+import os
+import re
+import sqlite3
+import sys
+import threading
+import urllib.request
+
+DB = "catalog.db"
+SOURCE = "local_multiplayer.json"
+OUT_DIR = os.path.join("app", "resources", "art")
+TRANSFORM = "w_256,q_70,f_jpg"
+WORKERS = 8
+MIN_BYTES = 500  # меньше — почти наверняка заглушка, а не обложка
+
+
+def art_url(url):
+    if "/image/fetch/" in url:
+        return re.sub(r"/image/fetch/[^h]*", f"/image/fetch/{TRANSFORM}/", url)
+    return re.sub(r"/image/upload/(?:(?!store)[^/]+/)*", f"/image/upload/{TRANSFORM}/", url)
+
+
+def load_targets():
+    """nsuid -> исходный URL обложки, только для игр, попавших в базу."""
+    db = sqlite3.connect(DB)
+    wanted = {r[0] for r in db.execute("SELECT nsuid FROM games WHERE box_art_file IS NOT NULL")}
+    db.close()
+    with open(SOURCE, encoding="utf-8") as f:
+        return {g["nsuid"]: g["box_art"] for g in json.load(f)
+                if g.get("nsuid") in wanted and g.get("box_art")}
+
+
+def main():
+    os.makedirs(OUT_DIR, exist_ok=True)
+    targets = load_targets()
+
+    todo = [(n, u) for n, u in targets.items()
+            if not os.path.exists(os.path.join(OUT_DIR, f"{n}.jpg"))]
+    print(f"обложек всего {len(targets)}, качаем {len(todo)}")
+    if not todo:
+        return report(targets)
+
+    lock = threading.Lock()
+    done = [0, 0]
+
+    def fetch(item):
+        nsuid, url = item
+        path = os.path.join(OUT_DIR, f"{nsuid}.jpg")
+        ok = False
+        for _ in range(3):
+            try:
+                req = urllib.request.Request(art_url(url), headers={"User-Agent": "Mozilla/5.0"})
+                with urllib.request.urlopen(req, timeout=60) as r:
+                    data = r.read()
+                if len(data) >= MIN_BYTES:
+                    tmp = path + ".tmp"
+                    with open(tmp, "wb") as f:
+                        f.write(data)
+                    os.replace(tmp, path)
+                    ok = True
+                break
+            except Exception:  # noqa: BLE001
+                continue
+        with lock:
+            done[0] += 1
+            done[1] += not ok
+            if done[0] % 200 == 0 or done[0] == len(todo):
+                print(f"  {done[0]}/{len(todo)}, не скачалось {done[1]}")
+
+    with concurrent.futures.ThreadPoolExecutor(WORKERS) as pool:
+        list(pool.map(fetch, todo))
+
+    report(targets)
+
+
+def report(targets):
+    files = [f for f in os.listdir(OUT_DIR) if f.endswith(".jpg")]
+    total = sum(os.path.getsize(os.path.join(OUT_DIR, f)) for f in files)
+    avg = total / len(files) if files else 0
+    print(f"\nфайлов: {len(files)} из {len(targets)}")
+    print(f"объём: {total / 1024 / 1024:.1f} МБ, средний {avg / 1024:.1f} КБ")
+    if avg > 40 * 1024:
+        print("ВНИМАНИЕ: средний файл великоват — похоже, трансформация Cloudinary "
+              "не применилась и скачаны полноразмерные обложки", file=sys.stderr)
+
+
+if __name__ == "__main__":
+    main()

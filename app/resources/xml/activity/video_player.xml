@@ -1,0 +1,45 @@
+<brls:Box
+    width="auto"
+    height="auto"
+    backgroundColor="#000000">
+
+    <!-- Кадры рисуются кодом (VideoSurface) в этот контейнер на весь экран. -->
+    <brls:Box
+        id="video/box"
+        width="auto"
+        height="auto"
+        grow="1.0"
+        axis="column"
+        justifyContent="center"
+        alignItems="center" />
+
+    <!-- Статус и индикатор паузы лежат поверх кадра, а не полосой сверху:
+         абсолютное позиционирование в этой версии borealis есть, и заслонять
+         видео отдельной строкой незачем. Подложка полупрозрачная, чтобы текст
+         читался на любом кадре. -->
+    <brls:Label
+        id="video/status"
+        text="Загрузка трейлера…"
+        fontSize="22"
+        positionType="absolute"
+        positionTop="40"
+        positionLeft="0"
+        positionRight="0"
+        horizontalAlign="center"
+        textColor="#FFFFFF" />
+
+    <brls:Label
+        id="video/pause"
+        text="II  Пауза"
+        fontSize="30"
+        positionType="absolute"
+        positionTop="0"
+        positionBottom="0"
+        positionLeft="0"
+        positionRight="0"
+        horizontalAlign="center"
+        verticalAlign="center"
+        textColor="#FFFFFF"
+        visibility="gone" />
+
+</brls:Box>

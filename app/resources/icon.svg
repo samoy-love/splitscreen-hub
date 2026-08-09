@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <rect width="256" height="256" fill="#1b2a4a"/>
+
+  <!-- central shared screen -->
+  <rect x="88" y="88" width="80" height="80" rx="10" fill="#f2f4f8"/>
+  <rect x="100" y="100" width="56" height="56" rx="4" fill="#1b2a4a"/>
+
+  <!-- four player dots converging toward the screen, one per corner -->
+  <circle cx="52" cy="52" r="30" fill="#e84545"/>
+  <circle cx="204" cy="52" r="30" fill="#3aa6ff"/>
+  <circle cx="52" cy="204" r="30" fill="#f4c542"/>
+  <circle cx="204" cy="204" r="30" fill="#3ec97a"/>
+</svg>

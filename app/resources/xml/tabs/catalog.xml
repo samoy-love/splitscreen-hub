@@ -1,0 +1,60 @@
+<brls:Box
+    axis="column"
+    width="auto"
+    height="auto"
+    paddingTop="20"
+    paddingRight="30"
+    paddingBottom="10"
+    paddingLeft="20">
+
+    <brls:Box
+        axis="row"
+        alignItems="center"
+        marginBottom="10">
+
+        <brls:Label
+            text="Игроков"
+            fontSize="17"
+            textColor="@theme/brls/text_disabled"
+            marginRight="14" />
+
+        <brls:Box
+            id="catalog/players"
+            axis="row"
+            alignItems="center" />
+
+        <brls:Label
+            id="catalog/count"
+            text=""
+            fontSize="17"
+            textColor="@theme/brls/text_disabled"
+            grow="1.0"
+            horizontalAlign="right" />
+
+    </brls:Box>
+
+    <!-- wrap: если подписей всё же станет больше или жанр окажется длинным,
+         чипы перенесутся на вторую строку, а не уедут за край экрана. -->
+    <brls:Box
+        id="catalog/toggles"
+        axis="row"
+        wrap="wrap"
+        alignItems="center"
+        marginBottom="10" />
+
+    <brls:Label
+        id="catalog/empty"
+        text="Ничего не нашлось. Ослабьте фильтр — например, снимите «только установленные»."
+        fontSize="20"
+        textColor="@theme/brls/text_disabled"
+        visibility="gone"
+        marginTop="60"
+        horizontalAlign="center" />
+
+    <brls:RecyclerFrame
+        id="catalog/recycler"
+        width="auto"
+        height="auto"
+        grow="1.0" />
+
+</brls:Box>

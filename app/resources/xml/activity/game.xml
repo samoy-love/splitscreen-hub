@@ -1,0 +1,149 @@
+<brls:AppletFrame
+    iconInterpolation="linear"
+    footerHidden="false">
+
+    <brls:Box
+        axis="column"
+        width="auto"
+        height="auto">
+
+        <brls:Box
+            id="game/header"
+            axis="row"
+            alignItems="center"
+            height="120"
+            paddingLeft="40"
+            paddingRight="40">
+
+            <brls:Image
+                id="game/cover"
+                width="80"
+                height="80"
+                cornerRadius="8"
+                marginRight="20"
+                scalingType="fill" />
+
+            <brls:Box axis="column" grow="1.0">
+                <brls:Label
+                    id="game/title"
+                    text=""
+                    fontSize="28"
+                    textColor="#FFFFFF"
+                    singleLine="true" />
+                <brls:Label
+                    id="game/subtitle"
+                    text=""
+                    fontSize="17"
+                    marginTop="4"
+                    textColor="#FFFFFFB0" />
+            </brls:Box>
+
+            <!-- Индикаторы избранного и папки: в макете они стоят справа в
+                 цветной шапке. Действия по кнопкам X и Y, здесь только
+                 состояние. -->
+            <brls:Label
+                id="game/star"
+                text="★"
+                fontSize="26"
+                marginRight="14"
+                textColor="#FFFFFF"
+                visibility="gone" />
+
+            <brls:Label
+                id="game/folders"
+                text=""
+                fontSize="16"
+                textColor="#FFFFFFB0"
+                visibility="gone" />
+
+        </brls:Box>
+
+        <brls:ScrollingFrame
+            width="auto"
+            height="auto"
+            grow="1.0">
+
+            <brls:Box
+                axis="column"
+                width="auto"
+                height="auto"
+                paddingTop="20"
+                paddingRight="40"
+                paddingBottom="30"
+                paddingLeft="40">
+
+                <brls:Box
+                    id="game/stats"
+                    axis="row"
+                    marginBottom="16" />
+
+                <brls:Label
+                    id="game/players_note"
+                    text=""
+                    fontSize="17"
+                    marginBottom="14"
+                    textColor="@theme/brls/accent"
+                    visibility="gone" />
+
+                <brls:Box
+                    id="game/tags"
+                    axis="row"
+                    wrap="wrap"
+                    marginBottom="16" />
+
+                <brls:Label
+                    id="game/genres"
+                    text=""
+                    fontSize="16"
+                    marginBottom="14"
+                    textColor="@theme/brls/text_disabled"
+                    visibility="gone" />
+
+                <brls:Label
+                    id="game/headline"
+                    text=""
+                    fontSize="19"
+                    marginBottom="14" />
+
+                <brls:Label
+                    id="game/shots_hint"
+                    text=""
+                    fontSize="15"
+                    marginBottom="6"
+                    textColor="@theme/brls/text_disabled"
+                    visibility="gone" />
+
+                <!-- Скриншоты стоят над описанием, а не под ним: описание
+                     прокручивается и может быть любой длины, а если поставить
+                     их снизу, они подпирают текст и в первом экране остаётся
+                     всего две строки. -->
+                <brls:Box
+                    id="game/shots"
+                    axis="row"
+                    height="130"
+                    marginBottom="10" />
+
+                <!-- Кнопка трейлера: включена, только если у игры есть видео
+                     и сеть доступна — иначе задизейблена с понятной подписью
+                     (fillTrailerButton() в game_activity.cpp). -->
+                <brls:Button
+                    id="game/trailer_button"
+                    width="auto"
+                    height="auto"
+                    style="highlight"
+                    marginBottom="18"
+                    text="▶ Смотреть трейлер" />
+
+                <brls:Label
+                    id="game/description"
+                    text=""
+                    fontSize="17"
+                    textColor="@theme/brls/text_disabled" />
+
+            </brls:Box>
+
+        </brls:ScrollingFrame>
+
+    </brls:Box>
+
+</brls:AppletFrame>

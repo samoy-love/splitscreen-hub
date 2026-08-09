@@ -1,0 +1,44 @@
+<brls:Box
+    axis="row"
+    width="auto"
+    height="auto"
+    paddingTop="20"
+    paddingRight="30"
+    paddingBottom="10"
+    paddingLeft="20">
+
+    <brls:Box
+        id="library/sidebar"
+        axis="column"
+        width="220"
+        marginRight="20" />
+
+    <brls:Box
+        axis="column"
+        grow="1.0">
+
+        <brls:Label
+            id="library/empty"
+            text=""
+            fontSize="19"
+            textColor="@theme/brls/text_disabled"
+            visibility="gone"
+            marginTop="40" />
+
+        <brls:ScrollingFrame
+            width="auto"
+            height="auto"
+            grow="1.0">
+
+            <brls:Box
+                id="library/grid"
+                axis="row"
+                wrap="wrap"
+                width="auto"
+                height="auto" />
+
+        </brls:ScrollingFrame>
+
+    </brls:Box>
+
+</brls:Box>

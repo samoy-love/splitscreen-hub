@@ -1,0 +1,62 @@
+<brls:Box
+    axis="column"
+    width="192"
+    height="212"
+    focusable="true"
+    cornerRadius="8">
+
+    <brls:Box
+        width="192"
+        height="160">
+
+        <brls:Image
+            id="tile/cover"
+            width="192"
+            height="160"
+            cornerRadius="8"
+            scalingType="fill" />
+
+        <brls:Label
+            id="tile/star"
+            text="★"
+            fontSize="20"
+            positionType="absolute"
+            positionTop="6"
+            positionLeft="8"
+            textColor="#FFFFFF"
+            visibility="gone" />
+
+        <brls:Box
+            id="tile/installed"
+            width="10"
+            height="10"
+            cornerRadius="5"
+            positionType="absolute"
+            positionTop="10"
+            positionRight="10"
+            backgroundColor="#4CD964"
+            visibility="gone" />
+
+        <brls:Label
+            id="tile/players"
+            text=""
+            fontSize="16"
+            positionType="absolute"
+            positionBottom="6"
+            positionRight="8"
+            paddingLeft="8"
+            paddingRight="8"
+            cornerRadius="10"
+            backgroundColor="#000000B0"
+            textColor="#FFFFFF" />
+
+    </brls:Box>
+
+    <brls:Label
+        id="tile/name"
+        text=""
+        fontSize="16"
+        marginTop="6"
+        singleLine="true" />
+
+</brls:Box>

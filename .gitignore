@@ -1,0 +1,26 @@
+# сборка приложения и распакованные исходники FFmpeg — воспроизводятся скриптами
+app/build/
+build-ffmpeg/
+*.log
+
+# артефакт сборки FFmpeg: получается из build_ffmpeg_slim.sh
+app/lib/ffmpeg-slim/
+
+# база, которая едет в romfs: делается из catalog.db через make_ship_db.py
+app/resources/catalog.db
+app/resources/art/
+
+# кэш карточек eShop: тяжёлый и восстанавливается повторным прогоном
+products_cache.json
+
+# тяжёлые сгенерированные данные (пересобираются скриптами build_*.py/fetch_*.py)
+catalog.db
+translations.db
+toplists.db
+local_multiplayer.csv
+local_multiplayer.json
+
+# временные файлы процесса перевода
+.translate_tmp/
+
+__pycache__/
