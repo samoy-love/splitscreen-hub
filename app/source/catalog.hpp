@@ -23,11 +23,6 @@ struct Game
     bool noTabletop = false;
     bool hasDemo = false;
     bool hasRussian = false;
-    // Оценка показывается вместе с числом голосов и источником: «87% из
-    // 74 978, Steam» честнее и информативнее абстрактного числа.
-    int rating = 0;  // 0-100, 0 — оценки нет
-    int ratingVotes = 0;
-    std::string ratingSource;
     /// В скольких подборках «лучших couch co-op» игра названа.
     int topMentions = 0;
 
@@ -63,16 +58,21 @@ class Catalog
     /// Возвращает false, если базу открыть не удалось.
     bool open(const std::string& path);
 
-    /// Полная выборка — со всеми текстами. Нужна редко.
-    std::vector<Game> query(const Filter& filter) const;
+    /// Причина неудачи последнего open(): код sqlite и его текст. Ошибка
+    /// возникает до появления интерфейса, поэтому её некуда показать — её
+    /// забирает журнал загрузки.
+    std::string lastError;
+
+  private:
+    int countGames();
+    bool openInMemory(const std::string& path);
+
+  public:
 
     /// Выборка для сетки: только то, что видно на плитке. Без описаний,
     /// которые при 3489 играх дают лишние мегабайты на каждый фильтр.
     std::vector<Game> queryBrief(const Filter& filter) const;
     int count(const Filter& filter) const;
-
-    /// Сколько игр найдётся для каждого порога — для подписей на кнопках фильтра.
-    int countAtLeast(int players) const;
 
     Game byNsuid(const std::string& nsuid) const;
     std::vector<std::string> genres() const;
@@ -84,7 +84,10 @@ class Catalog
   private:
     struct sqlite3* db = nullptr;
 
-    std::string buildWhere(const Filter& filter) const;
+    /// Собирает условие WHERE. Значения не подставляются в текст, а
+    /// складываются в params для последующего bindParams().
+    std::string buildWhere(const Filter& filter, std::vector<std::string>& params) const;
+    static void bindParams(struct sqlite3_stmt* st, const std::vector<std::string>& params);
     const char* orderBy(const Filter& filter) const;
     std::vector<std::string> media(const std::string& nsuid, const char* kind) const;
 };

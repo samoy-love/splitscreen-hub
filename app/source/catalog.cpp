@@ -3,9 +3,81 @@
 #include <borealis.hpp>
 #include <sqlite3.h>
 
+#include <chrono>
+#include <cstring>
+#include <fstream>
+
 namespace
 {
 
+/// Родительская VFS. Отдельной переменной, а не в pAppData копии: unix-VFS
+/// хранит там свой указатель на выбор стиля блокировок и разыменовывает его при
+/// каждом открытии файла — подмена поля обернулась бы падением внутри sqlite.
+sqlite3_vfs* nxParentVfs = nullptr;
+
+/// Регистрирует VFS для путей devkitPro и возвращает её имя.
+///
+/// sqlite считает путь абсолютным только когда он начинается с «/», а
+/// «romfs:/catalog.db» начинается с буквы. Поэтому штатная unixFullPathname
+/// приклеивает спереди текущий каталог и получает несуществующее имя — база не
+/// открывается с «unable to open database file», хотя файл на месте и читается
+/// обычным fopen. Подменяем единственный метод: путь с префиксом устройства
+/// отдаём как есть.
+///
+/// Это обёртка вокруг штатной VFS, а не своя реализация: чтение, блокировки и
+/// всё остальное остаются родными.
+const char* nxVfsName()
+{
+    static sqlite3_vfs nxVfs;
+    static bool registered = false;
+
+    if (registered)
+        return nxVfs.zName;
+
+    // Оборачиваем «unix-none», а не VFS по умолчанию: перед чтением схемы sqlite
+    // берёт разделяемую блокировку через fcntl, а romfs блокировок не умеет и
+    // отвечает ошибкой ввода-вывода. Файл здесь только для чтения и никем не
+    // изменяется, так что блокировки не нужны вовсе.
+    sqlite3_vfs* base = sqlite3_vfs_find("unix-none");
+    if (!base)
+        base = sqlite3_vfs_find(nullptr);
+    if (!base)
+        return nullptr;
+
+    nxParentVfs = base;
+
+    nxVfs               = *base;
+    nxVfs.zName         = "nx";
+    nxVfs.xFullPathname = [](sqlite3_vfs* vfs, const char* path, int outSize, char* out) -> int
+    {
+        (void)vfs;
+        // «устройство:» в начале — путь уже абсолютный
+        const char* colon = std::strchr(path, ':');
+        const char* slash = std::strchr(path, '/');
+        if (colon && (!slash || colon < slash))
+        {
+            const size_t len = std::strlen(path);
+            if ((int)len >= outSize)
+                return SQLITE_CANTOPEN;
+            std::memcpy(out, path, len + 1);
+            return SQLITE_OK;
+        }
+
+        return nxParentVfs->xFullPathname(nxParentVfs, path, outSize, out);
+    };
+
+    if (sqlite3_vfs_register(&nxVfs, 0) != SQLITE_OK)
+        return nullptr;
+
+    registered = true;
+    return nxVfs.zName;
+}
+
+// Таблица ratings в отгружаемой базе пуста — источник оценок так и не появился,
+// и сортировка «по оценке» упорядочивала 3489 игр по нулю. Пункт убран из
+// SORT_NAMES, а вместе с ним и джойн: он тянул три пустые колонки на каждую
+// строку каждого запроса.
+//
 // Тексты берутся из games напрямую: в базе, которая едет в romfs, перевод уже
 // вписан поверх оригинала (make_ship_db.py), а таблица translations удалена —
 // два языка одного и того же текста в сборке не нужны. Английские черновики
@@ -15,10 +87,8 @@ const char* SELECT_FIELDS =
     " g.players_note, g.box_art_file, g.background_color,"
     " g.headline, g.description,"
     " g.publisher, g.release_year, g.languages, g.rom_size_bytes, g.has_online,"
-    " g.no_tabletop, g.has_demo, g.has_russian,"
-    " r.rating, r.votes, r.source, tl.mentions"
+    " g.no_tabletop, g.has_demo, g.has_russian, tl.mentions"
     " FROM games g"
-    " LEFT JOIN ratings r ON r.nsuid = g.nsuid"
     " LEFT JOIN toplists tl ON tl.nsuid = g.nsuid";
 
 // Сетке не нужны описания: они есть только у карточки, где игра одна.
@@ -26,9 +96,8 @@ const char* SELECT_FIELDS =
 // и делает это заново на каждое нажатие фильтра.
 const char* SELECT_BRIEF =
     "SELECT g.nsuid, g.title, g.title_id, g.same_screen_min, g.same_screen_max,"
-    " g.box_art_file, r.rating, r.votes, tl.mentions"
+    " g.box_art_file, tl.mentions"
     " FROM games g"
-    " LEFT JOIN ratings r ON r.nsuid = g.nsuid"
     " LEFT JOIN toplists tl ON tl.nsuid = g.nsuid";
 
 std::string text(sqlite3_stmt* st, int col)
@@ -58,12 +127,7 @@ Game readGame(sqlite3_stmt* st)
     g.noTabletop      = sqlite3_column_int(st, 15) != 0;
     g.hasDemo         = sqlite3_column_int(st, 16) != 0;
     g.hasRussian      = sqlite3_column_int(st, 17) != 0;
-    g.rating          = sqlite3_column_type(st, 18) == SQLITE_NULL
-        ? 0
-        : sqlite3_column_int(st, 18);
-    g.ratingVotes     = sqlite3_column_int(st, 19);
-    g.ratingSource    = text(st, 20);
-    g.topMentions     = sqlite3_column_int(st, 21);
+    g.topMentions     = sqlite3_column_int(st, 18);
     return g;
 }
 
@@ -76,41 +140,22 @@ Game readGameBrief(sqlite3_stmt* st)
     g.sameScreenMin = sqlite3_column_int(st, 3);
     g.sameScreenMax = sqlite3_column_int(st, 4);
     g.boxArtFile    = text(st, 5);
-    g.rating        = sqlite3_column_type(st, 6) == SQLITE_NULL
-        ? 0
-        : sqlite3_column_int(st, 6);
-    g.ratingVotes   = sqlite3_column_int(st, 7);
-    g.topMentions   = sqlite3_column_int(st, 8);
+    g.topMentions   = sqlite3_column_int(st, 6);
     return g;
-}
-
-/// Экранирует строку для подстановки в SQL-литерал.
-std::string quote(const std::string& s)
-{
-    std::string out = "'";
-    for (char c : s)
-    {
-        if (c == '\'')
-            out += '\'';
-        out += c;
-    }
-    return out + "'";
 }
 
 /// Порядок в SQL для каждой сортировки. Приписка `sort_title` вторым ключом
 /// нужна везде: без неё игры с одинаковым числом игроков или годом выпуска
 /// перемешиваются от запроса к запросу.
 const char* ORDER_BY[] = {
-    // Согласие обзоров: в скольких независимых подборках «лучших couch co-op
-    // игр» игра названа. Ставится по умолчанию — из 3480 игр это единственный
-    // порядок, который сразу показывает то, во что стоит играть.
+    // В скольких независимых подборках «лучших couch co-op игр» игра названа.
+    // Стоит по умолчанию: упоминания есть только у 85 игр, но именно они и
+    // отвечают на вопрос «во что поиграть», а остальное идёт по алфавиту.
     " ORDER BY tl.mentions IS NULL, tl.mentions DESC, tl.best_pos, g.sort_title",
     " ORDER BY g.sort_title",                              // название А→Я
     " ORDER BY g.sort_title DESC",                         // название Я→А
     " ORDER BY g.same_screen_max DESC, g.sort_title",      // больше игроков
     " ORDER BY g.release_year DESC, g.sort_title",         // сначала новые
-    // оценки есть не у всех, игры без неё уходят в конец, а не наверх
-    " ORDER BY r.rating IS NULL, r.rating DESC, g.sort_title",
     // «что влезет на карту» — сначала маленькие, размер известен не везде
     " ORDER BY g.rom_size_bytes IS NULL, g.rom_size_bytes, g.sort_title",
     " ORDER BY g.sort_title",  // сначала мои: доупорядочивается в приложении
@@ -120,13 +165,15 @@ const char* ORDER_BY[] = {
 
 // Названия короткие: они целиком печатаются на чипе, а строка фильтров и так
 // упирается в 820 точек ширины контента.
+// «Из подборок», а не «по обзорам»: упоминания есть у 85 игр из 3489, то есть
+// осмысленно упорядочены первые несколько десятков, а остальные идут по
+// алфавиту. Прежнее название обещало сортировку всего каталога по качеству.
 const std::vector<std::string> Catalog::SORT_NAMES = {
-    "по обзорам",
+    "из подборок",
     "по названию А–Я",
     "по названию Я–А",
     "больше игроков",
     "сначала новые",
-    "по оценке",
     "по размеру",
     "сначала мои",
 };
@@ -137,40 +184,175 @@ Catalog::~Catalog()
         sqlite3_close(db);
 }
 
-bool Catalog::open(const std::string& path)
+/// Сколько игр видит уже открытая база. Отрицательное значение — база
+/// открылась, но не читается: такое бывает при отказе ввода-вывода на первой же
+/// странице, и молча поднимать пустой интерфейс в этом случае нельзя.
+int Catalog::countGames()
 {
-    if (sqlite3_open_v2(path.c_str(), &db, SQLITE_OPEN_READONLY, nullptr) != SQLITE_OK)
+    sqlite3_stmt* st = nullptr;
+    int rc = sqlite3_prepare_v2(db, "SELECT count(*) FROM games", -1, &st, nullptr);
+    if (rc != SQLITE_OK)
     {
-        brls::Logger::error("Не удалось открыть каталог {}: {}", path, sqlite3_errmsg(db));
+        // Расширенный код важнее базового: SQLITE_IOERR один на десяток разных
+        // причин, а по уточнению видно, чтение это, блокировка или fstat.
+        lastError = "rc=" + std::to_string(rc) + "/" +
+                    std::to_string(sqlite3_extended_errcode(db)) + " " + sqlite3_errmsg(db);
+        return -1;
+    }
+
+    rc       = sqlite3_step(st);
+    int games = rc == SQLITE_ROW ? sqlite3_column_int(st, 0) : -1;
+    if (games < 0)
+        lastError = "rc=" + std::to_string(rc) + "/" +
+                    std::to_string(sqlite3_extended_errcode(db)) + " " + sqlite3_errmsg(db);
+    sqlite3_finalize(st);
+    return games;
+}
+
+/// Последний рубеж: база целиком читается обычным потоком и отдаётся sqlite как
+/// готовый образ в памяти. Это снимает разом все особенности romfs — блокировки,
+/// нестандартное чтение, префиксы устройств, — ценой памяти под сам файл.
+bool Catalog::openInMemory(const std::string& path)
+{
+    std::ifstream in(path, std::ios::binary | std::ios::ate);
+    if (!in.good())
+    {
+        lastError = "не открылся файл " + path;
+        return false;
+    }
+
+    const std::streamsize size = in.tellg();
+    in.seekg(0);
+
+    // Освобождает sqlite при закрытии базы, поэтому именно sqlite3_malloc64.
+    auto* image = static_cast<unsigned char*>(sqlite3_malloc64(size));
+    if (!image)
+    {
+        lastError = "не хватило памяти на образ базы (" + std::to_string(size) + " Б)";
+        return false;
+    }
+
+    if (!in.read(reinterpret_cast<char*>(image), size))
+    {
+        sqlite3_free(image);
+        lastError = "файл прочитался не целиком";
+        return false;
+    }
+
+    int rc = sqlite3_open_v2(":memory:", &db, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE, nullptr);
+    if (rc != SQLITE_OK)
+    {
+        sqlite3_free(image);
+        lastError = "не создалась база в памяти: " + std::string(sqlite3_errstr(rc));
+        db        = nullptr;
+        return false;
+    }
+
+    rc = sqlite3_deserialize(db, "main", image, size, size,
+                             SQLITE_DESERIALIZE_FREEONCLOSE | SQLITE_DESERIALIZE_READONLY);
+    if (rc != SQLITE_OK)
+    {
+        lastError = "sqlite3_deserialize: " + std::string(sqlite3_errmsg(db));
         sqlite3_close(db);
         db = nullptr;
         return false;
     }
+
+    const int games = countGames();
+    if (games < 0)
+    {
+        sqlite3_close(db);
+        db = nullptr;
+        return false;
+    }
+
+    brls::Logger::warning("catalog: чтение из romfs не удалось, база поднята в память "
+                          "({} МБ), игр: {}",
+                          size / (1024 * 1024), games);
     return true;
 }
 
-std::string Catalog::buildWhere(const Filter& f) const
+bool Catalog::open(const std::string& path)
 {
+    // Порядок попыток от дешёвой к дорогой. «nx» — обёртка над «unix-none» с
+    // починенным разбором пути, дальше штатные VFS, и лишь в конце образ в
+    // памяти, который стоит 11 МБ.
+    const char* const vfsOrder[] = { nxVfsName(), nullptr, "unix-none" };
+
+    for (const char* vfs : vfsOrder)
+    {
+        int rc = sqlite3_open_v2(path.c_str(), &db, SQLITE_OPEN_READONLY, vfs);
+        if (rc == SQLITE_OK)
+        {
+            const int games = countGames();
+            if (games >= 0)
+            {
+                brls::Logger::info("catalog: открыт {} через VFS «{}» (sqlite {}), игр в базе: {}",
+                                   path, vfs ? vfs : "по умолчанию", sqlite3_libversion(), games);
+                return true;
+            }
+
+            brls::Logger::warning("catalog: VFS «{}» — база открылась, но не читается: {}",
+                                  vfs ? vfs : "по умолчанию", lastError);
+        }
+        else
+        {
+            lastError = "rc=" + std::to_string(rc) + " " +
+                        (db ? sqlite3_errmsg(db) : sqlite3_errstr(rc));
+            brls::Logger::warning("catalog: VFS «{}» не открыла {}: {}",
+                                  vfs ? vfs : "по умолчанию", path, lastError);
+        }
+
+        sqlite3_close(db);
+        db = nullptr;
+    }
+
+    if (openInMemory(path))
+        return true;
+
+    brls::Logger::error("Не удалось открыть каталог {}: {}", path, lastError);
+    return false;
+}
+
+std::string Catalog::buildWhere(const Filter& f, std::vector<std::string>& params) const
+{
+    // Значения подставляются через bind, а не склейкой текста: рядом в этом же
+    // классе byNsuid и genresOf уже так делают, и держать два способа — повод
+    // однажды забыть про экранирование.
+    params.clear();
+
     std::string w = " WHERE g.same_screen_max >= " + std::to_string(f.minPlayers);
 
     if (!f.genre.empty())
-        w += " AND g.nsuid IN (SELECT nsuid FROM genres WHERE genre = " + quote(f.genre) + ")";
+    {
+        w += " AND g.nsuid IN (SELECT nsuid FROM genres WHERE genre = ?)";
+        params.push_back(f.genre);
+    }
 
     if (f.onlyRussian)
         w += " AND g.has_russian = 1";
 
     if (!f.search.empty())
     {
-        // FTS5 ищет по префиксу, чтобы результат обновлялся по мере набора
+        // Кавычки и звёздочка — это синтаксис самого FTS5, а не текст запроса:
+        // оставленные как есть, они ломают разбор выражения.
         std::string term = f.search;
         for (char& c : term)
             if (c == '"' || c == '*' || c == '\'')
                 c = ' ';
-        w += " AND g.nsuid IN (SELECT nsuid FROM games_fts WHERE games_fts MATCH "
-             + quote("\"" + term + "\"*") + ")";
+
+        // FTS5 ищет по префиксу, чтобы результат обновлялся по мере набора
+        w += " AND g.nsuid IN (SELECT nsuid FROM games_fts WHERE games_fts MATCH ?)";
+        params.push_back("\"" + term + "\"*");
     }
 
     return w;
+}
+
+void Catalog::bindParams(sqlite3_stmt* st, const std::vector<std::string>& params)
+{
+    for (size_t i = 0; i < params.size(); i++)
+        sqlite3_bind_text(st, static_cast<int>(i + 1), params[i].c_str(), -1, SQLITE_TRANSIENT);
 }
 
 const char* Catalog::orderBy(const Filter& f) const
@@ -179,27 +361,6 @@ const char* Catalog::orderBy(const Filter& f) const
     return ORDER_BY[f.sort >= 0 && static_cast<size_t>(f.sort) < count ? f.sort : 0];
 }
 
-std::vector<Game> Catalog::query(const Filter& f) const
-{
-    std::vector<Game> out;
-    if (!db)
-        return out;
-
-    std::string sql = std::string(SELECT_FIELDS) + buildWhere(f) + orderBy(f);
-
-    sqlite3_stmt* st = nullptr;
-    if (sqlite3_prepare_v2(db, sql.c_str(), -1, &st, nullptr) != SQLITE_OK)
-    {
-        brls::Logger::error("Запрос каталога не выполнился: {}", sqlite3_errmsg(db));
-        return out;
-    }
-
-    while (sqlite3_step(st) == SQLITE_ROW)
-        out.push_back(readGame(st));
-    sqlite3_finalize(st);
-
-    return out;
-}
 
 std::vector<Game> Catalog::queryBrief(const Filter& f) const
 {
@@ -207,7 +368,8 @@ std::vector<Game> Catalog::queryBrief(const Filter& f) const
     if (!db)
         return out;
 
-    std::string sql = std::string(SELECT_BRIEF) + buildWhere(f) + orderBy(f);
+    std::vector<std::string> params;
+    std::string sql = std::string(SELECT_BRIEF) + buildWhere(f, params) + orderBy(f);
 
     sqlite3_stmt* st = nullptr;
     if (sqlite3_prepare_v2(db, sql.c_str(), -1, &st, nullptr) != SQLITE_OK)
@@ -215,11 +377,22 @@ std::vector<Game> Catalog::queryBrief(const Filter& f) const
         brls::Logger::error("Запрос каталога не выполнился: {}", sqlite3_errmsg(db));
         return out;
     }
+    bindParams(st, params);
 
+    const auto started = std::chrono::steady_clock::now();
     while (sqlite3_step(st) == SQLITE_ROW)
         out.push_back(readGameBrief(st));
     sqlite3_finalize(st);
 
+    // Этот запрос идёт на каждое движение фильтра и определяет отзывчивость
+    // сетки, поэтому его время меряем всегда.
+    brls::Logger::debug("catalog: queryBrief — {} игр за {} мс (игроков >= {}, жанр «{}», "
+                        "сортировка {})",
+                        out.size(),
+                        std::chrono::duration_cast<std::chrono::milliseconds>(
+                            std::chrono::steady_clock::now() - started)
+                            .count(),
+                        f.minPlayers, f.genre, (int)f.sort);
     return out;
 }
 
@@ -227,7 +400,8 @@ int Catalog::count(const Filter& f) const
 {
     if (!db)
         return 0;
-    std::string sql = "SELECT count(*) FROM games g" + buildWhere(f);
+    std::vector<std::string> params;
+    std::string sql  = "SELECT count(*) FROM games g" + buildWhere(f, params);
     sqlite3_stmt* st = nullptr;
     if (sqlite3_prepare_v2(db, sql.c_str(), -1, &st, nullptr) != SQLITE_OK)
         return 0;
@@ -236,12 +410,6 @@ int Catalog::count(const Filter& f) const
     return n;
 }
 
-int Catalog::countAtLeast(int players) const
-{
-    Filter f;
-    f.minPlayers = players;
-    return count(f);
-}
 
 Game Catalog::byNsuid(const std::string& nsuid) const
 {
