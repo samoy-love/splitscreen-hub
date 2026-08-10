@@ -36,6 +36,8 @@ class CatalogTab : public brls::Box
     void chooseGenre();
     void chooseSort();
     void toggleHidden();
+    /// Обновляет отметки одной игры без перезапроса каталога.
+    void refreshTile(const std::string& nsuid);
     void refreshToggleLabels();
 
     brls::Button* genreButton = nullptr;

@@ -87,12 +87,19 @@ GameActivity::~GameActivity()
 
 void GameActivity::onContentAvailable()
 {
-    this->registerAction("Избранное", brls::BUTTON_X, [this](brls::View*) {
-        toggleFavorite();
+    // Те же кнопки, что в каталоге: X кладёт в списки, Y прячет. Раньше X здесь
+    // значил «избранное», а там «в папку» — одна кнопка с двумя смыслами.
+    this->registerAction("В списки", brls::BUTTON_X, [this](brls::View*) {
+        chooseFolder();
         return true;
     });
-    this->registerAction("В папку", brls::BUTTON_Y, [this](brls::View*) {
-        chooseFolder();
+    this->registerAction("Скрыть", brls::BUTTON_Y, [this](brls::View*) {
+        AppState& state     = AppState::get();
+        const bool wasShown = !state.library.isHidden(nsuid);
+        state.library.toggleHidden(nsuid);
+        game.hidden = !wasShown;
+        brls::Application::notify(wasShown ? "Игра скрыта" : "Игра возвращена");
+        refreshHeaderMarks();
         return true;
     });
 
@@ -194,6 +201,13 @@ void GameActivity::fillHeader()
 
 void GameActivity::loadCoverAsync(const std::string& file)
 {
+    // fillHeader() вызывается дважды — сразу из brief и потом из полной строки.
+    // Файл в обоих случаях один и тот же, а читать и разбирать его повторно
+    // значит зря потратить чтение с romfs и разбор JPEG на каждое открытие.
+    if (file == loadedArt)
+        return;
+    loadedArt = file;
+
     auto flag              = alive;
     auto* target           = cover.getView();
     const std::string path = std::string(ART_DIR) + file;
@@ -422,13 +436,6 @@ void GameActivity::openTrailer()
     });
 }
 
-void GameActivity::toggleFavorite()
-{
-    AppState& state = AppState::get();
-    state.library.toggleFavorite(game.nsuid);
-    game.favorite = state.library.isFavorite(game.nsuid);
-    refreshHeaderMarks();
-}
 
 void GameActivity::chooseFolder()
 {

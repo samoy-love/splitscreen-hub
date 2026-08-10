@@ -2,16 +2,16 @@
     axis="row"
     width="auto"
     height="auto"
-    paddingTop="8"
+    paddingTop="@style/hub/space/s"
     paddingRight="@style/hub/space/screen"
-    paddingBottom="10"
+    paddingBottom="@style/hub/space/s"
     paddingLeft="@style/hub/space/screen">
 
     <brls:Box
         id="library/sidebar"
         axis="column"
         width="200"
-        marginRight="20" />
+        marginRight="@style/hub/space/l" />
 
     <brls:Box
         axis="column"
@@ -20,10 +20,10 @@
         <brls:Label
             id="library/empty"
             text=""
-            fontSize="@style/hub/font/caption"
+            fontSize="@style/hub/font/body"
             textColor="@theme/brls/text_disabled"
             visibility="gone"
-            marginTop="40" />
+            marginTop="@style/hub/space/l" />
 
         <!-- RecyclerFrame, а не список плиток в WrapBox: без переиспользования
              сотня избранного держала бы сотню текстур сразу. -->

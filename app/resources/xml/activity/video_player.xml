@@ -43,7 +43,7 @@
         backgroundColor="#000000A0"
         visibility="gone">
 
-        <brls:Box width="10" height="34" marginRight="8" cornerRadius="2"
+        <brls:Box width="10" height="34" marginRight="@style/hub/space/s" cornerRadius="2"
                   backgroundColor="#FFFFFF" />
         <brls:Box width="10" height="34" cornerRadius="2"
                   backgroundColor="#FFFFFF" />
@@ -69,7 +69,7 @@
             id="video/elapsed"
             text="0:00"
             fontSize="@style/hub/font/caption"
-            marginRight="12"
+            marginRight="@style/hub/space/m"
             textColor="#FFFFFF" />
 
         <!-- Дорожка, а в ней две полосы: сколько закачано и сколько показано.
@@ -105,7 +105,7 @@
             id="video/left"
             text=""
             fontSize="@style/hub/font/caption"
-            marginLeft="12"
+            marginLeft="@style/hub/space/m"
             textColor="#FFFFFFC0" />
 
     </brls:Box>

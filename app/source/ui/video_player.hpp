@@ -181,6 +181,12 @@ class VideoPlayerActivity : public brls::Activity
     /// кадре — та же ошибка, что была с надписью «Пауза».
     void updateProgress(double position, double duration, float buffered);
 
+    /// Что уже нарисовано на шкале: обновляем только изменившееся.
+    std::string shownElapsed;
+    std::string shownLeft;
+    float shownPlayed = -1.0f;
+    float shownLoaded = -1.0f;
+
     void beginDownload();
     void closeSelf();
 };

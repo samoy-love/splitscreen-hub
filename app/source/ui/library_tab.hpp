@@ -2,6 +2,7 @@
 
 #include <borealis.hpp>
 
+#include <atomic>
 #include <memory>
 
 #include "catalog.hpp"
@@ -13,6 +14,7 @@ class LibraryTab : public brls::Box
 {
   public:
     LibraryTab();
+    ~LibraryTab() override;
     static brls::View* create();
 
   private:
@@ -20,6 +22,11 @@ class LibraryTab : public brls::Box
 
     void rebuildSidebar();
     void showSelection();
+    /// Показывает уже прочитанный список. Только из UI-потока.
+    void applyGames(std::vector<Game> games);
+
+    /// Вкладка может закрыться, пока список читается.
+    std::shared_ptr<std::atomic_bool> alive = std::make_shared<std::atomic_bool>(true);
     void promptNewFolder();
     void promptRename();
     void confirmRemove();

@@ -37,30 +37,48 @@ void pick(const std::string& nsuid, std::function<void()> onChanged)
     AppState& state                = AppState::get();
     std::vector<std::string> names = state.library.folderNames();
 
+    // Избранное — первым пунктом этого же списка, а не отдельной кнопкой.
+    // Раньше оно висело на X в карточке, тогда как в каталоге X означал «в
+    // папку», — одна кнопка с двумя разными смыслами. По сути избранное и есть
+    // особый список: в сайдбаре библиотеки оно и показано наравне с папками.
+    //
     // Отметка показывает, где игра уже лежит: без неё приходилось помнить.
     std::vector<std::string> items;
-    items.reserve(names.size() + 1);
+    items.reserve(names.size() + 2);
+    items.push_back((state.library.isFavorite(nsuid) ? "✓ " : "   ") + std::string("Избранное"));
     for (const std::string& name : names)
-        items.push_back((state.library.inFolder(name, nsuid) ? "★ " : "   ") + name);
+        items.push_back((state.library.inFolder(name, nsuid) ? "✓ " : "   ") + name);
     items.push_back("+ Новая папка…");
 
     auto* dropdown = new brls::Dropdown(
-        "В какую папку", items,
+        "Куда положить", items,
         [nsuid, names, onChanged](int selected) {
-            if (selected < 0 || selected > static_cast<int>(names.size()))
+            AppState& s = AppState::get();
+
+            // 0 — избранное, дальше папки, последним — создание новой
+            if (selected < 0 || selected > static_cast<int>(names.size()) + 1)
                 return;
 
-            if (selected == static_cast<int>(names.size()))
+            if (selected == 0)
+            {
+                s.library.toggleFavorite(nsuid);
+                brls::Application::notify(s.library.isFavorite(nsuid) ? "В избранном"
+                                                                      : "Убрано из избранного");
+            }
+            else if (selected == static_cast<int>(names.size()) + 1)
             {
                 promptNewFolder(nsuid, onChanged);
                 return;
             }
+            else
+            {
+                const std::string& name = names[selected - 1];
+                s.library.toggleInFolder(name, nsuid);
+                brls::Application::notify(s.library.inFolder(name, nsuid)
+                                              ? "Добавлено в «" + name + "»"
+                                              : "Убрано из «" + name + "»");
+            }
 
-            AppState& s = AppState::get();
-            s.library.toggleInFolder(names[selected], nsuid);
-            brls::Application::notify(s.library.inFolder(names[selected], nsuid)
-                                          ? "Добавлено в «" + names[selected] + "»"
-                                          : "Убрано из «" + names[selected] + "»");
             if (onChanged)
                 onChanged();
         },

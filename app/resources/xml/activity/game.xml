@@ -21,7 +21,7 @@
                 width="70"
                 height="70"
                 cornerRadius="6"
-                marginRight="16"
+                marginRight="@style/hub/space/m"
                 scalingType="fill" />
 
             <brls:Box axis="column" grow="1.0">
@@ -35,7 +35,7 @@
                     id="game/subtitle"
                     text=""
                     fontSize="@style/hub/font/caption"
-                    marginTop="2"
+                    marginTop="@style/hub/space/xs"
                     textColor="#FFFFFFB0" />
             </brls:Box>
 
@@ -45,7 +45,7 @@
                 id="game/star"
                 text="★"
                 fontSize="@style/hub/font/title"
-                marginRight="12"
+                marginRight="@style/hub/space/m"
                 textColor="#FFFFFF"
                 visibility="gone" />
 
@@ -67,34 +67,34 @@
                 axis="column"
                 width="auto"
                 height="auto"
-                paddingTop="14"
+                paddingTop="@style/hub/space/m"
                 paddingRight="@style/hub/space/screen"
-                paddingBottom="30"
+                paddingBottom="@style/hub/space/l"
                 paddingLeft="@style/hub/space/screen">
 
                 <brls:Box
                     id="game/stats"
                     axis="row"
-                    marginBottom="12" />
+                    marginBottom="@style/hub/space/m" />
 
                 <brls:Label
                     id="game/players_note"
                     text=""
                     fontSize="@style/hub/font/body"
-                    marginBottom="10"
+                    marginBottom="@style/hub/space/s"
                     textColor="@theme/brls/accent"
                     visibility="gone" />
 
                 <WrapBox
                     id="game/tags"
                     axis="row"
-                    marginBottom="12" />
+                    marginBottom="@style/hub/space/m" />
 
                 <brls:Label
                     id="game/genres"
                     text=""
                     fontSize="@style/hub/font/caption"
-                    marginBottom="10"
+                    marginBottom="@style/hub/space/s"
                     textColor="@theme/brls/text_disabled"
                     visibility="gone" />
 
@@ -102,13 +102,13 @@
                     id="game/headline"
                     text=""
                     fontSize="@style/hub/font/accent"
-                    marginBottom="12" />
+                    marginBottom="@style/hub/space/m" />
 
                 <brls:Label
                     id="game/shots_hint"
                     text=""
                     fontSize="@style/hub/font/caption"
-                    marginBottom="4"
+                    marginBottom="@style/hub/space/xs"
                     textColor="@theme/brls/text_disabled"
                     visibility="gone" />
 
@@ -126,7 +126,7 @@
                     alignItems="center"
                     width="auto"
                     height="128"
-                    marginBottom="14" />
+                    marginBottom="@style/hub/space/m" />
 
                 <brls:Label
                     id="game/description"

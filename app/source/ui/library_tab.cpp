@@ -1,6 +1,7 @@
 #include "ui/library_tab.hpp"
 
 #include "app_state.hpp"
+#include "tasks.hpp"
 #include "ui/fonts.hpp"
 #include "ui/game_activity.hpp"
 #include "ui/game_tile.hpp"
@@ -46,6 +47,11 @@ LibraryTab::LibraryTab()
             confirmRemove();
         return true;
     });
+}
+
+LibraryTab::~LibraryTab()
+{
+    *alive = false;
 }
 
 void LibraryTab::rebuildSidebar()
@@ -94,32 +100,57 @@ void LibraryTab::rebuildSidebar()
 void LibraryTab::showSelection()
 {
     AppState& state = AppState::get();
-    const std::vector<std::string>& ids =
+    // Копия, а не ссылка: список читается в рабочем потоке, а библиотеку в это
+    // время могут изменить с другого экрана.
+    const std::vector<std::string> ids =
         selected.empty() ? state.library.favorites() : state.library.folder(selected);
 
-    std::vector<Game>& games = model->games;
-    games.clear();
-    for (const std::string& nsuid : ids)
-    {
-        Game g = state.catalog.byNsuid(nsuid);
-        if (g.nsuid.empty())
-            continue;  // игра выпала из каталога при обновлении базы
-        state.decorate(g);
-        games.push_back(g);
-    }
-
     focusedNsuid.clear();
+
+    // По запросу к базе на каждую игру, и все — в UI-потоке: на сотне
+    // избранного это сотня полных строк с описаниями в одном кадре. Читаем в
+    // рабочем потоке, как каталог и карточка.
+    auto flag  = alive;
+    auto* self = this;
+
+    tasks::io([flag, self, ids]() {
+        AppState& state = AppState::get();
+        std::vector<Game> games;
+        games.reserve(ids.size());
+
+        for (const std::string& nsuid : ids)
+        {
+            Game g = state.catalog.byNsuid(nsuid);
+            if (g.nsuid.empty())
+                continue;  // игра выпала из каталога при обновлении базы
+            state.decorate(g);
+            games.push_back(std::move(g));
+        }
+
+        if (!*flag)
+            return;
+
+        brls::sync([flag, self, games = std::move(games)]() mutable {
+            if (*flag)
+                self->applyGames(std::move(games));
+        });
+    });
+}
+
+void LibraryTab::applyGames(std::vector<Game> games)
+{
+    model->games = std::move(games);
     refreshGameGrid(grid);
 
-    bool empty = games.empty();
+    const bool empty = model->games.empty();
     emptyLabel->setText(selected.empty()
-                            ? "Избранное пустое. Отметьте игру кнопкой X в каталоге."
-                            : "Папка пустая. Добавьте игру кнопкой Y в её карточке.");
+                            ? "Избранное пустое. Отметьте игру кнопкой X."
+                            : "Папка пустая. Положите в неё игру кнопкой X.");
     emptyLabel->setVisibility(empty ? brls::Visibility::VISIBLE : brls::Visibility::GONE);
     grid->setVisibility(empty ? brls::Visibility::GONE : brls::Visibility::VISIBLE);
 
     brls::Logger::info("библиотека: «{}» — игр {}", selected.empty() ? "Избранное" : selected,
-                       games.size());
+                       model->games.size());
 }
 
 void LibraryTab::removeFocused()

@@ -2,44 +2,44 @@
     axis="column"
     width="auto"
     height="auto"
-    paddingTop="30"
+    paddingTop="@style/hub/space/l"
     paddingRight="@style/hub/space/screen"
-    paddingBottom="30"
+    paddingBottom="@style/hub/space/l"
     paddingLeft="@style/hub/space/screen">
 
     <brls:Label
         text="Кэш загрузок"
         fontSize="@style/hub/font/title"
-        marginBottom="6" />
+        marginBottom="@style/hub/space/s" />
 
     <brls:Label
         text="Скриншоты и трейлеры, скачанные при просмотре карточек"
         fontSize="@style/hub/font/caption"
-        marginBottom="24"
+        marginBottom="@style/hub/space/l"
         textColor="@theme/brls/text_disabled" />
 
     <brls:Label
         id="cache/summary"
         text="Считаем…"
         fontSize="@style/hub/font/display"
-        marginBottom="14" />
+        marginBottom="@style/hub/space/m" />
 
     <brls:Label
         id="cache/breakdown"
         text=""
         fontSize="@style/hub/font/body"
-        marginBottom="20"
+        marginBottom="@style/hub/space/l"
         textColor="@theme/brls/text_disabled" />
 
     <WrapBox
         axis="row"
-        marginBottom="20">
+        marginBottom="@style/hub/space/l">
 
         <brls:Button
             id="cache/clear_videos"
             width="auto"
             height="auto"
-            marginRight="12"
+            marginRight="@style/hub/space/m"
             text="Удалить трейлеры" />
 
         <brls:Button

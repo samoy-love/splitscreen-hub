@@ -13,10 +13,10 @@
         axis="row"
         alignItems="center"
         height="52"
-        paddingTop="10"
+        paddingTop="@style/hub/space/s"
         paddingLeft="@style/hub/space/screen"
         paddingRight="@style/hub/space/screen"
-        marginBottom="6"
+        marginBottom="@style/hub/space/s"
         lineColor="@theme/brls/applet_frame/separator"
         lineBottom="1px">
 
@@ -25,7 +25,7 @@
         <brls:Label
             text="Split Screen Hub"
             fontSize="@style/hub/font/body"
-            marginRight="24"
+            marginRight="@style/hub/space/l"
             textColor="@theme/brls/text" />
 
         <brls:Box

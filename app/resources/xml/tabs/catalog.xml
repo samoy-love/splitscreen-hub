@@ -2,9 +2,9 @@
     axis="column"
     width="auto"
     height="auto"
-    paddingTop="6"
+    paddingTop="@style/hub/space/s"
     paddingRight="@style/hub/space/screen"
-    paddingBottom="4"
+    paddingBottom="@style/hub/space/xs"
     paddingLeft="@style/hub/space/screen">
 
     <!-- Два явных ряда вместо одного переносящегося.
@@ -17,7 +17,7 @@
     <brls:Box
         axis="row"
         alignItems="center"
-        marginBottom="4">
+        marginBottom="@style/hub/space/xs">
 
         <brls:Box
             id="catalog/players"
@@ -29,14 +29,14 @@
             id="catalog/spinner"
             width="22"
             height="22"
-            marginRight="10"
+            marginRight="@style/hub/space/s"
             visibility="gone" />
 
         <brls:Label
             id="catalog/count"
             text=""
             fontSize="@style/hub/font/caption"
-            marginRight="16"
+            marginRight="@style/hub/space/m"
             textColor="@theme/brls/text_disabled" />
 
         <!-- Сортировка отделена от фильтров намеренно: она не сужает список, а
@@ -45,7 +45,7 @@
         <brls:Label
             text="Сортировка"
             fontSize="@style/hub/font/caption"
-            marginRight="8"
+            marginRight="@style/hub/space/s"
             textColor="@theme/brls/text_disabled" />
 
         <brls:Button
@@ -60,7 +60,7 @@
         id="catalog/toggles"
         axis="row"
         alignItems="center"
-        marginBottom="6" />
+        marginBottom="@style/hub/space/s" />
 
     <brls:Label
         id="catalog/empty"
@@ -68,7 +68,7 @@
         fontSize="@style/hub/font/body"
         textColor="@theme/brls/text_disabled"
         visibility="gone"
-        marginTop="40"
+        marginTop="@style/hub/space/l"
         horizontalAlign="center" />
 
     <brls:RecyclerFrame

@@ -61,7 +61,10 @@ CatalogTab::CatalogTab()
             brls::Application::notify("Наведитесь на игру");
             return true;
         }
-        folders::pick(focusedNsuid, [this]() { reload(); });
+        // Перечитывать 3015 строк ради отметки не нужно: на плитке видно
+        // только избранное, и его достаточно перерисовать на месте.
+        const std::string nsuid = focusedNsuid;
+        folders::pick(nsuid, [this, nsuid]() { refreshTile(nsuid); });
         return true;
     });
     // ZL/ZR листают сетку страницами — с 3489 играми стик утомляет. Подсказки
@@ -244,6 +247,19 @@ void CatalogTab::chooseSort()
         },
         AppState::get().filter.sort);
     brls::Application::pushActivity(new brls::Activity(dropdown));
+}
+
+void CatalogTab::refreshTile(const std::string& nsuid)
+{
+    AppState& state = AppState::get();
+    for (Game& g : model->games)
+    {
+        if (g.nsuid != nsuid)
+            continue;
+        state.decorate(g);
+        break;
+    }
+    recycler->reloadData();
 }
 
 void CatalogTab::toggleHidden()

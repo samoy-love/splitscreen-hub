@@ -7,6 +7,7 @@
 #include <borealis.hpp>
 
 #include <algorithm>
+#include <cmath>
 #include <cstdio>
 #include <cstring>
 #include <chrono>
@@ -633,24 +634,45 @@ std::string clock(double seconds)
 
 void VideoPlayerActivity::updateProgress(double position, double duration, float buffered)
 {
-    elapsedLabel->setText(clock(position));
+    // Нас зовут четыре раза в секунду, а видимое меняется раз в секунду и на
+    // доли процента. setText и setWidthPercentage помечают раскладку грязной,
+    // поэтому обновляем только то, что действительно изменилось, — та же
+    // ошибка уже была с надписью «Пауза».
+    auto setLabel = [](brls::Label* label, std::string& cache, const std::string& text) {
+        if (cache == text)
+            return;
+        cache = text;
+        label->setText(text);
+    };
+
+    auto setBar = [](brls::Box* bar, float& cache, float percent) {
+        if (percent < 0.0f)
+            percent = 0.0f;
+        if (percent > 100.0f)
+            percent = 100.0f;
+        // Полшага процента на экране — меньше половины точки ширины.
+        if (std::abs(percent - cache) < 0.5f)
+            return;
+        cache = percent;
+        bar->setWidthPercentage(percent);
+    };
+
+    setLabel(elapsedLabel, shownElapsed, clock(position));
 
     if (duration <= 0.0)
     {
         // Длительности нет — показываем только прошедшее время, шкалу прятать
         // не за что: доля закачанного всё равно осмысленна.
-        leftLabel->setText("");
-        playedBar->setWidth(0.0f);
+        setLabel(leftLabel, shownLeft, "");
+        setBar(playedBar, shownPlayed, 0.0f);
     }
     else
     {
-        leftLabel->setText("−" + clock(duration - position));
-
-        const float part = static_cast<float>(position / duration);
-        playedBar->setWidthPercentage(100.0f * (part < 0.0f ? 0.0f : part > 1.0f ? 1.0f : part));
+        setLabel(leftLabel, shownLeft, "−" + clock(duration - position));
+        setBar(playedBar, shownPlayed, 100.0f * static_cast<float>(position / duration));
     }
 
-    loadedBar->setWidthPercentage(100.0f * buffered);
+    setBar(loadedBar, shownLoaded, 100.0f * buffered);
 }
 
 void VideoPlayerActivity::beginDownload()

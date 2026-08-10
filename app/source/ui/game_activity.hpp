@@ -45,13 +45,13 @@ class GameActivity : public brls::Activity
     void fillHeader();
     /// Читает и разбирает обложку в рабочем потоке.
     void loadCoverAsync(const std::string& file);
+    std::string loadedArt;  ///< какую обложку уже загрузили
     void fillStats();
     void fillTags();
     void fillGenres(const std::vector<std::string>& list);
     /// Звезда и список папок в шапке — состояние, а не кнопки.
     void refreshHeaderMarks();
     void fillScreenshots(std::vector<std::string> urls);
-    void toggleFavorite();
     void chooseFolder();
 
     BRLS_BIND(brls::Box, header, "game/header");
