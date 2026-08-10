@@ -9,6 +9,8 @@
 #include "ui/game_activity.hpp"
 #include "ui/game_tile.hpp"
 
+using namespace brls::literals;
+
 namespace
 {
 
@@ -46,19 +48,19 @@ CatalogTab::CatalogTab()
     };
     model->onFocus = [this](const std::string& nsuid) { focusedNsuid = nsuid; };
 
-    this->registerAction("Поиск", brls::BUTTON_BACK, [this](brls::View*) {
+    this->registerAction("hub/action/search"_i18n, brls::BUTTON_BACK, [this](brls::View*) {
         promptSearch();
         return true;
     });
-    this->registerAction("Скрыть", brls::BUTTON_Y, [this](brls::View*) {
+    this->registerAction("hub/action/hide"_i18n, brls::BUTTON_Y, [this](brls::View*) {
         toggleHidden();
         return true;
     });
     // Раскладывать игры по папкам, не открывая каждую карточку.
-    this->registerAction("В папку", brls::BUTTON_X, [this](brls::View*) {
+    this->registerAction("hub/action/to_folder"_i18n, brls::BUTTON_X, [this](brls::View*) {
         if (focusedNsuid.empty())
         {
-            brls::Application::notify("Наведитесь на игру");
+            brls::Application::notify("hub/filter/point_at_game"_i18n);
             return true;
         }
         // Перечитывать 3015 строк ради отметки не нужно: на плитке видно
@@ -70,11 +72,11 @@ CatalogTab::CatalogTab()
     // ZL/ZR листают сетку страницами — с 3489 играми стик утомляет. Подсказки
     // скрыты: две строки по 200 точек ради приёма, без которого прокрутка всё
     // равно работает, вытесняли из полосы нужное.
-    this->registerAction("Страница вверх", brls::BUTTON_LT, [this](brls::View*) {
+    this->registerAction("hub/action/page_up"_i18n, brls::BUTTON_LT, [this](brls::View*) {
         recycler->setContentOffsetY(recycler->getContentOffsetY() - PAGE_STEP, true);
         return true;
     }, true);
-    this->registerAction("Страница вниз", brls::BUTTON_RT, [this](brls::View*) {
+    this->registerAction("hub/action/page_down"_i18n, brls::BUTTON_RT, [this](brls::View*) {
         recycler->setContentOffsetY(recycler->getContentOffsetY() + PAGE_STEP, true);
         return true;
     }, true);
@@ -89,7 +91,7 @@ void CatalogTab::buildPlayerFilter()
     for (int threshold : THRESHOLDS)
     {
         auto* button = new brls::Button();
-        button->setText("от " + std::to_string(threshold));
+        button->setText(brls::getStr("hub/filter/at_least", threshold));
         button->setFontSize(fonts::CAPTION);
         button->setMarginRight(6);
         button->setStyle(state.filter.minPlayers == threshold ? &brls::BUTTONSTYLE_PRIMARY
@@ -135,8 +137,8 @@ void CatalogTab::buildToggles()
         return button;
     };
 
-    installedButton = addToggle("Мои", &Filter::onlyInstalled);
-    addToggle("Русский", &Filter::onlyRussian);
+    installedButton = addToggle("", &Filter::onlyInstalled);
+    addToggle("hub/filter/russian"_i18n, &Filter::onlyRussian);
 
     genreButton = new brls::Button();
     genreButton->setFontSize(fonts::CAPTION);
@@ -158,8 +160,8 @@ void CatalogTab::buildToggles()
     });
     togglesBox->addView(searchButton);
 
-    retroButton  = addToggle("Ретро", &Filter::showRetro);
-    hiddenButton = addToggle("Скрытые", &Filter::showHidden);
+    retroButton  = addToggle("hub/filter/retro"_i18n, &Filter::showRetro);
+    hiddenButton = addToggle("hub/filter/hidden"_i18n, &Filter::showHidden);
 
     sortButton->setFontSize(fonts::CAPTION);
     sortButton->setStyle(&brls::BUTTONSTYLE_PRIMARY);
@@ -176,28 +178,30 @@ void CatalogTab::refreshToggleLabels()
 {
     const Filter& f = AppState::get().filter;
 
-    genreButton->setText(f.genre.empty() ? "Жанр" : f.genre);
+    genreButton->setText(f.genre.empty() ? "hub/filter/genre"_i18n : f.genre);
     genreButton->setStyle(f.genre.empty() ? &brls::BUTTONSTYLE_BORDERLESS
                                           : &brls::BUTTONSTYLE_PRIMARY);
 
-    searchButton->setText(f.search.empty() ? "Поиск" : "Поиск: " + f.search);
+    searchButton->setText(f.search.empty() ? "hub/filter/search"_i18n
+                                           : brls::getStr("hub/filter/search_on", f.search));
     searchButton->setStyle(f.search.empty() ? &brls::BUTTONSTYLE_BORDERLESS
                                             : &brls::BUTTONSTYLE_PRIMARY);
 
     // Подписи короткие намеренно: пять чипов с полными фразами не помещались
     // в 820 точек и уезжали за край. Контейнер к тому же переносит строку,
     // если названию жанра всё-таки не хватит места.
-    sortButton->setText(Catalog::SORT_NAMES[f.sort]);
+    sortButton->setText(Catalog::sortNames()[f.sort]);
 
     if (retroButton)
-        retroButton->setText(f.showRetro ? "Ретро: показаны" : "Ретро");
+        retroButton->setText(f.showRetro ? "hub/filter/retro_on"_i18n : "hub/filter/retro"_i18n);
     if (hiddenButton)
-        hiddenButton->setText(f.showHidden ? "Скрытые: показаны" : "Скрытые");
+        hiddenButton->setText(f.showHidden ? "hub/filter/hidden_on"_i18n
+                                           : "hub/filter/hidden"_i18n);
 
     // счётчик прямо на чипе — как в макете «Только мои · 12»
     if (installedButton)
-        installedButton->setText("Мои · "
-                                 + std::to_string(AppState::get().installedTitleIds.size()));
+        installedButton->setText(
+            brls::getStr("hub/filter/mine", AppState::get().installedTitleIds.size()));
 }
 
 void CatalogTab::promptSearch()
@@ -210,7 +214,7 @@ void CatalogTab::promptSearch()
             refreshToggleLabels();
             reload();
         },
-        "Поиск по названию", "Пустая строка снимет фильтр", 40, f.search);
+        "hub/filter/search_title"_i18n, "hub/filter/search_hint"_i18n, 40, f.search);
 }
 
 void CatalogTab::chooseGenre()
@@ -243,11 +247,11 @@ void CatalogTab::chooseGenre()
 
 void CatalogTab::openGenreDropdown()
 {
-    std::vector<std::string> options = { "Любой" };
+    std::vector<std::string> options = { "hub/filter/genre_any"_i18n };
     options.insert(options.end(), genreCache.begin(), genreCache.end());
 
     auto* dropdown = new brls::Dropdown(
-        "Жанр", options,
+        "hub/filter/genre"_i18n, options,
         [this, options](int selected) {
             if (selected < 0 || selected >= static_cast<int>(options.size()))
                 return;
@@ -264,9 +268,9 @@ void CatalogTab::chooseSort()
     // Список, а не перебор по кругу: перебором не видно, какие порядки вообще
     // есть, и до нужного приходится щёлкать вслепую.
     auto* dropdown = new brls::Dropdown(
-        "Сортировка", Catalog::SORT_NAMES,
+        "hub/filter/sort"_i18n, Catalog::sortNames(),
         [this](int selected) {
-            if (selected < 0 || selected >= static_cast<int>(Catalog::SORT_NAMES.size()))
+            if (selected < 0 || selected >= static_cast<int>(Catalog::sortNames().size()))
                 return;
             AppState::get().filter.sort = selected;
             refreshToggleLabels();
@@ -293,14 +297,15 @@ void CatalogTab::toggleHidden()
 {
     if (focusedNsuid.empty())
     {
-        brls::Application::notify("Наведитесь на игру, чтобы скрыть её");
+        brls::Application::notify("hub/filter/point_to_hide"_i18n);
         return;
     }
 
     AppState& state    = AppState::get();
     const bool wasShown = !state.library.isHidden(focusedNsuid);
     state.library.toggleHidden(focusedNsuid);
-    brls::Application::notify(wasShown ? "Игра скрыта" : "Игра возвращена");
+    brls::Application::notify(wasShown ? "hub/filter/hidden_done"_i18n
+                                      : "hub/filter/shown_done"_i18n);
     reload();
 }
 
@@ -364,7 +369,7 @@ void CatalogTab::applyRows()
 
     int installed = state.installedCount(games);
     // коротко: полная фраза не помещалась рядом с кнопками порогов
-    countLabel->setText(std::to_string(games.size()) + " · мои " + std::to_string(installed));
+    countLabel->setText(brls::getStr("hub/filter/count", games.size(), installed));
 
     bool empty = games.empty();
     emptyLabel->setVisibility(empty ? brls::Visibility::VISIBLE : brls::Visibility::GONE);

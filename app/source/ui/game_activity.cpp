@@ -16,6 +16,8 @@
 #include "ui/remote_image.hpp"
 #include "ui/video_player.hpp"
 
+using namespace brls::literals;
+
 namespace
 {
 
@@ -89,16 +91,16 @@ void GameActivity::onContentAvailable()
 {
     // Те же кнопки, что в каталоге: X кладёт в списки, Y прячет. Раньше X здесь
     // значил «избранное», а там «в папку» — одна кнопка с двумя смыслами.
-    this->registerAction("В списки", brls::BUTTON_X, [this](brls::View*) {
+    this->registerAction("hub/action/to_folder"_i18n, brls::BUTTON_X, [this](brls::View*) {
         chooseFolder();
         return true;
     });
-    this->registerAction("Скрыть", brls::BUTTON_Y, [this](brls::View*) {
+    this->registerAction("hub/action/hide"_i18n, brls::BUTTON_Y, [this](brls::View*) {
         AppState& state     = AppState::get();
         const bool wasShown = !state.library.isHidden(nsuid);
         state.library.toggleHidden(nsuid);
         game.hidden = !wasShown;
-        brls::Application::notify(wasShown ? "Игра скрыта" : "Игра возвращена");
+        brls::Application::notify(wasShown ? "hub/filter/hidden_done"_i18n : "hub/filter/shown_done"_i18n);
         refreshHeaderMarks();
         return true;
     });
@@ -198,7 +200,7 @@ void GameActivity::fillHeader()
     if (game.releaseYear)
         sub += " · " + std::to_string(game.releaseYear);
     if (game.topMentions > 0)
-        sub += " · в подборках: " + std::to_string(game.topMentions);
+        sub += " · " + brls::getStr("hub/game/in_toplists", game.topMentions);
     subtitle->setText(sub);
 
     refreshHeaderMarks();
@@ -247,7 +249,7 @@ void GameActivity::refreshHeaderMarks()
         if (AppState::get().library.inFolder(name, game.nsuid))
             in += (in.empty() ? "" : ", ") + name;
 
-    folders->setText(in.empty() ? "" : "в папках: " + in);
+    folders->setText(in.empty() ? "" : brls::getStr("hub/game/in_lists", in));
     folders->setVisibility(in.empty() ? brls::Visibility::GONE : brls::Visibility::VISIBLE);
 }
 
@@ -267,15 +269,19 @@ void GameActivity::fillStats()
 
     std::string players = std::to_string(game.sameScreenMin) + "–"
         + std::to_string(game.sameScreenMax);
-    statsBox->addView(statTile("На одном экране", players));
+    statsBox->addView(statTile("hub/game/players"_i18n, players));
 
     std::string size = formatSize(game.romSizeBytes);
-    statsBox->addView(statTile("Размер", size.empty() ? "—" : size));
+    statsBox->addView(statTile("hub/game/size"_i18n,
+                               size.empty() ? "hub/game/unknown"_i18n : size));
 
     int langs = languageCount(game.languages);
-    statsBox->addView(statTile("Языки", langs ? std::to_string(langs) : "—"));
+    statsBox->addView(statTile("hub/game/languages"_i18n,
+                               langs ? std::to_string(langs) : "hub/game/unknown"_i18n));
 
-    statsBox->addView(statTile("Статус", game.installed ? "Установлена" : "Не установлена"));
+    statsBox->addView(statTile("hub/game/status"_i18n,
+                               game.installed ? "hub/game/installed"_i18n
+                                              : "hub/game/not_installed"_i18n));
 }
 
 void GameActivity::fillTags()
@@ -283,14 +289,14 @@ void GameActivity::fillTags()
     tagsBox->clearViews();
 
     if (game.hasRussian)
-        tagsBox->addView(tag("Есть русский"));
+        tagsBox->addView(tag("hub/game/has_russian"_i18n));
     if (game.hasOnline)
-        tagsBox->addView(tag("Есть и онлайн"));
+        tagsBox->addView(tag("hub/game/has_online"_i18n));
     if (game.hasDemo)
-        tagsBox->addView(tag("Есть демо"));
+        tagsBox->addView(tag("hub/game/has_demo"_i18n));
     // настольный режим есть почти у всех, поэтому интересно обратное
     if (game.noTabletop)
-        tagsBox->addView(tag("Без настольного режима"));
+        tagsBox->addView(tag("hub/game/no_tabletop"_i18n));
 }
 
 void GameActivity::fillScreenshots(std::vector<std::string> urls)
@@ -315,7 +321,7 @@ void GameActivity::fillScreenshots(std::vector<std::string> urls)
 
     shotsPending = static_cast<int>(urls.size());
     shotsFailed  = 0;
-    shotsHint->setText("Скриншоты загружаются…");
+    shotsHint->setText("hub/game/shots_loading"_i18n);
     shotsHint->setVisibility(brls::Visibility::VISIBLE);
 
     for (size_t i = 0; i < urls.size(); i++)
@@ -347,9 +353,8 @@ void GameActivity::fillScreenshots(std::vector<std::string> urls)
             if (shotsFailed == 0)
                 shotsHint->setVisibility(brls::Visibility::GONE);
             else
-                shotsHint->setText(net::isReady()
-                                       ? "Часть скриншотов не загрузилась"
-                                       : "Скриншоты недоступны — нет сети");
+                shotsHint->setText(net::isReady() ? "hub/game/shots_partial"_i18n
+                                                  : "hub/game/shots_offline"_i18n);
         };
         shot->load(url);
         shotsBox->addView(shot);
@@ -381,7 +386,7 @@ void GameActivity::fillTrailerButton(std::vector<std::string> videos)
         trailerButton->setWidth(190);
         trailerButton->setHeight(128);
         trailerButton->setMarginRight(10);
-        trailerButton->setText("Трейлера нет");
+        trailerButton->setText("hub/game/no_trailer"_i18n);
         trailerButton->setStyle(&brls::BUTTONSTYLE_BORDERLESS);
         trailerButton->setState(brls::ButtonState::DISABLED);
         shotsBox->addView(trailerButton);
@@ -398,9 +403,8 @@ void GameActivity::fillTrailerButton(std::vector<std::string> videos)
         button->setStyle(&brls::BUTTONSTYLE_PRIMARY);
         // Номер печатаем только когда роликов правда несколько: «▶ Трейлер 1»
         // при единственном ролике обещает продолжение, которого нет.
-        button->setText(videos.size() > 1
-                            ? "▶ Трейлер " + std::to_string(i + 1)
-                            : "▶ Трейлер");
+        button->setText(videos.size() > 1 ? brls::getStr("hub/game/trailer_n", i + 1)
+                                          : "hub/game/trailer"_i18n);
 
         const std::string url = videos[i];
         button->registerClickAction([this, url](brls::View*) {
@@ -428,7 +432,7 @@ void GameActivity::openTrailer()
         return;
     }
 
-    trailerButton->setText("Подключаемся…");
+    trailerButton->setText("hub/game/connecting"_i18n);
     std::string url = trailerUrl;
     tasks::io([url]() {
         const bool ok = net::waitReady(5000);
@@ -436,7 +440,7 @@ void GameActivity::openTrailer()
             if (ok)
                 brls::Application::pushActivity(new VideoPlayerActivity(url));
             else
-                brls::Application::notify("Нет сети — трейлер не открыть");
+                brls::Application::notify("hub/game/no_network"_i18n);
         });
     });
 }

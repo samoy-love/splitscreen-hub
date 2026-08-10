@@ -17,7 +17,7 @@
 
     <brls:Label
         id="gallery/status"
-        text="Загрузка…"
+        text="@i18n/hub/gallery/loading"
         fontSize="@style/hub/font/body"
         positionType="absolute"
         positionTop="0"

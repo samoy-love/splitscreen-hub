@@ -5,13 +5,15 @@
 #include "ui/catalog_tab.hpp"
 #include "ui/library_tab.hpp"
 
+using namespace brls::literals;
+
 MainTabs::MainTabs()
 {
     this->inflateFromXMLRes("xml/views/main_tabs.xml");
 
-    addTab("Каталог", new CatalogTab());
-    addTab("Библиотека", new LibraryTab());
-    addTab("Кэш", new CacheTab());
+    addTab("hub/tab/catalog"_i18n, new CatalogTab());
+    addTab("hub/tab/library"_i18n, new LibraryTab());
+    addTab("hub/tab/settings"_i18n, new CacheTab());
 
     select(0);
     built = true;
@@ -22,11 +24,11 @@ MainTabs::MainTabs()
     // hidden=true: обе подсказки съедали почти 400 точек нижней полосы, из-за
     // чего остальные наезжали на часы и индикаторы. Что вкладки переключаются
     // плечевыми, написано прямо в строке вкладок — там это и уместнее.
-    this->registerAction("Вкладка влево", brls::BUTTON_LB, [this](brls::View*) {
+    this->registerAction("hub/tab/prev"_i18n, brls::BUTTON_LB, [this](brls::View*) {
         select((current + pages.size() - 1) % pages.size());
         return true;
     }, true);
-    this->registerAction("Вкладка вправо", brls::BUTTON_RB, [this](brls::View*) {
+    this->registerAction("hub/tab/next"_i18n, brls::BUTTON_RB, [this](brls::View*) {
         select((current + 1) % pages.size());
         return true;
     }, true);
@@ -35,9 +37,9 @@ MainTabs::MainTabs()
 void MainTabs::updateShortcuts()
 {
     //  /  — L и R,  /  — ZL и ZR из системного шрифта.
-    std::string text = " вкладки";
+    std::string text = " " + "hub/tab/shortcut_tabs"_i18n;
     if (current == 0)
-        text += "    страница";
+        text += "    " + "hub/tab/shortcut_page"_i18n;
     shortcuts->setText(text);
 }
 

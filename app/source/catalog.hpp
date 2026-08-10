@@ -44,7 +44,7 @@ struct Filter
     bool showRetro = false;
     /// Показывать спрятанные вручную. Сами игры хранятся в Library.
     bool showHidden = false;
-    int sort = 0;            // индекс в Catalog::SORT_NAMES
+    int sort = 0;            // индекс в Catalog::sortNames()
 };
 
 /// Каталог игр из romfs. Держит открытым один SQLite-коннект на всё время работы.
@@ -65,13 +65,12 @@ class Catalog
     void setLanguage(Language language) { lang = language; }
     Language language() const { return lang; }
 
-    /// Порядок совпадает с Filter::sort.
+    /// Названия сортировок в порядке Filter::sort — уже переведённые.
     ///
-    /// Первые четыре — то полезное, что есть в самом eShop (сортировки по цене
-    /// и по скидке нам не нужны, цену мы не переносим). Остальные eShop не
-    /// умеет вовсе, но для выбора игры на вечер они важнее: сколько игроков,
-    /// что уже стоит на консоли, что влезет на карту памяти.
-    static const std::vector<std::string> SORT_NAMES;
+    /// Функция, а не константа: перевод берётся из i18n, а он готов только
+    /// после инициализации borealis, тогда как статический вектор
+    /// инициализировался бы раньше и остался бы на языке ключей.
+    static std::vector<std::string> sortNames();
 
     ~Catalog();
 

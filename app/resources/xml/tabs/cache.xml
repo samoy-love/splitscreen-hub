@@ -26,14 +26,14 @@
         marginBottom="@style/hub/space/s" />
 
     <brls:Label
-        text="Скриншоты и трейлеры, скачанные при просмотре карточек"
+        text="@i18n/hub/cache/subtitle"
         fontSize="@style/hub/font/caption"
         marginBottom="@style/hub/space/l"
         textColor="@theme/brls/text_disabled" />
 
     <brls:Label
         id="cache/summary"
-        text="Считаем…"
+        text="@i18n/hub/cache/counting"
         fontSize="@style/hub/font/display"
         marginBottom="@style/hub/space/m" />
 
@@ -53,14 +53,14 @@
             width="auto"
             height="auto"
             marginRight="@style/hub/space/m"
-            text="Удалить трейлеры" />
+            text="@i18n/hub/cache/clear_videos" />
 
         <brls:Button
             id="cache/clear_all"
             width="auto"
             height="auto"
             style="highlight"
-            text="Очистить весь кэш" />
+            text="@i18n/hub/cache/clear_all" />
 
     </WrapBox>
 

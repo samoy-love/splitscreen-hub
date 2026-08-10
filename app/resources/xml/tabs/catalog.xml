@@ -43,7 +43,7 @@
              меняет порядок, и раньше её чип стоял в общем ряду и терялся среди
              них. Здесь она прижата к правому краю и подписана. -->
         <brls:Label
-            text="Сортировка"
+            text="@i18n/hub/filter/sort"
             fontSize="@style/hub/font/caption"
             marginRight="@style/hub/space/s"
             textColor="@theme/brls/text_disabled" />
@@ -64,7 +64,7 @@
 
     <brls:Label
         id="catalog/empty"
-        text="Ничего не нашлось. Ослабьте фильтр — например, снимите «Мои»."
+        text="@i18n/hub/filter/empty"
         fontSize="@style/hub/font/body"
         textColor="@theme/brls/text_disabled"
         visibility="gone"

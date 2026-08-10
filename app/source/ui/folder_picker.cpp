@@ -6,6 +6,8 @@
 
 #include "app_state.hpp"
 
+using namespace brls::literals;
+
 namespace
 {
 
@@ -20,11 +22,11 @@ void promptNewFolder(const std::string& nsuid, std::function<void()> onChanged)
             AppState& state = AppState::get();
             state.library.createFolder(name);
             state.library.toggleInFolder(name, nsuid);
-            brls::Application::notify("Добавлено в «" + name + "»");
+            brls::Application::notify(brls::getStr("hub/folders/added_to", name));
             if (onChanged)
                 onChanged();
         },
-        "Название папки", "Например: «Вечер с друзьями»", 32);
+        "hub/folders/name_title"_i18n, "hub/folders/name_hint"_i18n, 32);
 }
 
 }  // namespace
@@ -45,13 +47,13 @@ void pick(const std::string& nsuid, std::function<void()> onChanged)
     // Отметка показывает, где игра уже лежит: без неё приходилось помнить.
     std::vector<std::string> items;
     items.reserve(names.size() + 2);
-    items.push_back((state.library.isFavorite(nsuid) ? "✓ " : "   ") + std::string("Избранное"));
+    items.push_back((state.library.isFavorite(nsuid) ? "✓ " : "   ") + "hub/folders/favorites"_i18n);
     for (const std::string& name : names)
         items.push_back((state.library.inFolder(name, nsuid) ? "✓ " : "   ") + name);
-    items.push_back("+ Новая папка…");
+    items.push_back("hub/folders/new"_i18n);
 
     auto* dropdown = new brls::Dropdown(
-        "Куда положить", items,
+        "hub/folders/title"_i18n, items,
         [nsuid, names, onChanged](int selected) {
             AppState& s = AppState::get();
 
@@ -62,8 +64,9 @@ void pick(const std::string& nsuid, std::function<void()> onChanged)
             if (selected == 0)
             {
                 s.library.toggleFavorite(nsuid);
-                brls::Application::notify(s.library.isFavorite(nsuid) ? "В избранном"
-                                                                      : "Убрано из избранного");
+                brls::Application::notify(s.library.isFavorite(nsuid)
+                                              ? "hub/folders/in_favorites"_i18n
+                                              : "hub/folders/out_favorites"_i18n);
             }
             else if (selected == static_cast<int>(names.size()) + 1)
             {
@@ -74,9 +77,10 @@ void pick(const std::string& nsuid, std::function<void()> onChanged)
             {
                 const std::string& name = names[selected - 1];
                 s.library.toggleInFolder(name, nsuid);
-                brls::Application::notify(s.library.inFolder(name, nsuid)
-                                              ? "Добавлено в «" + name + "»"
-                                              : "Убрано из «" + name + "»");
+                brls::Application::notify(brls::getStr(
+                    s.library.inFolder(name, nsuid) ? "hub/folders/added_to"
+                                                    : "hub/folders/removed_from",
+                    name));
             }
 
             if (onChanged)

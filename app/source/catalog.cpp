@@ -7,6 +7,8 @@
 #include <cstring>
 #include <fstream>
 
+using namespace brls::literals;
+
 namespace
 {
 
@@ -167,14 +169,17 @@ const char* ORDER_BY[] = {
 //
 // Обратного алфавитного порядка здесь больше нет: он занимал место в списке, а
 // ответа ни на один вопрос не давал — от «Я» к «А» игру не ищут.
-const std::vector<std::string> Catalog::SORT_NAMES = {
-    "Из подборок",
-    "По алфавиту",
-    "Больше игроков",
-    "Сначала новые",
-    "Компактные",
-    "Сначала мои",
-};
+std::vector<std::string> Catalog::sortNames()
+{
+    return {
+        "hub/sort/toplists"_i18n,
+        "hub/sort/alphabet"_i18n,
+        "hub/sort/players"_i18n,
+        "hub/sort/newest"_i18n,
+        "hub/sort/compact"_i18n,
+        "hub/sort/mine"_i18n,
+    };
+}
 
 Catalog::~Catalog()
 {

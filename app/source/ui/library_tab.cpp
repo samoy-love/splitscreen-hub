@@ -6,6 +6,8 @@
 #include "ui/game_activity.hpp"
 #include "ui/game_tile.hpp"
 
+using namespace brls::literals;
+
 namespace
 {
 const char* FAVORITES = "";  // пустое имя = избранное
@@ -34,17 +36,17 @@ LibraryTab::LibraryTab()
 
     // Не BUTTON_START: на него в main.cpp повешен выход из приложения
     // (setGlobalQuit), и попытка создать папку закрывала бы программу.
-    this->registerAction("Новая папка", brls::BUTTON_RT, [this](brls::View*) {
+    this->registerAction("hub/action/new_folder"_i18n, brls::BUTTON_RT, [this](brls::View*) {
         promptNewFolder();
         return true;
     });
-    this->registerAction("Имя папки", brls::BUTTON_Y, [this](brls::View*) {
+    this->registerAction("hub/action/rename_folder"_i18n, brls::BUTTON_Y, [this](brls::View*) {
         promptRename();
         return true;
     });
     // X работает по контексту: на выбранной игре — убрать её из списка,
     // иначе — удалить саму папку
-    this->registerAction("Убрать", brls::BUTTON_X, [this](brls::View*) {
+    this->registerAction("hub/action/remove"_i18n, brls::BUTTON_X, [this](brls::View*) {
         if (!focusedNsuid.empty())
             removeFocused();
         else
@@ -85,18 +87,18 @@ void LibraryTab::rebuildSidebar()
         sidebar->addView(button);
     };
 
-    addEntry(FAVORITES, "★ Избранное", state.library.favorites().size());
+    addEntry(FAVORITES, "hub/library/favorites"_i18n, state.library.favorites().size());
 
     // Скрытые — такой же список, как избранное, и место им здесь. Переключатель
     // в каталоге показывает их вперемешку с остальными играми, а это отдельный
     // вопрос: «что я вообще прятал».
-    addEntry(HIDDEN, "Скрытые", state.library.hiddenGames().size());
+    addEntry(HIDDEN, "hub/library/hidden"_i18n, state.library.hiddenGames().size());
 
     for (const std::string& name : state.library.folderNames())
         addEntry(name, name, state.library.folder(name).size());
 
     auto* add = new brls::Button();
-    add->setText("Новая папка");
+    add->setText("hub/action/new_folder"_i18n);
     add->setFontSize(fonts::CAPTION);
     add->setStyle(&brls::BUTTONSTYLE_BORDERLESS);
     add->registerClickAction([this](brls::View*) {
@@ -155,9 +157,9 @@ void LibraryTab::applyGames(std::vector<Game> games)
 
     const bool empty = model->games.empty();
     emptyLabel->setText(
-        selected == HIDDEN  ? "Скрытых игр нет. Спрятать игру можно кнопкой Y в каталоге."
-        : selected.empty()  ? "Избранное пустое. Отметьте игру кнопкой X."
-                            : "Папка пустая. Положите в неё игру кнопкой X.");
+        selected == HIDDEN ? "hub/library/empty_hidden"_i18n
+        : selected.empty() ? "hub/library/empty_favorites"_i18n
+                           : "hub/library/empty_folder"_i18n);
     emptyLabel->setVisibility(empty ? brls::Visibility::VISIBLE : brls::Visibility::GONE);
     grid->setVisibility(empty ? brls::Visibility::GONE : brls::Visibility::VISIBLE);
 
@@ -170,17 +172,17 @@ void LibraryTab::removeFocused()
     if (selected == HIDDEN)
     {
         state.library.toggleHidden(focusedNsuid);
-        brls::Application::notify("Игра возвращена в каталог");
+        brls::Application::notify("hub/library/restored"_i18n);
     }
     else if (selected.empty())
     {
         state.library.toggleFavorite(focusedNsuid);
-        brls::Application::notify("Убрано из избранного");
+        brls::Application::notify("hub/folders/out_favorites"_i18n);
     }
     else
     {
         state.library.toggleInFolder(selected, focusedNsuid);
-        brls::Application::notify("Убрано из «" + selected + "»");
+        brls::Application::notify(brls::getStr("hub/folders/removed_from", selected));
     }
 
     focusedNsuid.clear();
@@ -192,7 +194,7 @@ void LibraryTab::promptNewFolder()
 {
     brls::Application::getImeManager()->openForText(
         [this](const std::string& text) { onFolderNamed(text); },
-        "Название папки", "Например: «Вечер с друзьями»", 32);
+        "hub/folders/name_title"_i18n, "hub/folders/name_hint"_i18n, 32);
 }
 
 void LibraryTab::onFolderNamed(const std::string& name)
@@ -212,7 +214,7 @@ void LibraryTab::promptRename()
 
     brls::Application::getImeManager()->openForText(
         [this](const std::string& text) { onFolderRenamed(text); },
-        "Новое название", "", 32, selected);
+        "hub/folders/rename_title"_i18n, "", 32, selected);
 }
 
 void LibraryTab::onFolderRenamed(const std::string& name)
@@ -231,9 +233,9 @@ void LibraryTab::confirmRemove()
         return;
 
     std::string name = selected;
-    auto* dialog     = new brls::Dialog("Удалить папку «" + name + "»? Игры останутся в каталоге.");
-    dialog->addButton("Отмена", []() {});
-    dialog->addButton("Удалить", [this, name]() {
+    auto* dialog     = new brls::Dialog(brls::getStr("hub/library/delete_folder", name));
+    dialog->addButton("hub/action/cancel"_i18n, []() {});
+    dialog->addButton("hub/action/delete"_i18n, [this, name]() {
         AppState::get().library.removeFolder(name);
         selected.clear();
         rebuildSidebar();

@@ -29,6 +29,8 @@ extern "C"
 
 #include <SDL2/SDL.h>
 
+using namespace brls::literals;
+
 namespace
 {
 
@@ -590,24 +592,25 @@ VideoPlayerActivity::~VideoPlayerActivity()
 
 void VideoPlayerActivity::onContentAvailable()
 {
-    statusLabel->setText(isCached(url) ? "Открываем трейлер…" : "Буферизация…");
+    statusLabel->setText(isCached(url) ? "hub/player/opening"_i18n
+                                       : "hub/player/buffering"_i18n);
     statusLabel->setVisibility(brls::Visibility::VISIBLE);
 
-    this->registerAction("Закрыть", brls::BUTTON_B, [this](brls::View*) {
+    this->registerAction("hub/action/close"_i18n, brls::BUTTON_B, [this](brls::View*) {
         closeSelf();
         return true;
     });
-    this->registerAction("Пауза", brls::BUTTON_A, [this](brls::View*) {
+    this->registerAction("hub/action/pause"_i18n, brls::BUTTON_A, [this](brls::View*) {
         if (decoder)
             decoder->togglePause();
         return true;
     });
-    this->registerAction("Назад 10с", brls::BUTTON_LEFT, [this](brls::View*) {
+    this->registerAction("hub/action/back10"_i18n, brls::BUTTON_LEFT, [this](brls::View*) {
         if (decoder)
             decoder->seekBy(-10.0);
         return true;
     });
-    this->registerAction("Вперёд 10с", brls::BUTTON_RIGHT, [this](brls::View*) {
+    this->registerAction("hub/action/forward10"_i18n, brls::BUTTON_RIGHT, [this](brls::View*) {
         if (decoder)
             decoder->seekBy(10.0);
         return true;
@@ -700,20 +703,18 @@ void VideoPlayerActivity::beginDownload()
                               bool reconnecting, int attempt) {
         if (reconnecting)
         {
-            statusLabel->setText("Связь оборвалась, продолжаем… ("
-                                 + std::to_string(attempt) + " из 5)");
+            statusLabel->setText(brls::getStr("hub/player/reconnecting", attempt));
             statusLabel->setVisibility(brls::Visibility::VISIBLE);
         }
         else if (failed)
         {
-            statusLabel->setText(net::isReady()
-                                     ? "Не удалось воспроизвести трейлер"
-                                     : "Не удалось загрузить трейлер — нет сети");
+            statusLabel->setText(net::isReady() ? "hub/player/failed"_i18n
+                                                : "hub/player/failed_offline"_i18n);
             statusLabel->setVisibility(brls::Visibility::VISIBLE);
         }
         else if (loading)
         {
-            statusLabel->setText("Буферизация…");
+            statusLabel->setText("hub/player/buffering"_i18n);
             statusLabel->setVisibility(brls::Visibility::VISIBLE);
         }
         else

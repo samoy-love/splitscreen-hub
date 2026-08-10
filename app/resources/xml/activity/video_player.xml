@@ -16,7 +16,7 @@
 
     <brls:Label
         id="video/status"
-        text="Загрузка трейлера…"
+        text="@i18n/hub/player/loading"
         fontSize="@style/hub/font/accent"
         positionType="absolute"
         positionTop="40"
