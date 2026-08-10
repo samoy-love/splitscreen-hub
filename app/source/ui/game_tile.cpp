@@ -7,6 +7,7 @@
 
 #include "tasks.hpp"
 #include "ui/async_image.hpp"
+#include "ui/cover_cache.hpp"
 
 namespace
 {
@@ -56,6 +57,17 @@ GameTile::~GameTile()
 void GameTile::loadCover(const std::string& file)
 {
     pendingArt = file;
+
+    // Текстурой владеет кэш, а не вид: одну и ту же обложку показывают разные
+    // плитки, и освобождать её по своему усмотрению нельзя.
+    cover->setFreeTexture(false);
+
+    if (int cached = covers::find(file))
+    {
+        cover->innerSetImage(cached);
+        return;
+    }
+
     cover->clear();
 
     auto flag = alive;
@@ -88,10 +100,13 @@ void GameTile::loadCover(const std::string& file)
             return;
 
         brls::sync([flag, self, file, pixels]() {
-            // плитку могли переиспользовать под другую игру, пока декодировали
-            if (!*flag || self->pendingArt != file)
-                return;
-            asyncimage::apply(self->cover, *pixels);
+            // Кладём в кэш в любом случае: даже если плитку успели занять под
+            // другую игру, работа уже сделана и пригодится при возврате.
+            const int texture = asyncimage::upload(*pixels);
+            covers::put(file, texture);
+
+            if (*flag && self->pendingArt == file && texture)
+                self->cover->innerSetImage(texture);
         });
     });
 }

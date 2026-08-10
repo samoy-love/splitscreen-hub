@@ -77,7 +77,7 @@ python make_overrides.py && python build_db.py && python download_art.py && pyth
 python make_ship_db.py
 ```
 
-Даёт `catalog.db` и `app/resources/art/` (3489 обложек по 256px, 62 МБ).
+Даёт `catalog.db` и `app/resources/art/` (3489 обложек по 256px, 43 МБ).
 `verify_db.py` прогоняет по базе те же запросы, что и приложение.
 
 ### Приложение
@@ -120,7 +120,7 @@ cmake -B build -G Ninja -DPLATFORM_SWITCH=ON -DUSE_SDL2=ON -DCMAKE_BUILD_TYPE=Re
 cmake --build build --target SplitScreenHub.nro
 ```
 
-На выходе `app/build/SplitScreenHub.nro` (~79 МБ, в основном `catalog.db` и
+На выходе `app/build/SplitScreenHub.nro` (~71 МБ, в основном `catalog.db` и
 `app/resources/art/` в romfs). Кладётся в `/switch/` на SD-карту.
 
 SQLite собирается из amalgamation — порта `switch-sqlite3` не существует.

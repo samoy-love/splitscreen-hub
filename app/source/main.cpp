@@ -20,6 +20,7 @@
 #include "tasks.hpp"
 #include "ui/cache_tab.hpp"
 #include "ui/catalog_tab.hpp"
+#include "ui/cover_cache.hpp"
 #include "ui/fonts.hpp"
 #include "ui/gallery_activity.hpp"
 #include "ui/library_tab.hpp"
@@ -302,6 +303,8 @@ int main(int argc, char* argv[])
             ;
 
         step("shutdown");
+        // До остановки borealis: текстуры принадлежат её контексту nanovg.
+        covers::clear();
         tasks::stop();
         net::shutdown();
         step("done");

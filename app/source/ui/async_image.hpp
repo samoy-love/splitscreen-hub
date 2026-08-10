@@ -33,8 +33,11 @@ struct Pixels
 /// Разбирает JPEG или PNG. Можно звать из любого потока.
 Pixels decode(const unsigned char* data, size_t size);
 
-/// Заливает пиксели в текстуру вида. Только из UI-потока: трогает контекст
-/// nanovg, который не потокобезопасен.
+/// Создаёт текстуру из пикселей и возвращает её. Ноль — не получилось.
+/// Только из UI-потока: трогает контекст nanovg, который не потокобезопасен.
+int upload(const Pixels& pixels);
+
+/// Заливает пиксели в текстуру вида. Владение текстурой остаётся у вида.
 void apply(brls::Image* image, const Pixels& pixels);
 
 }  // namespace asyncimage

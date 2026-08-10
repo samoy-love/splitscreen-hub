@@ -60,21 +60,26 @@ Pixels decode(const unsigned char* data, size_t size)
     return out;
 }
 
-void apply(brls::Image* image, const Pixels& pixels)
+int upload(const Pixels& pixels)
 {
-    if (!image || !pixels.valid())
-        return;
+    if (!pixels.valid())
+        return 0;
 
     NVGcontext* vg = brls::Application::getNVGContext();
     int texture    = nvgCreateImageRGBA(vg, pixels.width, pixels.height, 0, pixels.rgba);
     if (texture == 0)
-    {
         brls::Logger::error("image: не создалась текстура {}x{}", pixels.width, pixels.height);
+    return texture;
+}
+
+void apply(brls::Image* image, const Pixels& pixels)
+{
+    if (!image)
         return;
-    }
 
     // innerSetImage сам освобождает прежнюю текстуру вида
-    image->innerSetImage(texture);
+    if (int texture = upload(pixels))
+        image->innerSetImage(texture);
 }
 
 }  // namespace asyncimage
