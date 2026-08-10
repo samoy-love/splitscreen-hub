@@ -2,8 +2,12 @@
 
 #include <cstdio>
 
+#include "app_state.hpp"
 #include "net.hpp"
+#include "ui/fonts.hpp"
 #include "tasks.hpp"
+
+using namespace brls::literals;
 
 namespace
 {
@@ -44,7 +48,39 @@ CacheTab::CacheTab()
         return true;
     });
 
+    buildLanguage();
     refresh();
+}
+
+void CacheTab::buildLanguage()
+{
+    languageBox->clearViews();
+
+    // Язык применяется при запуске: локаль borealis задаётся один раз, до
+    // создания окна, и менять её на ходу она не умеет. Поэтому просим
+    // перезапустить, а не делаем вид, что переключили.
+    const std::string current = AppState::get().library.language();
+
+    auto add = [this, current](const char* code, const char* label) {
+        auto* button = new brls::Button();
+        button->setText(label);
+        button->setFontSize(fonts::CAPTION);
+        button->setMarginRight(fonts::CAPTION / 2);
+        button->setStyle(current == code ? &brls::BUTTONSTYLE_PRIMARY
+                                         : &brls::BUTTONSTYLE_BORDERLESS);
+        button->registerClickAction([this, code](brls::View*) {
+            if (AppState::get().library.language() == code)
+                return true;
+            AppState::get().library.setLanguage(code);
+            buildLanguage();
+            brls::Application::notify("hub/settings/restart"_i18n);
+            return true;
+        });
+        languageBox->addView(button);
+    };
+
+    add("en", "English");
+    add("ru", "Русский");
 }
 
 CacheTab::~CacheTab()

@@ -39,7 +39,7 @@ class GameRow : public brls::RecyclerCell
     /// Модель задаётся один раз при создании строки. Раньше обработчики
     /// выбора и фокуса копировались в каждую из семи плиток на каждую
     /// привязку — четырнадцать копий std::function на ряд при прокрутке.
-    void bind(std::shared_ptr<GridModel> model);
+    void bind(std::shared_ptr<GridModel> model, brls::RecyclerFrame* owner);
 
     /// Ширина плитки и зазор между ними — из game_tile.xml.
     static constexpr int TILE_WIDTH = 160;
@@ -53,9 +53,23 @@ class GameRow : public brls::RecyclerCell
 
     void setGames(size_t from);
 
+    /// Не выпускает фокус из сетки вверх, пока строка не первая.
+    ///
+    /// RecyclerFrame ищет строку выше среди уже созданных ячеек. При быстром
+    /// листании она ещё не создана, поиск не находит ничего и передаёт запрос
+    /// наружу — фокус улетал в шапку с фильтрами посреди прокрутки. Здесь такой
+    /// ответ отклоняется: подождать один кадр правильнее, чем прыгать через
+    /// весь экран.
+    brls::View* getNextFocus(brls::FocusDirection direction, brls::View* currentView) override;
+
   private:
     std::vector<brls::Box*> slots;
     std::shared_ptr<GridModel> model;
+
+    /// Номер строки в списке и сетка, которой она принадлежит, — по ним
+    /// понятно, можно ли отдавать фокус наружу.
+    size_t rowIndex             = 0;
+    brls::RecyclerFrame* owner  = nullptr;
 };
 
 /// Настраивает RecyclerFrame на показ игр и возвращает модель, которую надо

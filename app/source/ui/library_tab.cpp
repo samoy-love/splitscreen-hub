@@ -10,6 +10,10 @@ namespace
 {
 const char* FAVORITES = "";  // пустое имя = избранное
 
+/// Имя раздела скрытых. Папку с таким именем не завести: в имени есть символ,
+/// который не наберёшь с экранной клавиатуры.
+const char* HIDDEN = "hidden";
+
 /// Ширина под сетку: 1280 экрана минус поля по краям (space::SCREEN с обеих
 /// сторон), минус список папок с его правым полем.
 constexpr int CONTENT_WIDTH = 1280 - 30 - 30 - 200 - 20;
@@ -82,6 +86,12 @@ void LibraryTab::rebuildSidebar()
     };
 
     addEntry(FAVORITES, "★ Избранное", state.library.favorites().size());
+
+    // Скрытые — такой же список, как избранное, и место им здесь. Переключатель
+    // в каталоге показывает их вперемешку с остальными играми, а это отдельный
+    // вопрос: «что я вообще прятал».
+    addEntry(HIDDEN, "Скрытые", state.library.hiddenGames().size());
+
     for (const std::string& name : state.library.folderNames())
         addEntry(name, name, state.library.folder(name).size());
 
@@ -102,8 +112,9 @@ void LibraryTab::showSelection()
     AppState& state = AppState::get();
     // Копия, а не ссылка: список читается в рабочем потоке, а библиотеку в это
     // время могут изменить с другого экрана.
-    const std::vector<std::string> ids =
-        selected.empty() ? state.library.favorites() : state.library.folder(selected);
+    const std::vector<std::string> ids = selected == HIDDEN ? state.library.hiddenGames()
+        : selected.empty()                                  ? state.library.favorites()
+                                                            : state.library.folder(selected);
 
     focusedNsuid.clear();
 
@@ -143,8 +154,9 @@ void LibraryTab::applyGames(std::vector<Game> games)
     refreshGameGrid(grid);
 
     const bool empty = model->games.empty();
-    emptyLabel->setText(selected.empty()
-                            ? "Избранное пустое. Отметьте игру кнопкой X."
+    emptyLabel->setText(
+        selected == HIDDEN  ? "Скрытых игр нет. Спрятать игру можно кнопкой Y в каталоге."
+        : selected.empty()  ? "Избранное пустое. Отметьте игру кнопкой X."
                             : "Папка пустая. Положите в неё игру кнопкой X.");
     emptyLabel->setVisibility(empty ? brls::Visibility::VISIBLE : brls::Visibility::GONE);
     grid->setVisibility(empty ? brls::Visibility::GONE : brls::Visibility::VISIBLE);
@@ -154,15 +166,26 @@ void LibraryTab::applyGames(std::vector<Game> games)
 void LibraryTab::removeFocused()
 {
     AppState& state = AppState::get();
-    if (selected.empty())
+
+    if (selected == HIDDEN)
+    {
+        state.library.toggleHidden(focusedNsuid);
+        brls::Application::notify("Игра возвращена в каталог");
+    }
+    else if (selected.empty())
+    {
         state.library.toggleFavorite(focusedNsuid);
+        brls::Application::notify("Убрано из избранного");
+    }
     else
+    {
         state.library.toggleInFolder(selected, focusedNsuid);
+        brls::Application::notify("Убрано из «" + selected + "»");
+    }
 
     focusedNsuid.clear();
     rebuildSidebar();
     showSelection();
-    brls::Application::notify("Убрано из списка");
 }
 
 void LibraryTab::promptNewFolder()
@@ -184,8 +207,8 @@ void LibraryTab::onFolderNamed(const std::string& name)
 
 void LibraryTab::promptRename()
 {
-    if (selected.empty())
-        return;  // избранное переименовать нельзя
+    if (selected.empty() || selected == HIDDEN)
+        return;  // избранное и скрытые — не папки, переименовывать нечего
 
     brls::Application::getImeManager()->openForText(
         [this](const std::string& text) { onFolderRenamed(text); },
@@ -204,7 +227,7 @@ void LibraryTab::onFolderRenamed(const std::string& name)
 
 void LibraryTab::confirmRemove()
 {
-    if (selected.empty())
+    if (selected.empty() || selected == HIDDEN)
         return;
 
     std::string name = selected;

@@ -51,6 +51,20 @@ struct Filter
 class Catalog
 {
   public:
+    /// Язык текстов каталога. Названия игр не переводятся никогда — это имена
+    /// собственные; язык влияет на подзаголовок, описание и пояснение об
+    /// игроках.
+    enum class Language
+    {
+        English,
+        Russian,
+    };
+
+    /// Английский по умолчанию: у части игр перевода нет вовсе, и оригинал —
+    /// единственное, что можно показать наверняка.
+    void setLanguage(Language language) { lang = language; }
+    Language language() const { return lang; }
+
     /// Порядок совпадает с Filter::sort.
     ///
     /// Первые четыре — то полезное, что есть в самом eShop (сортировки по цене
@@ -89,6 +103,11 @@ class Catalog
 
   private:
     struct sqlite3* db = nullptr;
+    Language lang      = Language::English;
+
+    /// Список полей выборки. Зависит от языка: русский подмешивает перевод
+    /// через coalesce, чтобы игры без перевода показывали оригинал.
+    std::string selectFields() const;
 
     /// Собирает условие WHERE. Значения не подставляются в текст, а
     /// складываются в params для последующего bindParams().

@@ -35,6 +35,12 @@ class Library
     void toggleHidden(const std::string& nsuid);
     const std::vector<std::string>& hiddenGames() const { return hidden; }
 
+    /// Язык интерфейса и текстов о играх. Хранится здесь же: это единственный
+    /// файл пользовательских данных, и заводить второй ради одной строки
+    /// незачем.
+    const std::string& language() const { return lang; }
+    void setLanguage(const std::string& code);
+
     /// Сколько всего записей — для подписи на вкладке.
     size_t size() const;
 
@@ -43,6 +49,7 @@ class Library
     std::vector<std::string> favs;
     std::map<std::string, std::vector<std::string>> folders;
     std::vector<std::string> hidden;
+    std::string lang = "en";
 
     static const std::vector<std::string> empty;
 };

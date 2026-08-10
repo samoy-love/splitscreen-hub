@@ -1,19 +1,17 @@
 """
-Готовит catalog.db для romfs: подставляет переводы прямо в тексты игр и
-выбрасывает всё, что нужно только на этапе сборки.
+Готовит catalog.db для romfs: оставляет оба языка и выбрасывает всё, что нужно
+только на этапе сборки.
 
-Зачем отдельный шаг. Рабочая `catalog.db` держит английские оригиналы в таблице
-games и русские переводы рядом в translations — так удобно и переводчику
-(видно, что ещё не переведено), и инструментам. Но в .nro оба языка ехать не
-должны: это дубль одного и того же текста, который никто никогда не увидит
-по-английски, если перевод есть.
+Раньше здесь перевод вписывался поверх оригинала, а таблица translations
+удалялась: интерфейс был русским, и второй язык считался мёртвым весом. Теперь
+язык переключается в самом приложении, поэтому в .nro едут оба текста — русский
+в translations, английский в games.
 
-Поэтому здесь перевод вписывается в games поверх оригинала, а таблица
-translations удаляется целиком. Английские черновики остаются в репозитории —
-в `catalog.db` и `local_multiplayer.json`.
+Стоит это 6.4 МБ описаний, то есть около 5 МБ после сжатия базы. Плата за то,
+что каталог читается на обоих языках без пересборки.
 
-Игры без перевода сохраняют английский текст: показать оригинал лучше, чем
-пустую карточку.
+Игры без перевода показывают английский: в translations у них пусто, и
+приложение само откатывается к оригиналу.
 
 Результат: app/resources/catalog.db
 """
@@ -48,16 +46,22 @@ def main():
 
     replaced = {name: 0 for name, _ in FIELDS}
     if has_translations:
-        for target_col, source_col in FIELDS:
-            cur = db.execute(
-                f"UPDATE games SET {target_col} = ("
-                f"  SELECT {source_col} FROM translations t WHERE t.nsuid = games.nsuid)"
-                f" WHERE nsuid IN (SELECT nsuid FROM translations"
-                f"                 WHERE {source_col} IS NOT NULL AND {source_col} != '')")
-            replaced[target_col] = cur.rowcount
-            cur.close()
+        # Пустые переводы выкидываем: приложение отличает «нет перевода» от
+        # «перевод есть» по наличию строки, и пустая строка сбивала бы его на
+        # пустую карточку вместо английского оригинала.
+        for _, source_col in FIELDS:
+            db.execute(f"UPDATE translations SET {source_col} = NULL"
+                       f" WHERE {source_col} = ''")
+        db.execute("DELETE FROM translations WHERE headline_ru IS NULL"
+                   " AND description_ru IS NULL AND players_note_ru IS NULL")
 
-        db.execute("DROP TABLE translations")
+        for target_col, source_col in FIELDS:
+            replaced[target_col] = db.execute(
+                f"SELECT count(*) FROM translations WHERE {source_col} IS NOT NULL"
+            ).fetchone()[0]
+
+        # Индекс под соединение: перевод подмешивается к каждой выборке каталога.
+        db.execute("CREATE INDEX IF NOT EXISTS idx_tr ON translations(nsuid)")
 
     # Источник оценок так и не появился, таблица пуста, и приложение к ней
     # больше не обращается — в релизной базе ей делать нечего.

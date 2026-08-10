@@ -32,8 +32,11 @@ class CacheTab : public brls::Box
     std::shared_ptr<std::atomic_bool> alive;
 
     void refresh();
+    /// Кнопки выбора языка. Смена требует перезапуска, о чём и говорим.
+    void buildLanguage();
     void confirmClear(bool onlyVideos);
 
+    BRLS_BIND(brls::Box, languageBox, "settings/language");
     BRLS_BIND(brls::Label, summary, "cache/summary");
     BRLS_BIND(brls::Label, breakdown, "cache/breakdown");
     BRLS_BIND(brls::Label, hint, "cache/hint");

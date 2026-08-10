@@ -60,6 +60,7 @@ bool Library::load(const std::string& path)
         in >> j;
         favs   = j.value("favorites", std::vector<std::string>{});
         hidden = j.value("hidden", std::vector<std::string>{});
+        lang   = j.value("language", std::string("en"));
         for (auto& [name, items] : j.value("folders", json::object()).items())
             folders[name] = items.get<std::vector<std::string>>();
     }
@@ -85,6 +86,7 @@ bool Library::save() const
     json j;
     j["favorites"] = favs;
     j["hidden"]    = hidden;
+    j["language"]  = lang;
     j["folders"]   = json::object();
     for (const auto& [name, items] : folders)
         j["folders"][name] = items;
@@ -138,6 +140,14 @@ void Library::toggleFavorite(const std::string& nsuid)
         favs.push_back(nsuid);
     else
         favs.erase(it);
+    save();
+}
+
+void Library::setLanguage(const std::string& code)
+{
+    if (lang == code)
+        return;
+    lang = code;
     save();
 }
 

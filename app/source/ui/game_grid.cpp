@@ -62,9 +62,10 @@ int GameRow::columnsFor(int availableWidth)
     return n < 1 ? 1 : n;
 }
 
-void GameRow::bind(std::shared_ptr<GridModel> model)
+void GameRow::bind(std::shared_ptr<GridModel> model, brls::RecyclerFrame* owner)
 {
     this->model = std::move(model);
+    this->owner = owner;
 
     // Обработчики одни и те же для всех игр — ставим их раз и навсегда.
     for (brls::Box* slot : slots)
@@ -79,6 +80,8 @@ void GameRow::setGames(size_t from)
 {
     if (!model)
         return;
+
+    rowIndex = slots.empty() ? 0 : from / slots.size();
 
     for (size_t i = 0; i < slots.size(); i++)
     {
@@ -99,14 +102,42 @@ void GameRow::setGames(size_t from)
     }
 }
 
+namespace
+{
+
+/// Лежит ли вид внутри поддерева предка.
+bool isInside(brls::View* view, brls::View* ancestor)
+{
+    for (brls::View* p = view; p != nullptr; p = p->getParent())
+        if (p == ancestor)
+            return true;
+    return false;
+}
+
+}  // namespace
+
+brls::View* GameRow::getNextFocus(brls::FocusDirection direction, brls::View* currentView)
+{
+    brls::View* next = Box::getNextFocus(direction, currentView);
+
+    // Наверх из первой строки — это выход к фильтрам, так и задумано. Из любой
+    // другой ответ за пределами сетки означает, что строку выше просто не успели
+    // создать: остаёмся на месте.
+    if (direction == brls::FocusDirection::UP && rowIndex > 0 && owner && next
+        && !isInside(next, owner))
+        return currentView;
+
+    return next;
+}
+
 std::shared_ptr<GridModel> attachGameGrid(brls::RecyclerFrame* recycler, int columns)
 {
     auto model = std::make_shared<GridModel>();
 
     recycler->estimatedRowHeight = GameRow::HEIGHT;
-    recycler->registerCell("Row", [columns, model]() {
+    recycler->registerCell("Row", [columns, model, recycler]() {
         auto* row = new GameRow(columns);
-        row->bind(model);
+        row->bind(model, recycler);
         return row;
     });
     recycler->setDataSource(new GridDataSource(model, columns));

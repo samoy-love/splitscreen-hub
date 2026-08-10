@@ -166,10 +166,15 @@ int main(int argc, char* argv[])
             if (std::strcmp(argv[i], "-d") == 0)
                 brls::Logger::setLogLevel(brls::LogLevel::LOG_DEBUG);
 
-        // Интерфейс написан по-русски целиком, поэтому и подсказки borealis
-        // должны быть русскими. С LOCALE_AUTO на английской консоли выходила
-        // смесь: наши строки по-русски, «OK» и «Back» — по-английски.
-        brls::Platform::APP_LOCALE_DEFAULT = brls::LOCALE_RU;
+        // Язык берём из настроек пользователя, а не из локали консоли: тексты
+        // о играх переведены не полностью, и выбор должен оставаться за
+        // человеком. По умолчанию английский — он есть у всех игр.
+        //
+        // Читаем файл настроек до brls::Application::init(): локаль borealis
+        // задаётся один раз при запуске и позже не меняется.
+        AppState::get().library.load(LIBRARY_PATH);
+        const bool russian = AppState::get().library.language() == "ru";
+        brls::Platform::APP_LOCALE_DEFAULT = russian ? brls::LOCALE_RU : brls::LOCALE_EN_US;
 
         step("borealis init");
         if (!brls::Application::init())
@@ -273,8 +278,10 @@ int main(int argc, char* argv[])
             return EXIT_FAILURE;
         }
 
-        step("library");
-        state.library.load(LIBRARY_PATH);
+        // Библиотека уже прочитана выше, до инициализации borealis: оттуда
+        // берётся язык.
+        state.catalog.setLanguage(russian ? Catalog::Language::Russian
+                                          : Catalog::Language::English);
 
         step("installed titles");
         state.installedTitleIds = installed::titleIds();

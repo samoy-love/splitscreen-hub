@@ -82,13 +82,14 @@ const char* nxVfsName()
 // вписан поверх оригинала (make_ship_db.py), а таблица translations удалена —
 // два языка одного и того же текста в сборке не нужны. Английские черновики
 // остаются в рабочей catalog.db в репозитории.
-const char* SELECT_FIELDS =
-    "SELECT g.nsuid, g.title, g.title_id, g.same_screen_min, g.same_screen_max,"
-    " g.players_note, g.box_art_file, g.background_color,"
-    " g.headline, g.description,"
+// Тексты берутся по языку: английский лежит в games, русский — в translations.
+// coalesce, а не join-и-надейся: перевод есть не у всех игр, и для остальных
+// правильный ответ — показать оригинал, а не пустоту.
+const char* SELECT_HEAD =
+    "SELECT g.nsuid, g.title, g.title_id, g.same_screen_min, g.same_screen_max,";
+const char* SELECT_TAIL =
     " g.publisher, g.release_year, g.languages, g.rom_size_bytes, g.has_online,"
-    " g.no_tabletop, g.has_demo, g.has_russian, g.mentions"
-    " FROM games g";
+    " g.no_tabletop, g.has_demo, g.has_russian, g.mentions";
 
 // Сетке не нужны описания: они есть только у карточки, где игра одна.
 // При 3489 играх полная выборка тянет в память несколько мегабайт текста —
@@ -311,6 +312,22 @@ bool Catalog::open(const std::string& path)
     return false;
 }
 
+std::string Catalog::selectFields() const
+{
+    if (lang == Language::Russian)
+        return std::string(SELECT_HEAD)
+            + " coalesce(t.players_note_ru, g.players_note), g.box_art_file,"
+              " g.background_color,"
+              " coalesce(t.headline_ru, g.headline), coalesce(t.description_ru, g.description),"
+            + SELECT_TAIL
+            + " FROM games g LEFT JOIN translations t ON t.nsuid = g.nsuid";
+
+    return std::string(SELECT_HEAD)
+        + " g.players_note, g.box_art_file, g.background_color,"
+          " g.headline, g.description,"
+        + SELECT_TAIL + " FROM games g";
+}
+
 std::string Catalog::buildWhere(const Filter& f, std::vector<std::string>& params) const
 {
     // Значения подставляются через bind, а не склейкой текста: рядом в этом же
@@ -416,7 +433,7 @@ Game Catalog::byNsuid(const std::string& nsuid) const
     Game g;
     if (!db)
         return g;
-    std::string sql = std::string(SELECT_FIELDS) + " WHERE g.nsuid = ?";
+    std::string sql = selectFields() + " WHERE g.nsuid = ?";
     sqlite3_stmt* st = nullptr;
     if (sqlite3_prepare_v2(db, sql.c_str(), -1, &st, nullptr) != SQLITE_OK)
         return g;
