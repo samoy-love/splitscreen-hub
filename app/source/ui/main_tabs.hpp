@@ -23,6 +23,8 @@ class MainTabs : public brls::Box
   private:
     void addTab(const std::string& label, brls::View* content);
     void select(size_t index);
+    /// Подписи к плечевым кнопкам — то, что не поместилось в нижнюю полосу.
+    void updateShortcuts();
 
     std::vector<brls::Button*> buttons;
     std::vector<brls::View*> pages;
@@ -34,4 +36,5 @@ class MainTabs : public brls::Box
 
     BRLS_BIND(brls::Box, tabsBox, "main/tabs");
     BRLS_BIND(brls::Box, contentBox, "main/content");
+    BRLS_BIND(brls::Label, shortcuts, "main/shortcuts");
 };

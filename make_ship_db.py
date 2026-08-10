@@ -59,6 +59,10 @@ def main():
 
         db.execute("DROP TABLE translations")
 
+    # Источник оценок так и не появился, таблица пуста, и приложение к ней
+    # больше не обращается — в релизной базе ей делать нечего.
+    db.execute("DROP TABLE IF EXISTS ratings")
+
     db.commit()
     db.execute("VACUUM")
     db.close()

@@ -164,6 +164,19 @@ int main(int argc, char* argv[])
             return EXIT_FAILURE;
         }
 
+        // Нижняя полоса подсказок переполнялась: подсказки налезали на
+        // индикаторы Wi-Fi, батареи и часы, и не читалось ни то, ни другое.
+        // Размер шрифта самих подсказок задан в borealis числом и нам
+        // недоступен (она подключена подмодулем), поэтому ужимаем отступы и
+        // сокращаем число подсказок — см. hidden=true в экранах.
+        //
+        // Метрики надо задать до разбора разметки: значения @style/... в XML
+        // подставляются один раз при инфляции.
+        brls::Style style = brls::getStyle();
+        style.addMetric("brls/hints/footer_margin_sides", 16.0f);
+        style.addMetric("brls/hints/footer_padding_sides", 10.0f);
+        style.addMetric("brls/applet_frame/footer_height", 64.0f);
+
         step("create window");
         brls::Application::createWindow("SplitScreen Hub");
         brls::Application::setGlobalQuit(true);

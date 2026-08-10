@@ -24,6 +24,9 @@ constexpr int SORT_INSTALLED_FIRST = 6;
 /// Ширина под сетку: 1280 экрана минус боковые отступы catalog.xml по 30.
 constexpr int CONTENT_WIDTH = 1280 - 60;
 
+/// Шаг постраничной прокрутки — примерно экран строк сетки.
+constexpr float PAGE_STEP = GameRow::HEIGHT * 3;
+
 }  // namespace
 
 // --------------------------------------------------------------------------
@@ -48,15 +51,17 @@ CatalogTab::CatalogTab()
         promptSearch();
         return true;
     });
-    // ZL/ZR листают сетку страницами — с 3489 играми стик утомляет
+    // ZL/ZR листают сетку страницами — с 3489 играми стик утомляет. Подсказки
+    // скрыты: две строки по 200 точек ради приёма, без которого прокрутка всё
+    // равно работает, вытесняли из полосы нужное.
     this->registerAction("Страница вверх", brls::BUTTON_LT, [this](brls::View*) {
-        recycler->setContentOffsetY(recycler->getContentOffsetY() - 666, true);
+        recycler->setContentOffsetY(recycler->getContentOffsetY() - PAGE_STEP, true);
         return true;
-    });
+    }, true);
     this->registerAction("Страница вниз", brls::BUTTON_RT, [this](brls::View*) {
-        recycler->setContentOffsetY(recycler->getContentOffsetY() + 666, true);
+        recycler->setContentOffsetY(recycler->getContentOffsetY() + PAGE_STEP, true);
         return true;
-    });
+    }, true);
 
     reload();
 }

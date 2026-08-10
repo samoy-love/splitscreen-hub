@@ -32,13 +32,13 @@ LibraryTab::LibraryTab()
         promptNewFolder();
         return true;
     });
-    this->registerAction("Переименовать", brls::BUTTON_Y, [this](brls::View*) {
+    this->registerAction("Имя папки", brls::BUTTON_Y, [this](brls::View*) {
         promptRename();
         return true;
     });
     // X работает по контексту: на выбранной игре — убрать её из списка,
     // иначе — удалить саму папку
-    this->registerAction("Убрать · удалить папку", brls::BUTTON_X, [this](brls::View*) {
+    this->registerAction("Убрать", brls::BUTTON_X, [this](brls::View*) {
         if (!focusedNsuid.empty())
             removeFocused();
         else

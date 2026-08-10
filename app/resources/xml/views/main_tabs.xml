@@ -25,6 +25,16 @@
             alignItems="center"
             grow="1.0" />
 
+        <!-- Подсказки, вытесненные из нижней полосы: там они занимали почти
+             400 точек и наезжали на часы с индикаторами. Здесь строка всё
+             равно наполовину пуста. Значки  и  — L и R из
+             системного шрифта Nintendo, те же, что рисует borealis. -->
+        <brls:Label
+            id="main/shortcuts"
+            text=""
+            fontSize="14"
+            textColor="@theme/brls/text_disabled" />
+
     </brls:Box>
 
     <brls:Box

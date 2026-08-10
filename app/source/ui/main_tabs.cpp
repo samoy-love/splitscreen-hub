@@ -17,14 +17,27 @@ MainTabs::MainTabs()
 
     // Плечевые кнопки листают вкладки, не уводя фокус наверх: с геймпада это
     // привычнее, чем возвращаться к строке вкладок каждый раз.
+    //
+    // hidden=true: обе подсказки съедали почти 400 точек нижней полосы, из-за
+    // чего остальные наезжали на часы и индикаторы. Что вкладки переключаются
+    // плечевыми, написано прямо в строке вкладок — там это и уместнее.
     this->registerAction("Вкладка влево", brls::BUTTON_LB, [this](brls::View*) {
         select((current + pages.size() - 1) % pages.size());
         return true;
-    });
+    }, true);
     this->registerAction("Вкладка вправо", brls::BUTTON_RB, [this](brls::View*) {
         select((current + 1) % pages.size());
         return true;
-    });
+    }, true);
+}
+
+void MainTabs::updateShortcuts()
+{
+    //  /  — L и R,  /  — ZL и ZR из системного шрифта.
+    std::string text = " вкладки";
+    if (current == 0)
+        text += "    страница";
+    shortcuts->setText(text);
 }
 
 void MainTabs::addTab(const std::string& label, brls::View* content)
@@ -66,6 +79,8 @@ void MainTabs::select(size_t index)
         buttons[i]->setStyle(i == index ? &brls::BUTTONSTYLE_PRIMARY
                                         : &brls::BUTTONSTYLE_BORDERLESS);
     }
+
+    updateShortcuts();
 
     // Фокус мог остаться на плитке спрятанной вкладки — тогда нажатия уходили
     // бы в невидимое. Переводим его на открытую страницу.
