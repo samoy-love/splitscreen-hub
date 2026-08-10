@@ -151,9 +151,6 @@ void GameActivity::applyDetails(Game full, std::vector<std::string> genreList,
     }
 
     game = std::move(full);
-    brls::Logger::info("карточка: открыта «{}» ({}), игроков до {}", game.title, nsuid,
-                       game.sameScreenMax);
-
     fillHeader();
     fillStats();
     fillTags();

@@ -109,11 +109,7 @@ void enforceCacheLimit()
     ::closedir(dir);
 
     if (total <= CACHE_LIMIT_BYTES)
-    {
-        brls::Logger::debug("net: кеш {} МБ из {} МБ, чистка не нужна", total / (1024 * 1024),
-                            CACHE_LIMIT_BYTES / (1024 * 1024));
         return;
-    }
 
     std::sort(entries.begin(), entries.end(),
         [](const Entry& a, const Entry& b) { return a.mtime < b.mtime; });
@@ -203,8 +199,6 @@ namespace net
 
 void init()
 {
-    brls::Logger::info("net: инициализация начата");
-
 #ifdef __SWITCH__
     // borealis поднимает сокеты сама в userAppInit, до входа в main. Наш вызов
     // приходит вторым и возвращает LibnxError_AlreadyInitialized — это не
@@ -216,7 +210,6 @@ void init()
 
     if (alreadyUp)
     {
-        brls::Logger::info("net: сокеты уже подняты borealis");
         socketResult = 0;
         weOwnSockets = false;
     }
@@ -435,7 +428,6 @@ std::vector<unsigned char> fetch(const std::string& url)
     std::vector<unsigned char> cached = readFile(path);
     if (!cached.empty())
     {
-        brls::Logger::debug("net: из кеша {} Б — {}", cached.size(), url);
         return cached;
     }
 
@@ -445,8 +437,6 @@ std::vector<unsigned char> fetch(const std::string& url)
         brls::Logger::warning("net: сеть не поднялась за 5 с, пропускаем {}", url);
         return {};
     }
-
-    brls::Logger::debug("net: качаем {}", url);
 
     long status     = 0;
     CURLcode result = CURLE_OK;
@@ -468,8 +458,6 @@ std::vector<unsigned char> fetch(const std::string& url)
         std::vector<unsigned char> data = fetchOnce(url, status, result);
         if (!data.empty())
         {
-            brls::Logger::debug("net: скачано {} Б с попытки {} — {}", data.size(), attempt + 1,
-                                url);
             writeFile(path, data);
             return data;
         }
@@ -479,10 +467,7 @@ std::vector<unsigned char> fetch(const std::string& url)
                               curl_easy_strerror(result), status, url);
 
         if (!worthRetrying(status, result))
-        {
-            brls::Logger::debug("net: повторять бессмысленно, прекращаем");
             break;
-        }
     }
 
     brls::Logger::error("Не скачалось (curl {} «{}», http {}): {}", static_cast<int>(result),

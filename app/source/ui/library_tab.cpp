@@ -149,8 +149,6 @@ void LibraryTab::applyGames(std::vector<Game> games)
     emptyLabel->setVisibility(empty ? brls::Visibility::VISIBLE : brls::Visibility::GONE);
     grid->setVisibility(empty ? brls::Visibility::GONE : brls::Visibility::VISIBLE);
 
-    brls::Logger::info("библиотека: «{}» — игр {}", selected.empty() ? "Избранное" : selected,
-                       model->games.size());
 }
 
 void LibraryTab::removeFocused()

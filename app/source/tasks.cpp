@@ -64,16 +64,11 @@ std::vector<std::thread> workers;
 
 void run(Queue& queue)
 {
-    brls::Logger::debug("tasks[{}]: рабочий поток запущен", queue.name);
-
     while (true)
     {
         std::function<void()> task = queue.pop();
         if (!task)
-        {
-            brls::Logger::debug("tasks[{}]: рабочий поток завершён", queue.name);
             return;
-        }
 
         // Без перехвата брошенное задание уносит весь рабочий поток, и очередь
         // после этого просто перестаёт разбираться — молча, без единого следа.
@@ -110,7 +105,6 @@ void start()
         workers.emplace_back([] { run(ioQueue); });
     workers.emplace_back([] { run(heavyQueue); });
 
-    brls::Logger::info("tasks: запущено потоков: {} (io {} + heavy 1)", workers.size(), IO_WORKERS);
 }
 
 bool shuttingDown()
@@ -130,7 +124,6 @@ void stop()
     if (workers.empty())
         return;
 
-    brls::Logger::info("tasks: остановка {} потоков", workers.size());
     ioQueue.running    = false;
     heavyQueue.running = false;
     ioQueue.wake();
@@ -140,7 +133,7 @@ void stop()
         if (worker.joinable())
             worker.join();
     workers.clear();
-    brls::Logger::info("tasks: все потоки остановлены");
+    brls::Logger::info("tasks: потоки остановлены");
 }
 
 void io(std::function<void()> task)

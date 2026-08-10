@@ -215,9 +215,36 @@ void CatalogTab::promptSearch()
 
 void CatalogTab::chooseGenre()
 {
+    // Список жанров — это DISTINCT по таблице в romfs, то есть последнее место,
+    // где мы ещё читали базу прямо в кадре. Читаем в рабочем потоке и открываем
+    // список, когда он готов: список жанров не меняется, поэтому запоминаем.
+    if (!genreCache.empty())
+    {
+        openGenreDropdown();
+        return;
+    }
+
+    auto flag  = alive;
+    auto* self = this;
+
+    tasks::io([flag, self]() {
+        std::vector<std::string> list = AppState::get().catalog.genres();
+        if (!*flag)
+            return;
+
+        brls::sync([flag, self, list = std::move(list)]() mutable {
+            if (!*flag)
+                return;
+            self->genreCache = std::move(list);
+            self->openGenreDropdown();
+        });
+    });
+}
+
+void CatalogTab::openGenreDropdown()
+{
     std::vector<std::string> options = { "Любой" };
-    for (const std::string& g : AppState::get().catalog.genres())
-        options.push_back(g);
+    options.insert(options.end(), genreCache.begin(), genreCache.end());
 
     auto* dropdown = new brls::Dropdown(
         "Жанр", options,

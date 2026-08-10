@@ -34,6 +34,9 @@ class CatalogTab : public brls::Box
     void buildToggles();
     void promptSearch();
     void chooseGenre();
+    void openGenreDropdown();
+    /// Жанры не меняются за время работы — читаем их один раз.
+    std::vector<std::string> genreCache;
     void chooseSort();
     void toggleHidden();
     /// Обновляет отметки одной игры без перезапроса каталога.

@@ -202,16 +202,11 @@ void HttpStream::startWorker(int64_t from)
         int64_t offset  = from;
         int attempt     = 0;
 
-        brls::Logger::debug("поток: качаем с байта {} — {}", from, url);
-
         while (workerRunning.load() && alive->load())
         {
             requestReceived = 0;
             const int result = performRange(offset);
             offset += requestReceived.load();
-
-            brls::Logger::debug("поток: получено {} Б, всего {} из {}, curl {}",
-                                requestReceived.load(), offset, contentLength.load(), result);
 
             const long long length = contentLength.load();
             const bool complete    = length > 0 && offset >= length;
@@ -282,7 +277,7 @@ void HttpStream::startWorker(int64_t from)
 
 void HttpStream::feedFromCache(int64_t from)
 {
-    brls::Logger::info("поток: читаем из кэша с байта {} — {}", from, cachePath);
+    brls::Logger::debug("поток: читаем из кэша с байта {} — {}", from, cachePath);
 
     std::FILE* file = std::fopen(cachePath.c_str(), "rb");
     if (!file)
