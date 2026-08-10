@@ -42,21 +42,29 @@
 
         <!-- Отступы внутри умеет только Box, поэтому подложка счётчика игроков
              вынесена в отдельный контейнер, а Label внутри остался чистым. -->
+        <!-- Высота задана явно, содержимое центрировано по обеим осям: без
+             этого подложка обтягивала глифы вплотную и цифра сидела в ней
+             криво. Ширина по содержимому — счётчик бывает и двузначным,
+             максимум в базе 12. -->
         <brls:Box
             width="auto"
-            height="auto"
+            height="21"
             positionType="absolute"
-            positionBottom="4"
+            positionBottom="5"
             positionRight="5"
-            paddingLeft="6"
-            paddingRight="6"
-            cornerRadius="8"
-            backgroundColor="#000000B0">
+            paddingLeft="8"
+            paddingRight="8"
+            justifyContent="center"
+            alignItems="center"
+            cornerRadius="10"
+            backgroundColor="#000000C8">
 
             <brls:Label
                 id="tile/players"
                 text=""
                 fontSize="13"
+                verticalAlign="center"
+                horizontalAlign="center"
                 textColor="#FFFFFF" />
 
         </brls:Box>

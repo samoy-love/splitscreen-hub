@@ -36,7 +36,13 @@ CREATE TABLE games (
   has_online       INTEGER NOT NULL DEFAULT 0,
   no_tabletop      INTEGER NOT NULL DEFAULT 0,
   has_demo         INTEGER NOT NULL DEFAULT 0,
-  has_russian      INTEGER NOT NULL DEFAULT 0
+  has_russian      INTEGER NOT NULL DEFAULT 0,
+  -- Копия из toplists. Сортировка по умолчанию идёт именно по ней, и через
+  -- LEFT JOIN она обходилась в секунду на консоли: соединение не давало
+  -- воспользоваться индексом, и 3489 строк каждый раз уходили во временное
+  -- B-дерево. Своя колонка в games делает порядок индексируемым.
+  mentions         INTEGER NOT NULL DEFAULT 0,
+  best_pos         INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE genres (
@@ -248,6 +254,16 @@ def main():
         db.execute("INSERT INTO media_prefix VALUES (?,?)", (pid, prefix))
 
     merge_sidecars(db)
+
+    # Переносим упоминания в games — см. комментарий у колонок.
+    db.execute("""
+        UPDATE games SET
+          mentions = coalesce((SELECT t.mentions FROM toplists t WHERE t.nsuid = games.nsuid), 0),
+          best_pos = coalesce((SELECT t.best_pos FROM toplists t WHERE t.nsuid = games.nsuid), 0)
+    """)
+    db.execute("CREATE INDEX IF NOT EXISTS idx_top ON games("
+               "mentions = 0, mentions DESC, best_pos, sort_title)")
+    db.commit()
     db.commit()
 
     print(f"игр в базе: {len(rows)}")

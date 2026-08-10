@@ -1,4 +1,5 @@
 <brls:Box
+    axis="column"
     width="auto"
     height="auto"
     backgroundColor="#000000">
@@ -13,14 +14,10 @@
         justifyContent="center"
         alignItems="center" />
 
-    <!-- Статус и индикатор паузы лежат поверх кадра, а не полосой сверху:
-         абсолютное позиционирование в этой версии borealis есть, и заслонять
-         видео отдельной строкой незачем. Подложка полупрозрачная, чтобы текст
-         читался на любом кадре. -->
     <brls:Label
         id="video/status"
         text="Загрузка трейлера…"
-        fontSize="22"
+        fontSize="20"
         positionType="absolute"
         positionTop="40"
         positionLeft="0"
@@ -28,18 +25,89 @@
         horizontalAlign="center"
         textColor="#FFFFFF" />
 
-    <brls:Label
+    <!-- Значок паузы вместо надписи: белый текст пропадал на светлом кадре.
+         Тёмная подложка со скруглением видна на любом фоне, а две полосы
+         внутри — это и есть привычный знак паузы, без зависимости от шрифта. -->
+    <brls:Box
         id="video/pause"
-        text="II  Пауза"
-        fontSize="30"
+        width="76"
+        height="76"
         positionType="absolute"
         positionTop="0"
         positionBottom="0"
         positionLeft="0"
         positionRight="0"
-        horizontalAlign="center"
-        verticalAlign="center"
-        textColor="#FFFFFF"
-        visibility="gone" />
+        justifyContent="center"
+        alignItems="center"
+        cornerRadius="38"
+        backgroundColor="#000000A0"
+        visibility="gone">
+
+        <brls:Box width="10" height="34" marginRight="8" cornerRadius="2"
+                  backgroundColor="#FFFFFF" />
+        <brls:Box width="10" height="34" cornerRadius="2"
+                  backgroundColor="#FFFFFF" />
+
+    </brls:Box>
+
+    <!-- Полоса прогресса поверх нижнего края кадра. Тёмная подложка нужна,
+         чтобы шкала читалась и на светлом видео. -->
+    <brls:Box
+        id="video/bar"
+        axis="row"
+        alignItems="center"
+        height="46"
+        positionType="absolute"
+        positionBottom="0"
+        positionLeft="0"
+        positionRight="0"
+        paddingLeft="40"
+        paddingRight="40"
+        backgroundColor="#00000090">
+
+        <brls:Label
+            id="video/elapsed"
+            text="0:00"
+            fontSize="15"
+            marginRight="12"
+            textColor="#FFFFFF" />
+
+        <!-- Дорожка, а в ней две полосы: сколько закачано и сколько показано.
+             Обе позиционированы абсолютно, чтобы задавать им только ширину. -->
+        <brls:Box
+            id="video/track"
+            height="6"
+            grow="1.0"
+            cornerRadius="3"
+            backgroundColor="#FFFFFF33">
+
+            <brls:Box
+                id="video/loaded"
+                width="0"
+                height="6"
+                positionType="absolute"
+                positionLeft="0"
+                cornerRadius="3"
+                backgroundColor="#FFFFFF66" />
+
+            <brls:Box
+                id="video/played"
+                width="0"
+                height="6"
+                positionType="absolute"
+                positionLeft="0"
+                cornerRadius="3"
+                backgroundColor="@theme/brls/accent" />
+
+        </brls:Box>
+
+        <brls:Label
+            id="video/left"
+            text=""
+            fontSize="15"
+            marginLeft="12"
+            textColor="#FFFFFFC0" />
+
+    </brls:Box>
 
 </brls:Box>

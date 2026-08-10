@@ -106,7 +106,12 @@ void openBootLog()
     // сбрасываем каждую строку. Так в файл попадает всё, что приложение и сама
     // borealis отправляют в brls::Logger, из любого потока.
     brls::Logger::setThreadSafeLogging(true);
-    brls::Logger::setLogLevel(brls::LogLevel::LOG_DEBUG);
+
+    // INFO, а не DEBUG: на отладочном уровне borealis пишет строку на каждую
+    // созданную и уничтоженную ячейку списка, а мы — на каждую поставленную
+    // задачу. При прокрутке это восемь строк на ряд, и каждая идёт на SD.
+    // Отладочный уровень включается ключом -d.
+    brls::Logger::setLogLevel(brls::LogLevel::LOG_INFO);
     brls::Logger::getLogEvent()->subscribe(
         [](brls::Logger::TimePoint now, brls::LogLevel level, std::string message)
         {
@@ -125,7 +130,13 @@ void openBootLog()
 
             std::lock_guard<std::mutex> lock(logMutex);
             std::fprintf(bootLog, "[%7lld ms] %-7s %s\n", (long long)ms, name, message.c_str());
-            std::fflush(bootLog);
+
+            // Сбрасываем на карту только то, что важно увидеть после падения.
+            // Раньше сбрасывалась каждая строка, и при прокрутке сетки запись на
+            // SD шла из UI-потока по нескольку раз на ряд — интерфейс от этого
+            // заметно дёргался. Остальное дойдёт буфером или ближайшей ошибкой.
+            if (level <= brls::LogLevel::LOG_WARNING)
+                std::fflush(bootLog);
         });
 }
 

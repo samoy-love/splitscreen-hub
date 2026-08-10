@@ -2,15 +2,25 @@
 
 #include <cstdlib>
 
+#include <fstream>
+#include <memory>
+
 #include "app_state.hpp"
 #include "format.hpp"
 #include "net.hpp"
 #include "tasks.hpp"
+#include "ui/async_image.hpp"
 #include "ui/remote_image.hpp"
 #include "ui/video_player.hpp"
 
 namespace
 {
+
+#ifdef __SWITCH__
+const char* ART_DIR = "romfs:/art/";
+#else
+const char* ART_DIR = "resources/art/";
+#endif
 
 /// Фирменный цвет игры приходит из eShop строкой вида "0f336f".
 NVGcolor parseColor(const std::string& hex, NVGcolor fallback)
@@ -57,6 +67,13 @@ brls::Label* tag(const std::string& text)
 GameActivity::GameActivity(const std::string& nsuid)
     : nsuid(nsuid)
 {
+}
+
+GameActivity::~GameActivity()
+{
+    // Обложка и скриншоты могут догружаться в рабочем потоке; без флага их
+    // возврат через brls::sync обратился бы к уничтоженной карточке.
+    *alive = false;
 }
 
 void GameActivity::onContentAvailable()
@@ -108,8 +125,10 @@ void GameActivity::fillHeader()
     header->setBackgroundColor(
         parseColor(game.backgroundColor, brls::Application::getTheme()["brls/background"]));
 
+    // setImageFromRes читает файл и разбирает JPEG прямо здесь, в UI-потоке.
+    // Для шапки это лишние кадры на каждом открытии карточки.
     if (!game.boxArtFile.empty())
-        cover->setImageFromRes("art/" + game.boxArtFile);
+        loadCoverAsync(game.boxArtFile);
 
     title->setText(game.title);
 
@@ -121,6 +140,33 @@ void GameActivity::fillHeader()
     subtitle->setText(sub);
 
     refreshHeaderMarks();
+}
+
+void GameActivity::loadCoverAsync(const std::string& file)
+{
+    auto flag              = alive;
+    auto* target           = cover.getView();
+    const std::string path = std::string(ART_DIR) + file;
+
+    tasks::io([flag, target, path]() {
+        std::ifstream in(path, std::ios::binary);
+        if (!in.good())
+        {
+            brls::Logger::warning("карточка: обложка не открылась — {}", path);
+            return;
+        }
+        std::vector<unsigned char> data((std::istreambuf_iterator<char>(in)),
+                                        std::istreambuf_iterator<char>());
+        auto pixels = std::make_shared<asyncimage::Pixels>(
+            asyncimage::decode(data.data(), data.size()));
+        if (!pixels->valid() || !*flag)
+            return;
+
+        brls::sync([flag, target, pixels]() {
+            if (*flag)
+                asyncimage::apply(target, *pixels);
+        });
+    });
 }
 
 void GameActivity::refreshHeaderMarks()

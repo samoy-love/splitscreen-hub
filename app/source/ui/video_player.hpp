@@ -3,6 +3,7 @@
 #include <borealis.hpp>
 
 #include <atomic>
+#include <chrono>
 #include <functional>
 #include <memory>
 #include <condition_variable>
@@ -50,6 +51,14 @@ class VideoDecoder
     bool takeFrame(std::vector<uint8_t>& outRgba, int& outW, int& outH);
 
     bool isReady() const { return firstFrameDecoded; }
+
+    /// Позиция показа и длина ролика в секундах. Длина равна нулю, пока
+    /// заголовок не разобран или если её нет в контейнере.
+    double position() const { return currentPts.load(); }
+    double duration() const { return durationSeconds.load(); }
+
+    /// Доля ролика, уже полученная из сети: 0..1. Для роликов из кэша единица.
+    float bufferedFraction() const;
     bool hasError() const { return error; }
 
     /// Связь оборвалась посреди ролика и идёт попытка продолжить.
@@ -70,6 +79,7 @@ class VideoDecoder
     std::atomic<double> seekTargetSeconds { 0.0 };
     std::atomic_bool seekRequested { false };
     std::atomic<double> currentPts { 0.0 };
+    std::atomic<double> durationSeconds { 0.0 };
     /// Активный сетевой поток, если ролик не из кэша. Нужен, чтобы
     /// сообщить ему о паузе: иначе соединение умирает по таймауту, пока
     /// зритель стоит на паузе.
@@ -109,6 +119,10 @@ class VideoSurface : public brls::View
     std::function<void(bool loading, bool failed, bool paused,
                        bool reconnecting, int attempt)> onState;
 
+    /// Позиция, длительность и доля закачанного. Вызывается не чаще четырёх
+    /// раз в секунду — чаще шкала всё равно не меняется заметно.
+    std::function<void(double position, double duration, float buffered)> onProgress;
+
   private:
     /// Прошлое состояние: колбэк зовём только когда что-то изменилось.
     bool lastLoading      = false;
@@ -116,6 +130,9 @@ class VideoSurface : public brls::View
     bool lastPaused       = false;
     bool lastReconnecting = false;
     int lastAttempt       = -1;
+
+    /// Когда в последний раз сообщали прогресс.
+    std::chrono::steady_clock::time_point lastProgress {};
 
     VideoDecoder* decoder;
     std::vector<uint8_t> scratch;
@@ -151,7 +168,18 @@ class VideoPlayerActivity : public brls::Activity
 
     BRLS_BIND(brls::Box, videoBox, "video/box");
     BRLS_BIND(brls::Label, statusLabel, "video/status");
-    BRLS_BIND(brls::Label, pauseLabel, "video/pause");
+    BRLS_BIND(brls::Box, pauseIcon, "video/pause");
+    BRLS_BIND(brls::Box, progressBar, "video/bar");
+    BRLS_BIND(brls::Box, track, "video/track");
+    BRLS_BIND(brls::Box, loadedBar, "video/loaded");
+    BRLS_BIND(brls::Box, playedBar, "video/played");
+    BRLS_BIND(brls::Label, elapsedLabel, "video/elapsed");
+    BRLS_BIND(brls::Label, leftLabel, "video/left");
+
+    /// Обновляет шкалу и подписи. Зовётся из onProgress не чаще четырёх раз в
+    /// секунду: setText помечает раскладку грязной, и делать это на каждом
+    /// кадре — та же ошибка, что была с надписью «Пауза».
+    void updateProgress(double position, double duration, float buffered);
 
     void beginDownload();
     void closeSelf();

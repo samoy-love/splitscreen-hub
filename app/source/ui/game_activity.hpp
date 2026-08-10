@@ -2,6 +2,9 @@
 
 #include <borealis.hpp>
 
+#include <atomic>
+#include <memory>
+
 #include "catalog.hpp"
 
 /// Карточка игры: шапка красится в фирменный цвет игры, плитки с числом
@@ -16,7 +19,11 @@ class GameActivity : public brls::Activity
 
     void onContentAvailable() override;
 
+    ~GameActivity() override;
+
   private:
+    /// Карточку могли закрыть, пока грузилась обложка.
+    std::shared_ptr<std::atomic_bool> alive = std::make_shared<std::atomic_bool>(true);
     std::string nsuid;
     Game game;
     std::string trailerUrl;
@@ -26,6 +33,8 @@ class GameActivity : public brls::Activity
     int shotsFailed  = 0;
 
     void fillHeader();
+    /// Читает и разбирает обложку в рабочем потоке.
+    void loadCoverAsync(const std::string& file);
     void fillStats();
     void fillTags();
     void fillGenres();

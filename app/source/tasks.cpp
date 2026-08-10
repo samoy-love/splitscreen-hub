@@ -32,7 +32,7 @@ struct Queue
             items.push_back(std::move(task));
             depth = items.size();
         }
-        brls::Logger::debug("tasks[{}]: +задача, в очереди {}", name, depth);
+        brls::Logger::verbose("tasks[{}]: +задача, в очереди {}", name, depth);
         cv.notify_one();
     }
 

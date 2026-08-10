@@ -6,12 +6,19 @@
     width="auto"
     height="auto">
 
+    <!-- Шапка AppletFrame скрыта, поэтому верхний отступ этой строки —
+         единственное, что отделяет интерфейс от края экрана. Без него вкладки
+         прилипали к самому верху. Линия снизу отделяет их от содержимого. -->
     <brls:Box
         axis="row"
         alignItems="center"
-        height="44"
+        height="52"
+        paddingTop="10"
         paddingLeft="30"
-        paddingRight="30">
+        paddingRight="30"
+        marginBottom="6"
+        lineColor="@theme/brls/applet_frame/separator"
+        lineBottom="1px">
 
         <brls:Label
             text="Split Screen Hub"

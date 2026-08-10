@@ -73,10 +73,10 @@ const char* nxVfsName()
     return nxVfs.zName;
 }
 
-// Таблица ratings в отгружаемой базе пуста — источник оценок так и не появился,
-// и сортировка «по оценке» упорядочивала 3489 игр по нулю. Пункт убран из
-// SORT_NAMES, а вместе с ним и джойн: он тянул три пустые колонки на каждую
-// строку каждого запроса.
+// Ни одного соединения: и оценки, и подборки раньше подмешивались через LEFT
+// JOIN. Таблица ratings оказалась пустой и убрана совсем, а упоминания в
+// подборках перенесены прямо в games — соединение мешало взять индекс, и на
+// консоли сортировка по умолчанию стоила 1088 мс на 3489 строк.
 //
 // Тексты берутся из games напрямую: в базе, которая едет в romfs, перевод уже
 // вписан поверх оригинала (make_ship_db.py), а таблица translations удалена —
@@ -87,18 +87,16 @@ const char* SELECT_FIELDS =
     " g.players_note, g.box_art_file, g.background_color,"
     " g.headline, g.description,"
     " g.publisher, g.release_year, g.languages, g.rom_size_bytes, g.has_online,"
-    " g.no_tabletop, g.has_demo, g.has_russian, tl.mentions"
-    " FROM games g"
-    " LEFT JOIN toplists tl ON tl.nsuid = g.nsuid";
+    " g.no_tabletop, g.has_demo, g.has_russian, g.mentions"
+    " FROM games g";
 
 // Сетке не нужны описания: они есть только у карточки, где игра одна.
 // При 3489 играх полная выборка тянет в память несколько мегабайт текста —
 // и делает это заново на каждое нажатие фильтра.
 const char* SELECT_BRIEF =
     "SELECT g.nsuid, g.title, g.title_id, g.same_screen_min, g.same_screen_max,"
-    " g.box_art_file, tl.mentions"
-    " FROM games g"
-    " LEFT JOIN toplists tl ON tl.nsuid = g.nsuid";
+    " g.box_art_file, g.mentions"
+    " FROM games g";
 
 std::string text(sqlite3_stmt* st, int col)
 {
@@ -151,7 +149,7 @@ const char* ORDER_BY[] = {
     // В скольких независимых подборках «лучших couch co-op игр» игра названа.
     // Стоит по умолчанию: упоминания есть только у 85 игр, но именно они и
     // отвечают на вопрос «во что поиграть», а остальное идёт по алфавиту.
-    " ORDER BY tl.mentions IS NULL, tl.mentions DESC, tl.best_pos, g.sort_title",
+    " ORDER BY g.mentions = 0, g.mentions DESC, g.best_pos, g.sort_title",
     " ORDER BY g.sort_title",                              // название А→Я
     " ORDER BY g.sort_title DESC",                         // название Я→А
     " ORDER BY g.same_screen_max DESC, g.sort_title",      // больше игроков

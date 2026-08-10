@@ -77,6 +77,20 @@ void VideoDecoder::stop()
         worker.join();
 }
 
+float VideoDecoder::bufferedFraction() const
+{
+    // Ролик из кэша читается с диска целиком — буферизовать нечего.
+    HttpStream* stream = activeStream.load();
+    if (!stream)
+        return 1.0f;
+
+    const long long total = stream->total();
+    if (total <= 0)
+        return 0.0f;
+    const float part = static_cast<float>(stream->buffered()) / static_cast<float>(total);
+    return part > 1.0f ? 1.0f : part;
+}
+
 void VideoDecoder::interruptibleSleep(int64_t microseconds)
 {
     if (microseconds <= 0)
@@ -206,6 +220,11 @@ void VideoDecoder::decodeLoop(std::string url, std::string cachePath,
 
     brls::Logger::debug("плеер: дорожек {}, видео #{}, звук #{}", fmt->nb_streams, videoIdx,
                         audioIdx);
+
+    // Длительность нужна шкале прогресса. AV_NOPTS_VALUE бывает у потоков без
+    // индекса — тогда шкала покажет только прошедшее время.
+    if (fmt->duration > 0)
+        durationSeconds = static_cast<double>(fmt->duration) / AV_TIME_BASE;
 
     if (videoIdx < 0)
     {
@@ -498,6 +517,17 @@ void VideoSurface::draw(NVGcontext* vg, float x, float y, float width, float hei
         }
     }
 
+    if (onProgress && decoder)
+    {
+        const auto now = std::chrono::steady_clock::now();
+        if (now - lastProgress > std::chrono::milliseconds(250))
+        {
+            lastProgress = now;
+            onProgress(decoder->position(), decoder->duration(),
+                       decoder->bufferedFraction());
+        }
+    }
+
     if (nvgImage < 0)
         return;  // ещё ничего не декодировано — статус-лейбл показывает индикатор поверх
 
@@ -562,6 +592,44 @@ void VideoPlayerActivity::onContentAvailable()
     beginDownload();
 }
 
+namespace
+{
+
+/// «3:07» — привычный вид для роликов длиной в минуты.
+std::string clock(double seconds)
+{
+    if (seconds < 0)
+        seconds = 0;
+    const int total = static_cast<int>(seconds);
+    char buf[16];
+    std::snprintf(buf, sizeof(buf), "%d:%02d", total / 60, total % 60);
+    return buf;
+}
+
+}  // namespace
+
+void VideoPlayerActivity::updateProgress(double position, double duration, float buffered)
+{
+    elapsedLabel->setText(clock(position));
+
+    if (duration <= 0.0)
+    {
+        // Длительности нет — показываем только прошедшее время, шкалу прятать
+        // не за что: доля закачанного всё равно осмысленна.
+        leftLabel->setText("");
+        playedBar->setWidth(0.0f);
+    }
+    else
+    {
+        leftLabel->setText("−" + clock(duration - position));
+
+        const float part = static_cast<float>(position / duration);
+        playedBar->setWidthPercentage(100.0f * (part < 0.0f ? 0.0f : part > 1.0f ? 1.0f : part));
+    }
+
+    loadedBar->setWidthPercentage(100.0f * buffered);
+}
+
 void VideoPlayerActivity::beginDownload()
 {
     // Ждать полной закачки больше не нужно: декодер сам решает, читать ли
@@ -608,8 +676,12 @@ void VideoPlayerActivity::beginDownload()
             statusLabel->setVisibility(brls::Visibility::GONE);
         }
 
-        pauseLabel->setVisibility(paused && !failed ? brls::Visibility::VISIBLE
-                                                    : brls::Visibility::GONE);
+        pauseIcon->setVisibility(paused && !failed ? brls::Visibility::VISIBLE
+                                                   : brls::Visibility::GONE);
+    };
+
+    surface->onProgress = [this](double position, double duration, float buffered) {
+        updateProgress(position, duration, buffered);
     };
     videoBox->addView(surface);
 }

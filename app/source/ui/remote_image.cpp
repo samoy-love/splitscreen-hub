@@ -2,8 +2,11 @@
 
 #include <borealis.hpp>
 
+#include <memory>
+
 #include "net.hpp"
 #include "tasks.hpp"
+#include "ui/async_image.hpp"
 
 RemoteImage::RemoteImage()
     : alive(std::make_shared<std::atomic_bool>(true))
@@ -33,12 +36,19 @@ void RemoteImage::load(const std::string& url)
         if (data.empty())
             brls::Logger::warning("image: пусто после загрузки {}", url);
 
-        brls::sync([flag, self, data = std::move(data)]() {
+        // Скриншоты весят по 200–350 КБ, и их разбор в UI-потоке съедал по
+        // несколько кадров на каждый — открытие карточки заметно подвисало.
+        auto pixels = std::make_shared<asyncimage::Pixels>(
+            asyncimage::decode(data.data(), data.size()));
+        if (!*flag)
+            return;
+
+        brls::sync([flag, self, pixels]() {
             if (!*flag)
                 return;  // карточку успели закрыть
-            const bool ok = !data.empty();
+            const bool ok = pixels->valid();
             if (ok)
-                self->setImageFromMem(data.data(), static_cast<int>(data.size()));
+                asyncimage::apply(self, *pixels);
             if (self->onDone)
                 self->onDone(ok);
         });

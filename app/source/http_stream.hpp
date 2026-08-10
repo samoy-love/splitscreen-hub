@@ -40,6 +40,11 @@ class HttpStream
     /// остаётся за HttpStream.
     AVIOContext* avio() { return context; }
 
+    /// Сколько байт получено и сколько всего — для шкалы буферизации.
+    /// total() равен -1, пока сервер не сообщил длину.
+    long long buffered() const { return received.load(); }
+    long long total() const { return contentLength.load(); }
+
     /// Связь оборвалась посреди файла и мы пробуем продолжить с того же
     /// места. Показ при этом замирает на последнем кадре, а не падает.
     bool reconnecting() const { return isReconnecting.load(); }
