@@ -26,7 +26,7 @@ class GridDataSource : public brls::RecyclerDataSource
                                    brls::IndexPath indexPath) override
     {
         auto* row = static_cast<GameRow*>(recycler->dequeueReusableCell("Row"));
-        row->setGames(*model, static_cast<size_t>(indexPath.row) * columns);
+        row->setGames(static_cast<size_t>(indexPath.row) * columns);
         return row;
     }
 
@@ -62,14 +62,30 @@ int GameRow::columnsFor(int availableWidth)
     return n < 1 ? 1 : n;
 }
 
-void GameRow::setGames(const GridModel& model, size_t from)
+void GameRow::bind(std::shared_ptr<GridModel> model)
 {
+    this->model = std::move(model);
+
+    // Обработчики одни и те же для всех игр — ставим их раз и навсегда.
+    for (brls::Box* slot : slots)
+    {
+        auto* tile = static_cast<GameTile*>(slot);
+        tile->setOnSelect(this->model->onSelect);
+        tile->setOnFocus(this->model->onFocus);
+    }
+}
+
+void GameRow::setGames(size_t from)
+{
+    if (!model)
+        return;
+
     for (size_t i = 0; i < slots.size(); i++)
     {
         size_t idx = from + i;
         auto* tile = static_cast<GameTile*>(slots[i]);
 
-        if (idx >= model.games.size())
+        if (idx >= model->games.size())
         {
             // хвост последней строки: место занимаем, но фокус туда не пускаем
             tile->setVisibility(brls::Visibility::INVISIBLE);
@@ -78,10 +94,8 @@ void GameRow::setGames(const GridModel& model, size_t from)
         }
 
         tile->setVisibility(brls::Visibility::VISIBLE);
-        tile->setGame(model.games[idx]);
         tile->setFocusable(true);
-        tile->setOnSelect(model.onSelect);
-        tile->setOnFocus(model.onFocus);
+        tile->setGame(model->games[idx]);
     }
 }
 
@@ -90,7 +104,11 @@ std::shared_ptr<GridModel> attachGameGrid(brls::RecyclerFrame* recycler, int col
     auto model = std::make_shared<GridModel>();
 
     recycler->estimatedRowHeight = GameRow::HEIGHT;
-    recycler->registerCell("Row", [columns]() { return new GameRow(columns); });
+    recycler->registerCell("Row", [columns, model]() {
+        auto* row = new GameRow(columns);
+        row->bind(model);
+        return row;
+    });
     recycler->setDataSource(new GridDataSource(model, columns));
 
     return model;

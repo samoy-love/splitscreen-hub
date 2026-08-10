@@ -59,6 +59,7 @@
         </brls:Box>
 
         <brls:ScrollingFrame
+            id="game/scroll"
             width="auto"
             height="auto"
             grow="1.0">

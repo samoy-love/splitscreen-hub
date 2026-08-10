@@ -36,6 +36,11 @@ class GameRow : public brls::RecyclerCell
   public:
     explicit GameRow(int columns);
 
+    /// Модель задаётся один раз при создании строки. Раньше обработчики
+    /// выбора и фокуса копировались в каждую из семи плиток на каждую
+    /// привязку — четырнадцать копий std::function на ряд при прокрутке.
+    void bind(std::shared_ptr<GridModel> model);
+
     /// Ширина плитки и зазор между ними — из game_tile.xml.
     static constexpr int TILE_WIDTH = 160;
     static constexpr int TILE_GAP   = 14;
@@ -46,10 +51,11 @@ class GameRow : public brls::RecyclerCell
     /// Сколько плиток шириной TILE_WIDTH влезет в заданную ширину.
     static int columnsFor(int availableWidth);
 
-    void setGames(const GridModel& model, size_t from);
+    void setGames(size_t from);
 
   private:
     std::vector<brls::Box*> slots;
+    std::shared_ptr<GridModel> model;
 };
 
 /// Настраивает RecyclerFrame на показ игр и возвращает модель, которую надо

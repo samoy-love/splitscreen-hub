@@ -172,6 +172,14 @@ void GameActivity::applyDetails(Game full, std::vector<std::string> genreList,
     playersNote->setText(game.playersNote);
     playersNote->setVisibility(game.playersNote.empty() ? brls::Visibility::GONE
                                                         : brls::Visibility::VISIBLE);
+
+    // Фокус borealis выдаёт один раз — сразу после onContentAvailable, когда
+    // экран ещё пуст: полосу медиа наполняет рабочий поток. Без этого курсор
+    // оставался на плитке каталога, и нажатия уходили на предыдущий экран.
+    if (brls::View* first = shotsBox->getDefaultFocus())
+        brls::Application::giveFocus(first);
+    else if (brls::View* frame = scroller->getDefaultFocus())
+        brls::Application::giveFocus(frame);
 }
 
 void GameActivity::fillHeader()

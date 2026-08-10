@@ -729,6 +729,11 @@ void VideoPlayerActivity::beginDownload()
         updateProgress(position, duration, buffered);
     };
     videoBox->addView(surface);
+
+    // Явно, а не полагаясь на getDefaultFocus при открытии: поверхность
+    // добавляется в конце onContentAvailable, и раньше курсор мог остаться на
+    // кнопке трейлера на предыдущем экране.
+    brls::Application::giveFocus(surface);
 }
 
 void VideoPlayerActivity::closeSelf()

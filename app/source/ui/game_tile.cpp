@@ -113,6 +113,13 @@ void GameTile::loadCover(const std::string& file)
 
 void GameTile::setGame(const Game& game)
 {
+    // Рециклер часто отдаёт строке те же самые игры — например, когда список
+    // перерисовывается без смены фильтра. Тогда делать нечего: обложка уже
+    // показана, подписи те же.
+    if (nsuid == game.nsuid && game.favorite == this->game.favorite
+        && game.hidden == this->game.hidden && game.installed == this->game.installed)
+        return;
+
     this->game = game;
     nsuid      = game.nsuid;
 

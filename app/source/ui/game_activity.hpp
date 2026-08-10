@@ -67,6 +67,7 @@ class GameActivity : public brls::Activity
     BRLS_BIND(brls::Label, folders, "game/folders");
     BRLS_BIND(brls::Label, genres, "game/genres");
     BRLS_BIND(brls::Box, shotsBox, "game/shots");
+    BRLS_BIND(brls::ScrollingFrame, scroller, "game/scroll");
     BRLS_BIND(brls::Label, shotsHint, "game/shots_hint");
     /// Кнопка трейлера создаётся кодом и встаёт первой в полосе медиа рядом со
     /// скриншотами, поэтому её нет в разметке.
