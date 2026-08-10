@@ -7,6 +7,7 @@
 
 #include "app_state.hpp"
 #include "format.hpp"
+#include "ui/folder_picker.hpp"
 #include "ui/fonts.hpp"
 #include "net.hpp"
 #include "tasks.hpp"
@@ -71,6 +72,12 @@ GameActivity::GameActivity(const std::string& nsuid)
 {
 }
 
+GameActivity::GameActivity(const Game& brief)
+    : nsuid(brief.nsuid)
+    , brief(brief)
+{
+}
+
 GameActivity::~GameActivity()
 {
     // Обложка и скриншоты могут догружаться в рабочем потоке; без флага их
@@ -80,26 +87,76 @@ GameActivity::~GameActivity()
 
 void GameActivity::onContentAvailable()
 {
-    AppState& state = AppState::get();
-    game            = state.catalog.byNsuid(nsuid);
-    state.decorate(game);
+    this->registerAction("Избранное", brls::BUTTON_X, [this](brls::View*) {
+        toggleFavorite();
+        return true;
+    });
+    this->registerAction("В папку", brls::BUTTON_Y, [this](brls::View*) {
+        chooseFolder();
+        return true;
+    });
 
-    if (game.nsuid.empty())
+    // Название и обложка известны заранее — их каталог уже прочитал для плитки.
+    // Показываем сразу, чтобы экран открылся с содержимым, а не пустым: раньше
+    // всё, включая заголовок, ждало четырёх запросов к базе.
+    if (!brief.nsuid.empty())
+    {
+        game = brief;
+        fillHeader();
+    }
+
+    // Остальное — описание, жанры, ссылки на медиа — это ещё четыре запроса, и
+    // выполнять их в кадре открытия значило отдать этот кадр целиком под них.
+    auto flag        = alive;
+    auto* self       = this;
+    std::string want = nsuid;
+
+    tasks::io([flag, self, want]() {
+        AppState& state = AppState::get();
+
+        Game full = state.catalog.byNsuid(want);
+        state.decorate(full);
+        std::vector<std::string> genres = state.catalog.genresOf(want);
+        std::vector<std::string> shots  = state.catalog.screenshots(want);
+        std::vector<std::string> videos = state.catalog.videos(want);
+
+        if (!*flag)
+            return;
+
+        brls::sync([flag, self, full = std::move(full), genres = std::move(genres),
+                    shots = std::move(shots), videos = std::move(videos)]() mutable {
+            if (!*flag)
+                return;
+            self->applyDetails(std::move(full), std::move(genres), std::move(shots),
+                               std::move(videos));
+        });
+    });
+}
+
+void GameActivity::applyDetails(Game full, std::vector<std::string> genreList,
+                                std::vector<std::string> shots,
+                                std::vector<std::string> videos)
+{
+    if (full.nsuid.empty())
+    {
         brls::Logger::error("карточка: игра {} не найдена в каталоге", nsuid);
-    else
-        brls::Logger::info("карточка: открыта «{}» ({}), игроков до {}", game.title, nsuid,
-                           game.sameScreenMax);
+        return;
+    }
+
+    game = std::move(full);
+    brls::Logger::info("карточка: открыта «{}» ({}), игроков до {}", game.title, nsuid,
+                       game.sameScreenMax);
 
     fillHeader();
     fillStats();
     fillTags();
-    fillGenres();
+    fillGenres(genreList);
 
-    // Порядок важен: полоса медиа очищается один раз здесь, затем в неё встаёт
-    // кнопка трейлера, и только после — скриншоты.
+    // Порядок важен: полоса медиа очищается один раз здесь, затем в неё встают
+    // кнопки трейлеров, и только после — скриншоты.
     shotsBox->clearViews();
-    fillTrailerButton();
-    fillScreenshots();
+    fillTrailerButton(videos);
+    fillScreenshots(shots);
 
     headline->setText(game.headline);
     headline->setVisibility(game.headline.empty() ? brls::Visibility::GONE
@@ -111,15 +168,6 @@ void GameActivity::onContentAvailable()
     playersNote->setText(game.playersNote);
     playersNote->setVisibility(game.playersNote.empty() ? brls::Visibility::GONE
                                                         : brls::Visibility::VISIBLE);
-
-    this->registerAction("Избранное", brls::BUTTON_X, [this](brls::View*) {
-        toggleFavorite();
-        return true;
-    });
-    this->registerAction("В папку", brls::BUTTON_Y, [this](brls::View*) {
-        chooseFolder();
-        return true;
-    });
 }
 
 void GameActivity::fillHeader()
@@ -184,9 +232,8 @@ void GameActivity::refreshHeaderMarks()
     folders->setVisibility(in.empty() ? brls::Visibility::GONE : brls::Visibility::VISIBLE);
 }
 
-void GameActivity::fillGenres()
+void GameActivity::fillGenres(const std::vector<std::string>& list)
 {
-    std::vector<std::string> list = AppState::get().catalog.genresOf(game.nsuid);
     std::string joined;
     for (const std::string& g : list)
         joined += (joined.empty() ? "" : " · ") + g;
@@ -227,7 +274,7 @@ void GameActivity::fillTags()
         tagsBox->addView(tag("Без настольного режима"));
 }
 
-void GameActivity::fillScreenshots()
+void GameActivity::fillScreenshots(std::vector<std::string> urls)
 {
     // Полосу очищает onContentAvailable до вызова fillTrailerButton(), чтобы
     // кнопка трейлера встала первой и не была снесена этой очисткой.
@@ -235,7 +282,6 @@ void GameActivity::fillScreenshots()
     // Скриншотов в каталоге 20 тысяч — в romfs они не влезут, поэтому грузятся
     // из сети и оседают в кэше на SD. Первые четыре: остальные всё равно не
     // видны без прокрутки, а трафик тратят.
-    std::vector<std::string> urls = AppState::get().catalog.screenshots(game.nsuid);
     // В полосе показываем четыре, но в галерею отдаём все: листать там есть
     // куда, а трафик тратится только на открытый снимок.
     std::vector<std::string> all = urls;
@@ -291,41 +337,63 @@ void GameActivity::fillScreenshots()
     }
 }
 
-void GameActivity::fillTrailerButton()
+void GameActivity::fillTrailerButton(std::vector<std::string> videos)
 {
     // Ролики есть у 61% игр (2139 из 3489), у остальных кнопка не должна
     // появляться вовсе — но по ТЗ просят именно disabled с подписью, так
     // понятнее, что раздел вообще существует.
-    std::vector<std::string> videos = AppState::get().catalog.videos(game.nsuid);
-    trailerUrl = videos.empty() ? std::string() : videos.front();
+    // У большинства игр ролик один, но у 295 их несколько — раньше все, кроме
+    // первого, были недоступны вовсе. Показываем кнопку на каждый, но не больше
+    // трёх: дальше полоса медиа вытеснила бы скриншоты.
+    if (videos.size() > 3)
+        videos.resize(3);
 
-    trailerButton = new brls::Button();
-    trailerButton->setFontSize(fonts::CAPTION);
-    trailerButton->setWidth(190);
-    trailerButton->setHeight(128);
-    trailerButton->setMarginRight(10);
-    trailerButton->setStyle(&brls::BUTTONSTYLE_PRIMARY);
-    shotsBox->addView(trailerButton);
+    trailerUrl = videos.empty() ? std::string() : videos.front();
 
     // Состояние сети здесь не спрашиваем: net::init() идёт в фоне, и карточка,
     // открытая в первые секунды после запуска, навсегда получала «нет сети» —
     // до самого закрытия, хотя сеть успевала подняться. Проверка перенесена в
     // момент нажатия, где можно и подождать.
 
-    if (trailerUrl.empty())
+    if (videos.empty())
     {
+        trailerButton = new brls::Button();
+        trailerButton->setFontSize(fonts::CAPTION);
+        trailerButton->setWidth(190);
+        trailerButton->setHeight(128);
+        trailerButton->setMarginRight(10);
         trailerButton->setText("Трейлера нет");
         trailerButton->setStyle(&brls::BUTTONSTYLE_BORDERLESS);
         trailerButton->setState(brls::ButtonState::DISABLED);
+        shotsBox->addView(trailerButton);
         return;
     }
 
-    trailerButton->setText("▶ Трейлер");
-    trailerButton->setState(brls::ButtonState::ENABLED);
-    trailerButton->registerClickAction([this](brls::View*) {
-        openTrailer();
-        return true;
-    });
+    for (size_t i = 0; i < videos.size(); i++)
+    {
+        auto* button = new brls::Button();
+        button->setFontSize(fonts::CAPTION);
+        button->setWidth(190);
+        button->setHeight(128);
+        button->setMarginRight(10);
+        button->setStyle(&brls::BUTTONSTYLE_PRIMARY);
+        // Номер печатаем только когда роликов правда несколько: «▶ Трейлер 1»
+        // при единственном ролике обещает продолжение, которого нет.
+        button->setText(videos.size() > 1
+                            ? "▶ Трейлер " + std::to_string(i + 1)
+                            : "▶ Трейлер");
+
+        const std::string url = videos[i];
+        button->registerClickAction([this, url](brls::View*) {
+            trailerUrl = url;
+            openTrailer();
+            return true;
+        });
+        shotsBox->addView(button);
+
+        if (i == 0)
+            trailerButton = button;  // на него меняем подпись, пока ждём сеть
+    }
 }
 
 void GameActivity::openTrailer()
@@ -364,52 +432,6 @@ void GameActivity::toggleFavorite()
 
 void GameActivity::chooseFolder()
 {
-    AppState& state = AppState::get();
-    std::vector<std::string> names = state.library.folderNames();
-
-    // Список показывает, где игра уже лежит, и позволяет завести папку прямо
-    // отсюда: раньше при отсутствии папок мы просто отфутболивали во вкладку
-    // «Моя библиотека», а отметок не было вовсе — приходилось помнить.
-    std::vector<std::string> items;
-    items.reserve(names.size() + 1);
-    for (const std::string& name : names)
-        items.push_back((state.library.inFolder(name, game.nsuid) ? "* " : "   ") + name);
-    items.push_back("+ Новая папка…");
-
-    auto* dropdown = new brls::Dropdown(
-        "В какую папку", items,
-        [this, names](int selected) {
-            if (selected < 0 || selected > static_cast<int>(names.size()))
-                return;
-
-            if (selected == static_cast<int>(names.size()))
-            {
-                promptNewFolder();
-                return;
-            }
-
-            AppState& s = AppState::get();
-            s.library.toggleInFolder(names[selected], game.nsuid);
-            brls::Application::notify(s.library.inFolder(names[selected], game.nsuid)
-                                          ? "Добавлено в «" + names[selected] + "»"
-                                          : "Убрано из «" + names[selected] + "»");
-            refreshHeaderMarks();
-        },
-        0);
-    brls::Application::pushActivity(new brls::Activity(dropdown));
+    folders::pick(game.nsuid, [this]() { refreshHeaderMarks(); });
 }
 
-void GameActivity::promptNewFolder()
-{
-    brls::Application::getImeManager()->openForText(
-        [this](const std::string& name) {
-            if (name.empty())
-                return;
-            AppState& s = AppState::get();
-            s.library.createFolder(name);
-            s.library.toggleInFolder(name, game.nsuid);
-            brls::Application::notify("Добавлено в «" + name + "»");
-            refreshHeaderMarks();
-        },
-        "Название папки", "Например: «Вечер с друзьями»", 32);
-}

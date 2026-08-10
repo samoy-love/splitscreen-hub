@@ -20,10 +20,11 @@ class GameTile : public brls::Box
 
     void setGame(const Game& game);
 
-    /// Что делать по нажатию A. Плитка хранит nsuid, а не ссылку на Game:
-    /// список игр пересобирается при каждой смене фильтра, и ссылка на элемент
-    /// вектора после этого повиснет.
-    void setOnSelect(std::function<void(const std::string&)> callback);
+    /// Что делать по нажатию A. Плитка отдаёт свою копию Game, а не ссылку в
+    /// вектор каталога: список пересобирается на каждую смену фильтра, и ссылка
+    /// на элемент после этого повиснет. Копия нужна карточке, чтобы нарисовать
+    /// заголовок и обложку сразу, не дожидаясь запроса к базе.
+    void setOnSelect(std::function<void(const Game&)> callback);
 
     /// Кто получил фокус. Библиотеке это нужно, чтобы понимать, к чему
     /// относится «убрать»: к игре под курсором или к папке в списке слева.
@@ -39,8 +40,9 @@ class GameTile : public brls::Box
     std::string pendingArt;
     void loadCover(const std::string& file);
 
+    Game game;
     std::string nsuid;
-    std::function<void(const std::string&)> onSelect;
+    std::function<void(const Game&)> onSelect;
     std::function<void(const std::string&)> onFocus;
 
     BRLS_BIND(brls::Image, cover, "tile/cover");

@@ -3,22 +3,41 @@
     width="auto"
     height="auto"
     paddingTop="6"
-    paddingRight="30"
+    paddingRight="@style/hub/space/screen"
     paddingBottom="4"
-    paddingLeft="30">
+    paddingLeft="@style/hub/space/screen">
+
+    <!-- Два явных ряда вместо одного переносящегося.
+         Контейнер-строка в borealis проводит фокус только влево-вправо, а вниз
+         сразу отдаёт его наружу. С переносом это значило, что до чипов,
+         оказавшихся на второй строке, можно добраться только девятью нажатиями
+         вправо — а «вниз» уводило сразу в сетку. Здесь ряды вложены в колонку,
+         и вверх-вниз ходит между ними как положено. -->
 
     <brls:Box
         axis="row"
         alignItems="center"
-        marginBottom="8">
+        marginBottom="4">
 
-        <!-- Фильтры слева. WrapBox: если название жанра окажется длинным, чипы
-             перенесутся на вторую строку, а не уедут за край экрана. -->
-        <WrapBox
-            id="catalog/toggles"
+        <brls:Box
+            id="catalog/players"
             axis="row"
             alignItems="center"
             grow="1.0" />
+
+        <brls:ProgressSpinner
+            id="catalog/spinner"
+            width="22"
+            height="22"
+            marginRight="10"
+            visibility="gone" />
+
+        <brls:Label
+            id="catalog/count"
+            text=""
+            fontSize="@style/hub/font/caption"
+            marginRight="16"
+            textColor="@theme/brls/text_disabled" />
 
         <!-- Сортировка отделена от фильтров намеренно: она не сужает список, а
              меняет порядок, и раньше её чип стоял в общем ряду и терялся среди
@@ -26,7 +45,6 @@
         <brls:Label
             text="Сортировка"
             fontSize="@style/hub/font/caption"
-            marginLeft="16"
             marginRight="8"
             textColor="@theme/brls/text_disabled" />
 
@@ -37,6 +55,12 @@
             text="" />
 
     </brls:Box>
+
+    <brls:Box
+        id="catalog/toggles"
+        axis="row"
+        alignItems="center"
+        marginBottom="6" />
 
     <brls:Label
         id="catalog/empty"

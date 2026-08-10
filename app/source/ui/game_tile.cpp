@@ -27,7 +27,7 @@ GameTile::GameTile()
     // setGame, при переиспользовании плитки обработчики накапливались бы.
     this->registerClickAction([this](brls::View*) {
         if (onSelect && !nsuid.empty())
-            onSelect(nsuid);
+            onSelect(game);
         return true;
     });
 
@@ -98,7 +98,8 @@ void GameTile::loadCover(const std::string& file)
 
 void GameTile::setGame(const Game& game)
 {
-    nsuid = game.nsuid;
+    this->game = game;
+    nsuid      = game.nsuid;
 
     if (!game.boxArtFile.empty())
         loadCover(game.boxArtFile);
@@ -122,7 +123,7 @@ void GameTile::setGame(const Game& game)
                                                 : brls::Visibility::GONE);
 }
 
-void GameTile::setOnSelect(std::function<void(const std::string&)> callback)
+void GameTile::setOnSelect(std::function<void(const Game&)> callback)
 {
     onSelect = std::move(callback);
 }

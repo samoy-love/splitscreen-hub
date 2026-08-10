@@ -19,7 +19,9 @@
 struct GridModel
 {
     std::vector<Game> games;
-    std::function<void(const std::string&)> onSelect;
+    /// Игру передаём целиком: карточке хватит её на заголовок и обложку,
+    /// и открытие не ждёт запроса к базе.
+    std::function<void(const Game&)> onSelect;
     /// Необязательный: библиотеке нужно знать, на какой игре стоит курсор.
     std::function<void(const std::string&)> onFocus;
 };

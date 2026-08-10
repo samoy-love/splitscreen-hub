@@ -9,9 +9,9 @@ namespace
 {
 const char* FAVORITES = "";  // пустое имя = избранное
 
-/// Ширина под сетку: 1280 экрана минус отступы library.xml (20 слева, 30
-/// справа), минус список папок с его правым полем.
-constexpr int CONTENT_WIDTH = 1280 - 20 - 30 - 200 - 20;
+/// Ширина под сетку: 1280 экрана минус поля по краям (space::SCREEN с обеих
+/// сторон), минус список папок с его правым полем.
+constexpr int CONTENT_WIDTH = 1280 - 30 - 30 - 200 - 20;
 }
 
 LibraryTab::LibraryTab()
@@ -19,8 +19,8 @@ LibraryTab::LibraryTab()
     this->inflateFromXMLRes("xml/tabs/library.xml");
 
     model = attachGameGrid(grid, GameRow::columnsFor(CONTENT_WIDTH));
-    model->onSelect = [](const std::string& nsuid) {
-        brls::Application::pushActivity(new GameActivity(nsuid));
+    model->onSelect = [](const Game& game) {
+        brls::Application::pushActivity(new GameActivity(game));
     };
     model->onFocus = [this](const std::string& nsuid) { focusedNsuid = nsuid; };
 

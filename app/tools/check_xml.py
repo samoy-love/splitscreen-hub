@@ -36,6 +36,7 @@ FILES = {
     "ScrollingFrame": f"{LIB}/views/scrolling_frame.cpp",
     "RecyclerFrame": f"{LIB}/views/recycler.cpp",
     "TabFrame": f"{LIB}/views/tab_frame.cpp",
+    "ProgressSpinner": f"{LIB}/views/progress_spinner.cpp",
 }
 
 PARENT = {
@@ -51,6 +52,7 @@ PARENT = {
     "ScrollingFrame": "Box",
     "RecyclerFrame": "ScrollingFrame",
     "TabFrame": "AppletFrame",
+    "ProgressSpinner": "View",
 }
 
 # Наши собственные теги из registerXMLView.

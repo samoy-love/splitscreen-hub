@@ -2,7 +2,7 @@
 
 #include <borealis.hpp>
 
-/// Единая шкала размеров текста.
+/// Шкалы оформления: кегли и отступы.
 ///
 /// До неё в проекте было двенадцать разных кеглей — 13, 14, 15, 16, 17, 18, 19,
 /// 20, 24, 27, 28, 34, — и на каждом экране свой набор. Так вышло потому, что
@@ -49,3 +49,34 @@ inline void registerMetrics()
 }
 
 }  // namespace fonts
+
+/// Единая шкала отступов.
+///
+/// История та же, что у кеглей: боковые поля экранов оказались 20, 30, 40 и 60,
+/// а всего по разметке набралось тринадцать разных значений. Экраны от этого
+/// выглядят как собранные из разных приложений.
+namespace space
+{
+
+/// Между тесно связанными элементами: подпись и её значение.
+constexpr float XS = 4.0f;
+/// Между соседними элементами одной группы: чипы в ряду.
+constexpr float S = 8.0f;
+/// Между группами внутри экрана: блоками карточки.
+constexpr float M = 14.0f;
+/// Между крупными разделами.
+constexpr float L = 24.0f;
+/// Поля экрана от края. Одинаковые у всех экранов — это и задаёт общую рамку.
+constexpr float SCREEN = 30.0f;
+
+inline void registerMetrics()
+{
+    brls::Style style = brls::getStyle();
+    style.addMetric("hub/space/xs", XS);
+    style.addMetric("hub/space/s", S);
+    style.addMetric("hub/space/m", M);
+    style.addMetric("hub/space/l", L);
+    style.addMetric("hub/space/screen", SCREEN);
+}
+
+}  // namespace space

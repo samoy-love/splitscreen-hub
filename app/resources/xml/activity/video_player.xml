@@ -61,8 +61,8 @@
         positionBottom="0"
         positionLeft="0"
         positionRight="0"
-        paddingLeft="40"
-        paddingRight="40"
+        paddingLeft="@style/hub/space/screen"
+        paddingRight="@style/hub/space/screen"
         backgroundColor="#00000090">
 
         <brls:Label

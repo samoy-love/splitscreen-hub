@@ -5,6 +5,7 @@
 #include "app_state.hpp"
 #include "ui/fonts.hpp"
 #include "tasks.hpp"
+#include "ui/folder_picker.hpp"
 #include "ui/game_activity.hpp"
 #include "ui/game_tile.hpp"
 
@@ -40,8 +41,8 @@ CatalogTab::CatalogTab()
     // Сайдбара больше нет, под сетку идёт вся ширина экрана минус боковые
     // отступы из catalog.xml.
     model = attachGameGrid(recycler, GameRow::columnsFor(CONTENT_WIDTH));
-    model->onSelect = [](const std::string& nsuid) {
-        brls::Application::pushActivity(new GameActivity(nsuid));
+    model->onSelect = [](const Game& game) {
+        brls::Application::pushActivity(new GameActivity(game));
     };
     model->onFocus = [this](const std::string& nsuid) { focusedNsuid = nsuid; };
 
@@ -51,6 +52,16 @@ CatalogTab::CatalogTab()
     });
     this->registerAction("Скрыть", brls::BUTTON_Y, [this](brls::View*) {
         toggleHidden();
+        return true;
+    });
+    // Раскладывать игры по папкам, не открывая каждую карточку.
+    this->registerAction("В папку", brls::BUTTON_X, [this](brls::View*) {
+        if (focusedNsuid.empty())
+        {
+            brls::Application::notify("Наведитесь на игру");
+            return true;
+        }
+        folders::pick(focusedNsuid, [this]() { reload(); });
         return true;
     });
     // ZL/ZR листают сетку страницами — с 3489 играми стик утомляет. Подсказки
@@ -91,7 +102,7 @@ void CatalogTab::buildPlayerFilter()
             reload();
             return true;
         });
-        togglesBox->addView(button);
+        playersBox->addView(button);
         thresholdButtons.push_back(button);
     }
 }
@@ -154,14 +165,6 @@ void CatalogTab::buildToggles()
         chooseSort();
         return true;
     });
-
-    // Счётчик найденного — в конце той же строки: отдельная строка ради двух
-    // чисел стоила бы ряда игр.
-    countLabel = new brls::Label();
-    countLabel->setFontSize(fonts::CAPTION);
-    countLabel->setMarginLeft(8);
-    countLabel->setTextColor(brls::Application::getTheme()["brls/text_disabled"]);
-    togglesBox->addView(countLabel);
 
     refreshToggleLabels();
 }
@@ -268,6 +271,10 @@ void CatalogTab::reload()
     Filter filter   = AppState::get().filter;
     auto* self      = this;
 
+    // Выборка идёт в фоне и на консоли занимает заметное время. Без индикатора
+    // нажатие на фильтр выглядит как «ничего не произошло».
+    spinner->setVisibility(brls::Visibility::VISIBLE);
+
     tasks::io([self, alive, model, filter]() {
         AppState& state         = AppState::get();
         std::vector<Game> games = state.catalog.queryBrief(filter);
@@ -307,6 +314,8 @@ void CatalogTab::reload()
 
 void CatalogTab::applyRows()
 {
+    spinner->setVisibility(brls::Visibility::GONE);
+
     AppState& state          = AppState::get();
     std::vector<Game>& games = model->games;
 

@@ -188,6 +188,7 @@ int main(int argc, char* argv[])
         // Шкала кеглей — до разбора любой разметки: значения @style/... в XML
         // подставляются один раз при инфляции.
         fonts::registerMetrics();
+        space::registerMetrics();
 
         brls::Style style = brls::getStyle();
         style.addMetric("brls/hints/footer_margin_sides", 16.0f);

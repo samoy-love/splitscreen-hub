@@ -278,6 +278,15 @@ void VideoDecoder::decodeLoop(std::string url, std::string cachePath,
                 av_opt_set_sample_fmt(swr, "out_sample_fmt", AV_SAMPLE_FMT_S16, 0);
                 swr_init(swr);
 
+                // borealis поднимает SDL без звуковой подсистемы: в
+                // sdl_platform.cpp это EVENTS и TIMER, в sdl_video.cpp — VIDEO.
+                // Без SDL_INIT_AUDIO SDL_OpenAudioDevice возвращает ноль, и
+                // трейлер молча играл беззвучно. Подсистему можно поднять
+                // отдельно; повторный вызов безвреден.
+                if (SDL_InitSubSystem(SDL_INIT_AUDIO) != 0)
+                    brls::Logger::error("плеер: не поднялась звуковая подсистема SDL: {}",
+                                        SDL_GetError());
+
                 SDL_AudioSpec want {}, have {};
                 want.freq     = actx->sample_rate;
                 want.format   = AUDIO_S16SYS;
@@ -285,7 +294,16 @@ void VideoDecoder::decodeLoop(std::string url, std::string cachePath,
                 want.samples  = 1024;
                 dev           = SDL_OpenAudioDevice(nullptr, 0, &want, &have, 0);
                 if (dev)
+                {
+                    brls::Logger::info("плеер: звук {} Гц, каналов {}", have.freq,
+                                       (int)have.channels);
                     SDL_PauseAudioDevice(dev, 0);
+                }
+                else
+                {
+                    brls::Logger::error("плеер: звуковое устройство не открылось: {}",
+                                        SDL_GetError());
+                }
             }
             else if (actx)
             {
@@ -442,7 +460,12 @@ void VideoDecoder::decodeLoop(std::string url, std::string cachePath,
     }
 
     if (dev)
+    {
         SDL_CloseAudioDevice(dev);
+        // Подсистему поднимали мы, значит и опускать нам: borealis о ней не
+        // знает и при выходе её не тронет.
+        SDL_QuitSubSystem(SDL_INIT_AUDIO);
+    }
     if (swr)
         swr_free(&swr);
     if (sws)

@@ -46,14 +46,16 @@ class CatalogTab : public brls::Box
     /// полагаясь на порядок детей контейнера — рядом с ними теперь и остальные
     /// чипы фильтра.
     std::vector<brls::Button*> thresholdButtons;
-    brls::Label* countLabel = nullptr;
     brls::Button* retroButton = nullptr;
     brls::Button* hiddenButton = nullptr;
 
     /// nsuid игры под курсором — для «скрыть».
     std::string focusedNsuid;
 
+    BRLS_BIND(brls::Box, playersBox, "catalog/players");
     BRLS_BIND(brls::Box, togglesBox, "catalog/toggles");
+    BRLS_BIND(brls::Label, countLabel, "catalog/count");
+    BRLS_BIND(brls::ProgressSpinner, spinner, "catalog/spinner");
     BRLS_BIND(brls::Button, sortButton, "catalog/sort");
     BRLS_BIND(brls::RecyclerFrame, recycler, "catalog/recycler");
     BRLS_BIND(brls::Label, emptyLabel, "catalog/empty");

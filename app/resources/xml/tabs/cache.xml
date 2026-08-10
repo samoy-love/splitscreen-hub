@@ -3,9 +3,9 @@
     width="auto"
     height="auto"
     paddingTop="30"
-    paddingRight="60"
+    paddingRight="@style/hub/space/screen"
     paddingBottom="30"
-    paddingLeft="60">
+    paddingLeft="@style/hub/space/screen">
 
     <brls:Label
         text="Кэш загрузок"

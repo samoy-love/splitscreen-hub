@@ -14,17 +14,19 @@
         alignItems="center"
         height="52"
         paddingTop="10"
-        paddingLeft="30"
-        paddingRight="30"
+        paddingLeft="@style/hub/space/screen"
+        paddingRight="@style/hub/space/screen"
         marginBottom="6"
         lineColor="@theme/brls/applet_frame/separator"
         lineBottom="1px">
 
+        <!-- Название приложения — не служебная подпись: приглушённым цветом оно
+             читалось как что-то второстепенное. Полный цвет текста темы. -->
         <brls:Label
             text="Split Screen Hub"
             fontSize="@style/hub/font/body"
             marginRight="24"
-            textColor="@theme/brls/text_disabled" />
+            textColor="@theme/brls/text" />
 
         <brls:Box
             id="main/tabs"

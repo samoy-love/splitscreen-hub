@@ -3,9 +3,9 @@
     width="auto"
     height="auto"
     paddingTop="8"
-    paddingRight="30"
+    paddingRight="@style/hub/space/screen"
     paddingBottom="10"
-    paddingLeft="20">
+    paddingLeft="@style/hub/space/screen">
 
     <brls:Box
         id="library/sidebar"

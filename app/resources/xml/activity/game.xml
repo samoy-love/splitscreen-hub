@@ -13,8 +13,8 @@
             axis="row"
             alignItems="center"
             height="96"
-            paddingLeft="30"
-            paddingRight="30">
+            paddingLeft="@style/hub/space/screen"
+            paddingRight="@style/hub/space/screen">
 
             <brls:Image
                 id="game/cover"
@@ -68,9 +68,9 @@
                 width="auto"
                 height="auto"
                 paddingTop="14"
-                paddingRight="30"
+                paddingRight="@style/hub/space/screen"
                 paddingBottom="30"
-                paddingLeft="30">
+                paddingLeft="@style/hub/space/screen">
 
                 <brls:Box
                     id="game/stats"
