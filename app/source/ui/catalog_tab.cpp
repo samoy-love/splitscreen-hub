@@ -19,7 +19,7 @@ const std::vector<int> THRESHOLDS = { 2, 3, 4, 6, 8 };
 constexpr float CHIP_FONT_SIZE = 15.0f;
 
 // индекс «сначала мои» в Catalog::SORT_NAMES
-constexpr int SORT_INSTALLED_FIRST = 6;
+constexpr int SORT_INSTALLED_FIRST = 5;
 
 /// Ширина под сетку: 1280 экрана минус боковые отступы catalog.xml по 30.
 constexpr int CONTENT_WIDTH = 1280 - 60;
@@ -46,9 +46,14 @@ CatalogTab::CatalogTab()
     model->onSelect = [](const std::string& nsuid) {
         brls::Application::pushActivity(new GameActivity(nsuid));
     };
+    model->onFocus = [this](const std::string& nsuid) { focusedNsuid = nsuid; };
 
     this->registerAction("Поиск", brls::BUTTON_BACK, [this](brls::View*) {
         promptSearch();
+        return true;
+    });
+    this->registerAction("Скрыть", brls::BUTTON_Y, [this](brls::View*) {
+        toggleHidden();
         return true;
     });
     // ZL/ZR листают сетку страницами — с 3489 играми стик утомляет. Подсказки
@@ -143,15 +148,15 @@ void CatalogTab::buildToggles()
     });
     togglesBox->addView(searchButton);
 
-    sortButton = new brls::Button();
+    retroButton  = addToggle("Ретро", &Filter::showRetro);
+    hiddenButton = addToggle("Скрытые", &Filter::showHidden);
+
     sortButton->setFontSize(CHIP_FONT_SIZE);
-    sortButton->setMarginRight(6);
-    sortButton->setStyle(&brls::BUTTONSTYLE_BORDERLESS);
+    sortButton->setStyle(&brls::BUTTONSTYLE_PRIMARY);
     sortButton->registerClickAction([this](brls::View*) {
-        cycleSort();
+        chooseSort();
         return true;
     });
-    togglesBox->addView(sortButton);
 
     // Счётчик найденного — в конце той же строки: отдельная строка ради двух
     // чисел стоила бы ряда игр.
@@ -180,6 +185,11 @@ void CatalogTab::refreshToggleLabels()
     // в 820 точек и уезжали за край. Контейнер к тому же переносит строку,
     // если названию жанра всё-таки не хватит места.
     sortButton->setText(Catalog::SORT_NAMES[f.sort]);
+
+    if (retroButton)
+        retroButton->setText(f.showRetro ? "Ретро: показаны" : "Ретро");
+    if (hiddenButton)
+        hiddenButton->setText(f.showHidden ? "Скрытые: показаны" : "Скрытые");
 
     // счётчик прямо на чипе — как в макете «Только мои · 12»
     if (installedButton)
@@ -219,11 +229,32 @@ void CatalogTab::chooseGenre()
     brls::Application::pushActivity(new brls::Activity(dropdown));
 }
 
-void CatalogTab::cycleSort()
+void CatalogTab::chooseSort()
 {
-    Filter& f = AppState::get().filter;
-    f.sort    = (f.sort + 1) % static_cast<int>(Catalog::SORT_NAMES.size());
-    refreshToggleLabels();
+    // Список, а не перебор по кругу: перебором не видно, какие порядки вообще
+    // есть, и до нужного приходится щёлкать вслепую.
+    auto* dropdown = new brls::Dropdown(
+        "Сортировка", Catalog::SORT_NAMES,
+        [this](int selected) {
+            if (selected < 0 || selected >= static_cast<int>(Catalog::SORT_NAMES.size()))
+                return;
+            AppState::get().filter.sort = selected;
+            refreshToggleLabels();
+            reload();
+        },
+        AppState::get().filter.sort);
+    brls::Application::pushActivity(new brls::Activity(dropdown));
+}
+
+void CatalogTab::toggleHidden()
+{
+    if (focusedNsuid.empty())
+        return;
+
+    AppState& state    = AppState::get();
+    const bool wasShown = !state.library.isHidden(focusedNsuid);
+    state.library.toggleHidden(focusedNsuid);
+    brls::Application::notify(wasShown ? "Игра скрыта" : "Игра возвращена");
     reload();
 }
 
@@ -242,15 +273,22 @@ void CatalogTab::reload()
         std::vector<Game> games = state.catalog.queryBrief(filter);
         state.decorate(games);
 
-        // фильтр по установленным делаем уже здесь: каталог в romfs ничего не
-        // знает о том, что стоит на конкретной консоли
-        if (filter.onlyInstalled)
+        // Установленные и скрытые отсеиваем уже здесь: каталог в romfs не знает
+        // ни что стоит на консоли, ни что пользователь спрятал, — и то и другое
+        // живёт в library.json.
+        if (filter.onlyInstalled || !filter.showHidden)
         {
-            std::vector<Game> only;
+            std::vector<Game> kept;
+            kept.reserve(games.size());
             for (const Game& g : games)
-                if (g.installed)
-                    only.push_back(g);
-            games = std::move(only);
+            {
+                if (filter.onlyInstalled && !g.installed)
+                    continue;
+                if (!filter.showHidden && g.hidden)
+                    continue;
+                kept.push_back(g);
+            }
+            games = std::move(kept);
         }
 
         // «сначала мои» доупорядочивается здесь, а не в SQL: о том, что

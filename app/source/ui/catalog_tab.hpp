@@ -34,11 +34,11 @@ class CatalogTab : public brls::Box
     void buildToggles();
     void promptSearch();
     void chooseGenre();
-    void cycleSort();
+    void chooseSort();
+    void toggleHidden();
     void refreshToggleLabels();
 
     brls::Button* genreButton = nullptr;
-    brls::Button* sortButton  = nullptr;
     brls::Button* searchButton = nullptr;
     brls::Button* installedButton = nullptr;
 
@@ -47,8 +47,14 @@ class CatalogTab : public brls::Box
     /// чипы фильтра.
     std::vector<brls::Button*> thresholdButtons;
     brls::Label* countLabel = nullptr;
+    brls::Button* retroButton = nullptr;
+    brls::Button* hiddenButton = nullptr;
+
+    /// nsuid игры под курсором — для «скрыть».
+    std::string focusedNsuid;
 
     BRLS_BIND(brls::Box, togglesBox, "catalog/toggles");
+    BRLS_BIND(brls::Button, sortButton, "catalog/sort");
     BRLS_BIND(brls::RecyclerFrame, recycler, "catalog/recycler");
     BRLS_BIND(brls::Label, emptyLabel, "catalog/empty");
 };

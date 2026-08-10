@@ -20,6 +20,7 @@
 #include "tasks.hpp"
 #include "ui/cache_tab.hpp"
 #include "ui/catalog_tab.hpp"
+#include "ui/gallery_activity.hpp"
 #include "ui/library_tab.hpp"
 #include "ui/main_tabs.hpp"
 #include "ui/wrap_box.hpp"
@@ -187,6 +188,11 @@ int main(int argc, char* argv[])
         style.addMetric("brls/hints/footer_margin_sides", 16.0f);
         style.addMetric("brls/hints/footer_padding_sides", 10.0f);
         style.addMetric("brls/applet_frame/footer_height", 64.0f);
+
+        // Переходы между экранами по умолчанию длятся 200 мс и на глаз читаются
+        // как рывок. Чуть длиннее — и смена экрана выглядит движением, а не
+        // подменой кадра.
+        style.addMetric("brls/animations/show", 300.0f);
 
         step("create window");
         brls::Application::createWindow("SplitScreen Hub");

@@ -1,21 +1,22 @@
-<!-- Размер плитки подобран под ширину экрана: восемь штук по 140 с зазором 12
-     занимают 1204 из 1220 доступных точек, то есть сетка идёт во всю ширину.
+<!-- Размер подобран под ширину экрана: семь плиток по 160 с зазором 14
+     занимают 1204 из 1220 доступных точек. Восемь по 140 помещалось больше, но
+     названия при этом читались с трудом — здесь и плитка, и подпись крупнее.
      Обложки в базе квадратные (256×256), поэтому и картинка квадратная. -->
 <brls:Box
     axis="column"
-    width="140"
-    height="166"
+    width="160"
+    height="198"
     focusable="true"
     cornerRadius="6">
 
     <brls:Box
-        width="140"
-        height="140">
+        width="160"
+        height="160">
 
         <brls:Image
             id="tile/cover"
-            width="140"
-            height="140"
+            width="160"
+            height="160"
             cornerRadius="6"
             scalingType="fill" />
 
@@ -74,8 +75,8 @@
     <brls:Label
         id="tile/name"
         text=""
-        fontSize="13"
-        marginTop="4"
+        fontSize="15"
+        marginTop="6"
         singleLine="true" />
 
 </brls:Box>

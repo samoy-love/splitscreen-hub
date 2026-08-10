@@ -1,0 +1,52 @@
+<brls:Box
+    axis="column"
+    width="auto"
+    height="auto"
+    backgroundColor="#000000">
+
+    <!-- Картинка занимает весь экран; RemoteImage со scalingType=fit вписывает
+         её целиком, не обрезая. -->
+    <brls:Box
+        id="gallery/holder"
+        width="auto"
+        height="auto"
+        grow="1.0"
+        axis="column"
+        justifyContent="center"
+        alignItems="center" />
+
+    <brls:Label
+        id="gallery/status"
+        text="Загрузка…"
+        fontSize="18"
+        positionType="absolute"
+        positionTop="0"
+        positionBottom="0"
+        positionLeft="0"
+        positionRight="0"
+        horizontalAlign="center"
+        verticalAlign="center"
+        textColor="#FFFFFFC0" />
+
+    <!-- Счётчик снимков внизу: без него непонятно, сколько их всего и можно ли
+         листать дальше. -->
+    <brls:Box
+        axis="row"
+        alignItems="center"
+        justifyContent="center"
+        height="44"
+        positionType="absolute"
+        positionBottom="0"
+        positionLeft="0"
+        positionRight="0"
+        backgroundColor="#00000090">
+
+        <brls:Label
+            id="gallery/counter"
+            text=""
+            fontSize="16"
+            textColor="#FFFFFF" />
+
+    </brls:Box>
+
+</brls:Box>

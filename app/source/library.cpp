@@ -58,7 +58,8 @@ bool Library::load(const std::string& path)
     {
         json j;
         in >> j;
-        favs = j.value("favorites", std::vector<std::string>{});
+        favs   = j.value("favorites", std::vector<std::string>{});
+        hidden = j.value("hidden", std::vector<std::string>{});
         for (auto& [name, items] : j.value("folders", json::object()).items())
             folders[name] = items.get<std::vector<std::string>>();
     }
@@ -67,11 +68,12 @@ bool Library::load(const std::string& path)
         brls::Logger::error("Библиотека повреждена, начинаем с пустой: {}", e.what());
         favs.clear();
         folders.clear();
+        hidden.clear();
         return false;
     }
 
-    brls::Logger::info("библиотека: загружена из {} — избранного {}, папок {}", file, favs.size(),
-                       folders.size());
+    brls::Logger::info("библиотека: загружена из {} — избранного {}, папок {}, скрыто {}", file,
+                       favs.size(), folders.size(), hidden.size());
     return true;
 }
 
@@ -82,6 +84,7 @@ bool Library::save() const
 
     json j;
     j["favorites"] = favs;
+    j["hidden"]    = hidden;
     j["folders"]   = json::object();
     for (const auto& [name, items] : folders)
         j["folders"][name] = items;
@@ -135,6 +138,21 @@ void Library::toggleFavorite(const std::string& nsuid)
         favs.push_back(nsuid);
     else
         favs.erase(it);
+    save();
+}
+
+bool Library::isHidden(const std::string& nsuid) const
+{
+    return std::find(hidden.begin(), hidden.end(), nsuid) != hidden.end();
+}
+
+void Library::toggleHidden(const std::string& nsuid)
+{
+    auto it = std::find(hidden.begin(), hidden.end(), nsuid);
+    if (it == hidden.end())
+        hidden.push_back(nsuid);
+    else
+        hidden.erase(it);
     save();
 }
 

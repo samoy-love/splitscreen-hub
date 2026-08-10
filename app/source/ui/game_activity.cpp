@@ -10,6 +10,7 @@
 #include "net.hpp"
 #include "tasks.hpp"
 #include "ui/async_image.hpp"
+#include "ui/gallery_activity.hpp"
 #include "ui/remote_image.hpp"
 #include "ui/video_player.hpp"
 
@@ -234,6 +235,9 @@ void GameActivity::fillScreenshots()
     // из сети и оседают в кэше на SD. Первые четыре: остальные всё равно не
     // видны без прокрутки, а трафик тратят.
     std::vector<std::string> urls = AppState::get().catalog.screenshots(game.nsuid);
+    // В полосе показываем четыре, но в галерею отдаём все: листать там есть
+    // куда, а трафик тратится только на открытый снимок.
+    std::vector<std::string> all = urls;
     if (urls.size() > 4)
         urls.resize(4);
 
@@ -248,14 +252,26 @@ void GameActivity::fillScreenshots()
     shotsHint->setText("Скриншоты загружаются…");
     shotsHint->setVisibility(brls::Visibility::VISIBLE);
 
-    for (const std::string& url : urls)
+    for (size_t i = 0; i < urls.size(); i++)
     {
+        const std::string& url = urls[i];
+
         auto* shot = new RemoteImage();
         shot->setWidth(228);
         shot->setHeight(128);
         shot->setCornerRadius(6);
         shot->setMarginRight(10);
         shot->setScalingType(brls::ImageScalingType::FILL);
+
+        // Снимок теперь фокусируется и открывается: раньше фокус доставался
+        // только кнопке трейлера, и разглядеть скриншоты было нечем.
+        shot->setFocusable(true);
+        shot->registerClickAction([this, all, i](brls::View*) {
+            brls::Application::pushActivity(new GalleryActivity(all, i),
+                                            brls::TransitionAnimation::FADE);
+            return true;
+        });
+        shot->addGestureRecognizer(new brls::TapGestureRecognizer(shot));
         shot->onDone = [this](bool ok) {
             shotsFailed += !ok;
             if (--shotsPending > 0)

@@ -1,26 +1,47 @@
-<!-- Фильтры уложены в одну строку. Раньше их было две по 44 точки плюс отступы,
-     и вместе с шапкой AppletFrame на сетку оставалось меньше двух рядов. -->
 <brls:Box
     axis="column"
     width="auto"
     height="auto"
-    paddingTop="4"
+    paddingTop="6"
     paddingRight="30"
     paddingBottom="4"
     paddingLeft="30">
 
-    <!-- WrapBox: если жанр окажется длинным, чипы перенесутся на вторую строку,
-         а не уедут за край экрана. -->
-    <WrapBox
-        id="catalog/toggles"
+    <brls:Box
         axis="row"
         alignItems="center"
-        marginBottom="6" />
+        marginBottom="8">
+
+        <!-- Фильтры слева. WrapBox: если название жанра окажется длинным, чипы
+             перенесутся на вторую строку, а не уедут за край экрана. -->
+        <WrapBox
+            id="catalog/toggles"
+            axis="row"
+            alignItems="center"
+            grow="1.0" />
+
+        <!-- Сортировка отделена от фильтров намеренно: она не сужает список, а
+             меняет порядок, и раньше её чип стоял в общем ряду и терялся среди
+             них. Здесь она прижата к правому краю и подписана. -->
+        <brls:Label
+            text="Сортировка"
+            fontSize="14"
+            marginLeft="16"
+            marginRight="8"
+            textColor="@theme/brls/text_disabled" />
+
+        <brls:Button
+            id="catalog/sort"
+            width="auto"
+            height="auto"
+            text="" />
+
+    </brls:Box>
 
     <brls:Label
         id="catalog/empty"
-        text="Ничего не нашлось. Ослабьте фильтр — например, снимите «только мои»."
-        fontSize="16"
+        text="Ничего не нашлось. Ослабьте фильтр — например, снимите «Мои»."
+        fontSize="17"
         textColor="@theme/brls/text_disabled"
         visibility="gone"
         marginTop="40"

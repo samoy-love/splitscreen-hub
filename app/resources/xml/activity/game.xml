@@ -12,14 +12,14 @@
             id="game/header"
             axis="row"
             alignItems="center"
-            height="86"
+            height="96"
             paddingLeft="30"
             paddingRight="30">
 
             <brls:Image
                 id="game/cover"
-                width="62"
-                height="62"
+                width="70"
+                height="70"
                 cornerRadius="6"
                 marginRight="16"
                 scalingType="fill" />
@@ -28,13 +28,13 @@
                 <brls:Label
                     id="game/title"
                     text=""
-                    fontSize="22"
+                    fontSize="27"
                     textColor="#FFFFFF"
                     singleLine="true" />
                 <brls:Label
                     id="game/subtitle"
                     text=""
-                    fontSize="14"
+                    fontSize="16"
                     marginTop="2"
                     textColor="#FFFFFFB0" />
             </brls:Box>
@@ -44,7 +44,7 @@
             <brls:Label
                 id="game/star"
                 text="★"
-                fontSize="20"
+                fontSize="24"
                 marginRight="12"
                 textColor="#FFFFFF"
                 visibility="gone" />
@@ -52,7 +52,7 @@
             <brls:Label
                 id="game/folders"
                 text=""
-                fontSize="13"
+                fontSize="15"
                 textColor="#FFFFFFB0"
                 visibility="gone" />
 
@@ -69,7 +69,7 @@
                 height="auto"
                 paddingTop="14"
                 paddingRight="30"
-                paddingBottom="24"
+                paddingBottom="30"
                 paddingLeft="30">
 
                 <brls:Box
@@ -80,7 +80,7 @@
                 <brls:Label
                     id="game/players_note"
                     text=""
-                    fontSize="14"
+                    fontSize="17"
                     marginBottom="10"
                     textColor="@theme/brls/accent"
                     visibility="gone" />
@@ -93,7 +93,7 @@
                 <brls:Label
                     id="game/genres"
                     text=""
-                    fontSize="13"
+                    fontSize="15"
                     marginBottom="10"
                     textColor="@theme/brls/text_disabled"
                     visibility="gone" />
@@ -101,13 +101,13 @@
                 <brls:Label
                     id="game/headline"
                     text=""
-                    fontSize="16"
+                    fontSize="19"
                     marginBottom="12" />
 
                 <brls:Label
                     id="game/shots_hint"
                     text=""
-                    fontSize="13"
+                    fontSize="15"
                     marginBottom="4"
                     textColor="@theme/brls/text_disabled"
                     visibility="gone" />
@@ -131,7 +131,7 @@
                 <brls:Label
                     id="game/description"
                     text=""
-                    fontSize="14"
+                    fontSize="17"
                     textColor="@theme/brls/text_disabled" />
 
             </brls:Box>

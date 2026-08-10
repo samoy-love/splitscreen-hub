@@ -35,11 +35,11 @@ class GameRow : public brls::RecyclerCell
     explicit GameRow(int columns);
 
     /// Ширина плитки и зазор между ними — из game_tile.xml.
-    static constexpr int TILE_WIDTH = 140;
-    static constexpr int TILE_GAP   = 12;
+    static constexpr int TILE_WIDTH = 160;
+    static constexpr int TILE_GAP   = 14;
 
-    /// Высота плитки (166) плюс зазор между строками.
-    static constexpr int HEIGHT = 178;
+    /// Высота плитки (198) плюс зазор между строками.
+    static constexpr int HEIGHT = 212;
 
     /// Сколько плиток шириной TILE_WIDTH влезет в заданную ширину.
     static int columnsFor(int availableWidth);

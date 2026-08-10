@@ -29,6 +29,7 @@ struct Game
     // заполняется уже в приложении
     bool installed = false;
     bool favorite = false;
+    bool hidden = false;
 };
 
 struct Filter
@@ -38,6 +39,11 @@ struct Filter
     bool onlyInstalled = false;
     bool onlyRussian = false;
     std::string search;      // пусто — без поиска
+    /// Переиздания аркад: 474 игры, 13% каталога. По умолчанию скрыты, иначе
+    /// половина выдачи — «Arcade Archives ...».
+    bool showRetro = false;
+    /// Показывать спрятанные вручную. Сами игры хранятся в Library.
+    bool showHidden = false;
     int sort = 0;            // индекс в Catalog::SORT_NAMES
 };
 

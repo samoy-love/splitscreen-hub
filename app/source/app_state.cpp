@@ -12,6 +12,7 @@ void AppState::decorate(Game& game) const
 {
     game.installed = !game.titleId.empty() && installedTitleIds.count(game.titleId) > 0;
     game.favorite  = library.isFavorite(game.nsuid);
+    game.hidden    = library.isHidden(game.nsuid);
 }
 
 void AppState::decorate(std::vector<Game>& games) const

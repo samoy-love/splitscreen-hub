@@ -15,19 +15,19 @@ DB = "catalog.db"
 # Ровно то, что выбирает приложение: SELECT_FIELDS из app/source/catalog.cpp,
 # вместе с джойном подборок. Джойна ratings здесь нет намеренно — таблица пуста,
 # и приложение к ней больше не обращается.
-FROM_JOIN = " FROM games g LEFT JOIN toplists tl ON tl.nsuid = g.nsuid"
+# Соединений в запросах приложения больше нет: упоминания лежат в самой games.
+FROM_JOIN = " FROM games g"
 
 FIELDS = ("g.nsuid, g.title, g.title_id, g.same_screen_min, g.same_screen_max,"
           " g.players_note, g.box_art_file, g.background_color, g.headline,"
           " g.description, g.publisher, g.release_year, g.languages,"
           " g.rom_size_bytes, g.has_online, g.no_tabletop, g.has_demo,"
-          " g.has_russian, tl.mentions")
+          " g.has_russian, g.mentions")
 
 # ORDER_BY[] из app/source/catalog.cpp, в том же порядке, что SORT_NAMES.
 ORDER_BY = (
-    " ORDER BY tl.mentions IS NULL, tl.mentions DESC, tl.best_pos, g.sort_title",
+    " ORDER BY g.mentions = 0, g.mentions DESC, g.best_pos, g.sort_title",
     " ORDER BY g.sort_title",
-    " ORDER BY g.sort_title DESC",
     " ORDER BY g.same_screen_max DESC, g.sort_title",
     " ORDER BY g.release_year DESC, g.sort_title",
     " ORDER BY g.rom_size_bytes IS NULL, g.rom_size_bytes, g.sort_title",
@@ -44,13 +44,15 @@ def check(label, condition, detail=""):
         failures.append(label)
 
 
-def where(min_players, genre=None, russian=False, search=None):
+def where(min_players, genre=None, russian=False, search=None, retro=False):
     """Повторяет Catalog::buildWhere. Псевдоним g — как в запросах приложения."""
     w = f" WHERE g.same_screen_max >= {min_players}"
     if genre:
         w += f" AND g.nsuid IN (SELECT nsuid FROM genres WHERE genre = '{genre}')"
     if russian:
         w += " AND g.has_russian = 1"
+    if not retro:
+        w += " AND g.is_retro = 0"
     if search:
         w += (" AND g.nsuid IN (SELECT nsuid FROM games_fts"
               f" WHERE games_fts MATCH '\"{search}\"*')")
@@ -73,6 +75,20 @@ def main():
     check("строка читается", row is not None)
     check("есть nsuid и название", bool(row[0]) and bool(row[1]))
     check("min <= max", row[3] <= row[4], f"{row[3]}–{row[4]}")
+
+    print("\nПереиздания аркад скрыты по умолчанию:")
+    retro = db.execute("SELECT count(*) FROM games WHERE is_retro = 1").fetchone()[0]
+    check(f"помечено ретро: {retro}", retro > 400)
+    visible = db.execute("SELECT count(*)" + FROM_JOIN + where(2)).fetchone()[0]
+    with_retro = db.execute("SELECT count(*)" + FROM_JOIN + where(2, retro=True)).fetchone()[0]
+    check(f"без ретро {visible}, с ними {with_retro}", with_retro > visible)
+    check("в подборках ретро нет",
+          db.execute("SELECT count(*) FROM games WHERE mentions > 0 AND is_retro = 1")
+            .fetchone()[0] == 0)
+
+    print("\nЖанры переведены:")
+    english = db.execute("SELECT count(*) FROM genres WHERE genre GLOB '*[A-Za-z]*'").fetchone()[0]
+    check("английских названий не осталось", english == 0)
 
     print("\nВсе сортировки из ORDER_BY выполняются:")
     for i, order in enumerate(ORDER_BY):
@@ -106,7 +122,7 @@ def main():
     base = db.execute("SELECT count(*)" + FROM_JOIN + where(2)).fetchone()[0]
     ru = db.execute("SELECT count(*)" + FROM_JOIN + where(2, russian=True)).fetchone()[0]
     check(f"есть русский: {ru}", 0 < ru < base)
-    party = db.execute("SELECT count(*)" + FROM_JOIN + where(2, genre="Party")).fetchone()[0]
+    party = db.execute("SELECT count(*)" + FROM_JOIN + where(2, genre="Вечеринки")).fetchone()[0]
     check(f"жанр Party: {party}", 0 < party < base)
 
     print("\nПоиск по названию:")

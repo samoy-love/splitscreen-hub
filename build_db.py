@@ -42,7 +42,13 @@ CREATE TABLE games (
   -- воспользоваться индексом, и 3489 строк каждый раз уходили во временное
   -- B-дерево. Своя колонка в games делает порядок индексируемым.
   mentions         INTEGER NOT NULL DEFAULT 0,
-  best_pos         INTEGER NOT NULL DEFAULT 0
+  best_pos         INTEGER NOT NULL DEFAULT 0,
+  -- Переиздание аркадного автомата или консоли прошлого века. Таких в каталоге
+  -- 474 штуки — 13%, и почти все от одного издателя. Формально они подходят под
+  -- «вдвоём на одном экране», но когда ищешь во что поиграть вечером, полтысячи
+  -- «Arcade Archives ...» просто засоряют выдачу. Скрыты по умолчанию,
+  -- включаются отдельным фильтром.
+  is_retro         INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE genres (
@@ -140,6 +146,41 @@ def merge_sidecars(db):
         db.commit()
         db.execute("DETACH DATABASE side")
 
+# Серии переизданий: определяем по названию, а не по издателю. HAMSTER выпускает
+# только их, но SEGA — и переиздания, и обычные игры, так что признак по
+# издателю зацепил бы лишнее.
+RETRO_PREFIXES = ("ACA NEOGEO ", "Arcade Archives ", "SEGA AGES ")
+
+
+def is_retro(title):
+    return int(any(title.startswith(p) for p in RETRO_PREFIXES))
+
+
+# Жанры приходят из eShop по-английски. Интерфейс русский целиком, поэтому
+# переводим их прямо здесь: так и фильтр, и подписи в карточке говорят на одном
+# языке, и приложению не нужен отдельный словарь.
+GENRES_RU = {
+    "Action": "Экшен",
+    "Adventure": "Приключения",
+    "Application": "Приложения",
+    "Education": "Обучающие",
+    "Fighting": "Файтинги",
+    "Music": "Музыкальные",
+    "Narrative adventure": "Сюжетные",
+    "Party": "Вечеринки",
+    "Pinball": "Пинбол",
+    "Puzzle": "Головоломки",
+    "Racing": "Гонки",
+    "Role playing": "Ролевые",
+    "Shooting": "Шутеры",
+    "Simulation": "Симуляторы",
+    "Sports": "Спорт",
+    "Strategy": "Стратегии",
+    "Tabletop": "Настольные",
+    "Training": "Тренировки",
+}
+
+
 ARTICLES = re.compile(r"^(the|a|an)\s+", re.I)
 
 
@@ -222,8 +263,15 @@ def main():
         modes = g.get("play_modes") or ""
         langs = g.get("languages") or ""
 
+        # Колонки перечислены поимённо: позиционный список из двадцати с лишним
+        # «?» уже однажды разъехался со схемой при добавлении колонки.
         db.execute(
-            "INSERT INTO games VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            "INSERT INTO games (nsuid, title, sort_title, title_id,"
+            " same_screen_min, same_screen_max, players_note, box_art_file,"
+            " background_color, headline, description, publisher, release_year,"
+            " languages, rom_size_bytes, has_online, no_tabletop, has_demo,"
+            " has_russian, is_retro)"
+            " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (
                 nsuid, title, sort_key(title), g.get("title_id"),
                 g["_min"], g["_max"], clean(g.get("_note")),
@@ -237,12 +285,19 @@ def main():
                 int(bool(modes) and "Tabletop" not in modes),
                 int(bool(g.get("demo_nsuid"))),
                 int("Russian" in langs),
+                is_retro(title),
             ),
         )
         db.execute("INSERT INTO games_fts (title, nsuid) VALUES (?,?)", (title, nsuid))
 
         for genre in filter(None, (x.strip() for x in (g.get("genres") or "").split(","))):
-            db.execute("INSERT INTO genres VALUES (?,?)", (nsuid, genre))
+            ru = GENRES_RU.get(genre)
+            if ru is None:
+                # Новый жанр в исходных данных — заметить это лучше сразу, чем
+                # увидеть на консоли английское слово среди русских.
+                print(f"  ВНИМАНИЕ: нет перевода жанра «{genre}»")
+                ru = genre
+            db.execute("INSERT INTO genres VALUES (?,?)", (nsuid, ru))
 
         for kind, urls in (("image", g.get("images") or []), ("video", g.get("videos") or [])):
             for i, url in enumerate(urls):
