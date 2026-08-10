@@ -128,6 +128,21 @@ SQLite собирается из amalgamation — порта `switch-sqlite3` н
 системных вызовов, поэтому рядом лежит `app/lib/sqlite/nx_compat.c` с
 заглушками: база открывается только на чтение, вызваны они не будут.
 
+## Проверки
+
+```bash
+python app/tools/check_xml.py   # разметка против того, что понимает borealis
+python verify_db.py             # те же запросы, что выполняет приложение
+```
+
+Тесты чистых функций собираются обычным g++. На Windows их надо запускать из
+msys2, который идёт с devkitPro, — из Git Bash компилятор не находит свои
+заголовки C++, потому что там `/usr` указывает на каталог самого Git:
+
+```bash
+/c/devkitPro/msys2/usr/bin/bash -lc "cd /c/…/app && bash tools/run_tests.sh"
+```
+
 ## Управление
 
 | Кнопка | Действие |

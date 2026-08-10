@@ -49,6 +49,13 @@ void GalleryActivity::show(size_t index)
     image = new RemoteImage();
     image->setWidthPercentage(100.0f);
     image->setHeightPercentage(100.0f);
+
+    // Единственное, что может взять фокус на этом экране. Без этого действиям
+    // активности не на чём сработать и стрелки не листали бы — ровно та же
+    // ошибка, что была с поверхностью видео. Рамку прячем: подсвечивать
+    // единственный элемент незачем.
+    image->setFocusable(true);
+    image->setHideHighlight(true);
     // FIT, а не FILL: снимок надо увидеть целиком, а не обрезанным по краям.
     image->setScalingType(brls::ImageScalingType::FIT);
     image->onDone = [this](bool ok) {
@@ -59,4 +66,8 @@ void GalleryActivity::show(size_t index)
     };
     holder->addView(image);
     image->load(urls[current]);
+
+    // clearViews() уничтожил прежнюю картинку вместе с фокусом — возвращаем его
+    // на новую, иначе после первого перелистывания стрелки перестают работать.
+    brls::Application::giveFocus(image);
 }

@@ -113,6 +113,10 @@ void GameTile::setGame(const Game& game)
     // точное число игроков на одном экране; игр без него в базе нет
     players->setText(std::to_string(game.sameScreenMax));
 
+    // Скрытая игра видна только когда включён её фильтр, и там она должна
+    // отличаться от обычных — иначе непонятно, что именно ты вернул на экран.
+    this->setAlpha(game.hidden ? 0.45f : 1.0f);
+
     star->setVisibility(game.favorite ? brls::Visibility::VISIBLE : brls::Visibility::GONE);
     installedMark->setVisibility(game.installed ? brls::Visibility::VISIBLE
                                                 : brls::Visibility::GONE);

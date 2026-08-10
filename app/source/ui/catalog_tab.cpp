@@ -75,13 +75,6 @@ void CatalogTab::buildPlayerFilter()
 {
     AppState& state = AppState::get();
 
-    auto* caption = new brls::Label();
-    caption->setText("Игроков");
-    caption->setFontSize(CHIP_FONT_SIZE);
-    caption->setMarginRight(8);
-    caption->setTextColor(brls::Application::getTheme()["brls/text_disabled"]);
-    togglesBox->addView(caption);
-
     for (int threshold : THRESHOLDS)
     {
         auto* button = new brls::Button();
@@ -90,6 +83,7 @@ void CatalogTab::buildPlayerFilter()
         button->setMarginRight(6);
         button->setStyle(state.filter.minPlayers == threshold ? &brls::BUTTONSTYLE_PRIMARY
                                                               : &brls::BUTTONSTYLE_BORDERLESS);
+        button->getFocusEvent()->subscribe([this](brls::View*) { focusedNsuid.clear(); });
         button->registerClickAction([this, threshold](brls::View*) {
             AppState::get().filter.minPlayers = threshold;
             // перерисовываем подсветку выбранного порога
@@ -121,6 +115,11 @@ void CatalogTab::buildToggles()
             reload();
             return true;
         });
+        // Пока курсор на чипе, «скрыть» не относится ни к какой игре: иначе Y,
+        // нажатый на фильтре, тихо прятал бы ту, что была выделена до этого.
+        // Ровно на этом уже обжигались в библиотеке.
+        button->getFocusEvent()->subscribe([this](brls::View*) { focusedNsuid.clear(); });
+
         togglesBox->addView(button);
         return button;
     };
@@ -153,6 +152,7 @@ void CatalogTab::buildToggles()
 
     sortButton->setFontSize(CHIP_FONT_SIZE);
     sortButton->setStyle(&brls::BUTTONSTYLE_PRIMARY);
+    sortButton->getFocusEvent()->subscribe([this](brls::View*) { focusedNsuid.clear(); });
     sortButton->registerClickAction([this](brls::View*) {
         chooseSort();
         return true;
@@ -173,7 +173,7 @@ void CatalogTab::refreshToggleLabels()
 {
     const Filter& f = AppState::get().filter;
 
-    genreButton->setText(f.genre.empty() ? "Жанр: любой" : "Жанр: " + f.genre);
+    genreButton->setText(f.genre.empty() ? "Жанр" : f.genre);
     genreButton->setStyle(f.genre.empty() ? &brls::BUTTONSTYLE_BORDERLESS
                                           : &brls::BUTTONSTYLE_PRIMARY);
 
@@ -249,7 +249,10 @@ void CatalogTab::chooseSort()
 void CatalogTab::toggleHidden()
 {
     if (focusedNsuid.empty())
+    {
+        brls::Application::notify("Наведитесь на игру, чтобы скрыть её");
         return;
+    }
 
     AppState& state    = AppState::get();
     const bool wasShown = !state.library.isHidden(focusedNsuid);
@@ -312,8 +315,7 @@ void CatalogTab::applyRows()
 
     int installed = state.installedCount(games);
     // коротко: полная фраза не помещалась рядом с кнопками порогов
-    countLabel->setText(std::to_string(games.size()) + " · ваших "
-                        + std::to_string(installed));
+    countLabel->setText(std::to_string(games.size()) + " · мои " + std::to_string(installed));
 
     bool empty = games.empty();
     emptyLabel->setVisibility(empty ? brls::Visibility::VISIBLE : brls::Visibility::GONE);
