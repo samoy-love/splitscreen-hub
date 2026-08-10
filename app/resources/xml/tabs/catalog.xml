@@ -25,7 +25,7 @@
              них. Здесь она прижата к правому краю и подписана. -->
         <brls:Label
             text="Сортировка"
-            fontSize="14"
+            fontSize="@style/hub/font/caption"
             marginLeft="16"
             marginRight="8"
             textColor="@theme/brls/text_disabled" />
@@ -41,7 +41,7 @@
     <brls:Label
         id="catalog/empty"
         text="Ничего не нашлось. Ослабьте фильтр — например, снимите «Мои»."
-        fontSize="17"
+        fontSize="@style/hub/font/body"
         textColor="@theme/brls/text_disabled"
         visibility="gone"
         marginTop="40"

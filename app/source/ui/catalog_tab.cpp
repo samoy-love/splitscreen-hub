@@ -3,6 +3,7 @@
 #include <algorithm>
 
 #include "app_state.hpp"
+#include "ui/fonts.hpp"
 #include "tasks.hpp"
 #include "ui/game_activity.hpp"
 #include "ui/game_tile.hpp"
@@ -13,10 +14,6 @@ namespace
 // Пороги фильтра. Это именно «от N», а не точное совпадение: когда за консолью
 // четверо, игра на шестерых тоже подходит.
 const std::vector<int> THRESHOLDS = { 2, 3, 4, 6, 8 };
-
-/// Размер шрифта чипов фильтра. Со штатным подписи вроде «Жанр: приключения» не
-/// помещались в кнопку и переносились на вторую строку прямо внутри неё.
-constexpr float CHIP_FONT_SIZE = 15.0f;
 
 // индекс «сначала мои» в Catalog::SORT_NAMES
 constexpr int SORT_INSTALLED_FIRST = 5;
@@ -79,7 +76,7 @@ void CatalogTab::buildPlayerFilter()
     {
         auto* button = new brls::Button();
         button->setText("от " + std::to_string(threshold));
-        button->setFontSize(CHIP_FONT_SIZE);
+        button->setFontSize(fonts::CAPTION);
         button->setMarginRight(6);
         button->setStyle(state.filter.minPlayers == threshold ? &brls::BUTTONSTYLE_PRIMARY
                                                               : &brls::BUTTONSTYLE_BORDERLESS);
@@ -104,7 +101,7 @@ void CatalogTab::buildToggles()
     auto addToggle = [this](const std::string& label, bool Filter::*flag) -> brls::Button* {
         auto* button = new brls::Button();
         button->setText(label);
-        button->setFontSize(CHIP_FONT_SIZE);
+        button->setFontSize(fonts::CAPTION);
         button->setMarginRight(6);
         button->setStyle(AppState::get().filter.*flag ? &brls::BUTTONSTYLE_PRIMARY
                                                       : &brls::BUTTONSTYLE_BORDERLESS);
@@ -128,7 +125,7 @@ void CatalogTab::buildToggles()
     addToggle("Русский", &Filter::onlyRussian);
 
     genreButton = new brls::Button();
-    genreButton->setFontSize(CHIP_FONT_SIZE);
+    genreButton->setFontSize(fonts::CAPTION);
     genreButton->setMarginRight(6);
     genreButton->setStyle(&brls::BUTTONSTYLE_BORDERLESS);
     genreButton->registerClickAction([this](brls::View*) {
@@ -138,7 +135,7 @@ void CatalogTab::buildToggles()
     togglesBox->addView(genreButton);
 
     searchButton = new brls::Button();
-    searchButton->setFontSize(CHIP_FONT_SIZE);
+    searchButton->setFontSize(fonts::CAPTION);
     searchButton->setMarginRight(6);
     searchButton->setStyle(&brls::BUTTONSTYLE_BORDERLESS);
     searchButton->registerClickAction([this](brls::View*) {
@@ -150,7 +147,7 @@ void CatalogTab::buildToggles()
     retroButton  = addToggle("Ретро", &Filter::showRetro);
     hiddenButton = addToggle("Скрытые", &Filter::showHidden);
 
-    sortButton->setFontSize(CHIP_FONT_SIZE);
+    sortButton->setFontSize(fonts::CAPTION);
     sortButton->setStyle(&brls::BUTTONSTYLE_PRIMARY);
     sortButton->getFocusEvent()->subscribe([this](brls::View*) { focusedNsuid.clear(); });
     sortButton->registerClickAction([this](brls::View*) {
@@ -161,7 +158,7 @@ void CatalogTab::buildToggles()
     // Счётчик найденного — в конце той же строки: отдельная строка ради двух
     // чисел стоила бы ряда игр.
     countLabel = new brls::Label();
-    countLabel->setFontSize(CHIP_FONT_SIZE);
+    countLabel->setFontSize(fonts::CAPTION);
     countLabel->setMarginLeft(8);
     countLabel->setTextColor(brls::Application::getTheme()["brls/text_disabled"]);
     togglesBox->addView(countLabel);

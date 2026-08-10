@@ -20,6 +20,7 @@
 #include "tasks.hpp"
 #include "ui/cache_tab.hpp"
 #include "ui/catalog_tab.hpp"
+#include "ui/fonts.hpp"
 #include "ui/gallery_activity.hpp"
 #include "ui/library_tab.hpp"
 #include "ui/main_tabs.hpp"
@@ -184,6 +185,10 @@ int main(int argc, char* argv[])
         //
         // Метрики надо задать до разбора разметки: значения @style/... в XML
         // подставляются один раз при инфляции.
+        // Шкала кеглей — до разбора любой разметки: значения @style/... в XML
+        // подставляются один раз при инфляции.
+        fonts::registerMetrics();
+
         brls::Style style = brls::getStyle();
         style.addMetric("brls/hints/footer_margin_sides", 16.0f);
         style.addMetric("brls/hints/footer_padding_sides", 10.0f);

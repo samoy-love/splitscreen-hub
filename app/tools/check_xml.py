@@ -82,6 +82,17 @@ def main():
         return result
 
     problems = []
+
+    # Кегль задаётся только через шкалу из source/ui/fonts.hpp. Числом он тут
+    # уже накапливался — двенадцать разных значений, на каждом экране свои, и
+    # разница в точку читалась как небрежность, а не как замысел.
+    for path in sorted(glob.glob("resources/xml/**/*.xml", recursive=True)):
+        text = io.open(path, encoding="utf-8").read()
+        for match in re.finditer(r'fontSize="(\d[^"]*)"', text):
+            line = text[: match.start()].count("\n") + 1
+            problems.append((path, line, "fontSize", "число вместо @style/hub/font/...",
+                             match.group(1)))
+
     for path in sorted(glob.glob("resources/xml/**/*.xml", recursive=True)):
         text = io.open(path, encoding="utf-8").read()
         for match in re.finditer(r'<([\w:]+)((?:[^>"]|"[^"]*")*?)/?>', text):
@@ -96,7 +107,10 @@ def main():
                     problems.append((path, line, tag, name, value))
 
     for path, line, tag, name, value in problems:
-        print(f'{path}:{line}  <{tag}> не понимает {name}="{value}"')
+        if tag == "fontSize":
+            print(f'{path}:{line}  fontSize="{value}" — {name}')
+        else:
+            print(f'{path}:{line}  <{tag}> не понимает {name}="{value}"')
 
     if problems:
         print(f"\nнайдено проблем: {len(problems)}")

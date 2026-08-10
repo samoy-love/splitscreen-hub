@@ -1,6 +1,7 @@
 #include "ui/library_tab.hpp"
 
 #include "app_state.hpp"
+#include "ui/fonts.hpp"
 #include "ui/game_activity.hpp"
 #include "ui/game_tile.hpp"
 
@@ -55,7 +56,7 @@ void LibraryTab::rebuildSidebar()
     auto addEntry = [this](const std::string& name, const std::string& label, size_t count) {
         auto* button = new brls::Button();
         button->setText(label + "  " + std::to_string(count));
-        button->setFontSize(15);
+        button->setFontSize(fonts::CAPTION);
         button->setMarginBottom(4);
         button->setStyle(selected == name ? &brls::BUTTONSTYLE_PRIMARY
                                           : &brls::BUTTONSTYLE_BORDERLESS);
@@ -80,7 +81,7 @@ void LibraryTab::rebuildSidebar()
 
     auto* add = new brls::Button();
     add->setText("Новая папка");
-    add->setFontSize(15);
+    add->setFontSize(fonts::CAPTION);
     add->setStyle(&brls::BUTTONSTYLE_BORDERLESS);
     add->registerClickAction([this](brls::View*) {
         promptNewFolder();

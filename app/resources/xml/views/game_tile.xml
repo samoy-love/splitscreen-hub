@@ -23,7 +23,7 @@
         <brls:Label
             id="tile/star"
             text="★"
-            fontSize="15"
+            fontSize="@style/hub/font/caption"
             positionType="absolute"
             positionTop="4"
             positionLeft="6"
@@ -63,7 +63,7 @@
             <brls:Label
                 id="tile/players"
                 text=""
-                fontSize="13"
+                fontSize="@style/hub/font/caption"
                 verticalAlign="center"
                 horizontalAlign="center"
                 textColor="#FFFFFF" />
@@ -75,7 +75,7 @@
     <brls:Label
         id="tile/name"
         text=""
-        fontSize="15"
+        fontSize="@style/hub/font/caption"
         marginTop="6"
         singleLine="true" />
 

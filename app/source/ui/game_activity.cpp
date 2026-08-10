@@ -7,6 +7,7 @@
 
 #include "app_state.hpp"
 #include "format.hpp"
+#include "ui/fonts.hpp"
 #include "net.hpp"
 #include "tasks.hpp"
 #include "ui/async_image.hpp"
@@ -41,12 +42,12 @@ brls::Box* statTile(const std::string& caption, const std::string& value)
 
     auto* c = new brls::Label();
     c->setText(caption);
-    c->setFontSize(15);
+    c->setFontSize(fonts::CAPTION);
     c->setTextColor(brls::Application::getTheme()["brls/text_disabled"]);
 
     auto* v = new brls::Label();
     v->setText(value);
-    v->setFontSize(24);
+    v->setFontSize(fonts::ACCENT);
 
     box->addView(c);
     box->addView(v);
@@ -57,7 +58,7 @@ brls::Label* tag(const std::string& text)
 {
     auto* label = new brls::Label();
     label->setText(text);
-    label->setFontSize(16);
+    label->setFontSize(fonts::CAPTION);
     label->setMarginRight(14);
     label->setTextColor(brls::Application::getTheme()["brls/text_disabled"]);
     return label;
@@ -299,7 +300,7 @@ void GameActivity::fillTrailerButton()
     trailerUrl = videos.empty() ? std::string() : videos.front();
 
     trailerButton = new brls::Button();
-    trailerButton->setFontSize(14);
+    trailerButton->setFontSize(fonts::CAPTION);
     trailerButton->setWidth(190);
     trailerButton->setHeight(128);
     trailerButton->setMarginRight(10);

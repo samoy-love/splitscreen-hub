@@ -20,7 +20,7 @@
         <brls:Label
             id="library/empty"
             text=""
-            fontSize="15"
+            fontSize="@style/hub/font/caption"
             textColor="@theme/brls/text_disabled"
             visibility="gone"
             marginTop="40" />

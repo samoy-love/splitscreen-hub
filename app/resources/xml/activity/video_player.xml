@@ -17,7 +17,7 @@
     <brls:Label
         id="video/status"
         text="Загрузка трейлера…"
-        fontSize="20"
+        fontSize="@style/hub/font/accent"
         positionType="absolute"
         positionTop="40"
         positionLeft="0"
@@ -68,7 +68,7 @@
         <brls:Label
             id="video/elapsed"
             text="0:00"
-            fontSize="15"
+            fontSize="@style/hub/font/caption"
             marginRight="12"
             textColor="#FFFFFF" />
 
@@ -104,7 +104,7 @@
         <brls:Label
             id="video/left"
             text=""
-            fontSize="15"
+            fontSize="@style/hub/font/caption"
             marginLeft="12"
             textColor="#FFFFFFC0" />
 

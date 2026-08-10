@@ -22,7 +22,7 @@
 
         <brls:Label
             text="Split Screen Hub"
-            fontSize="17"
+            fontSize="@style/hub/font/body"
             marginRight="24"
             textColor="@theme/brls/text_disabled" />
 
@@ -39,7 +39,7 @@
         <brls:Label
             id="main/shortcuts"
             text=""
-            fontSize="14"
+            fontSize="@style/hub/font/caption"
             textColor="@theme/brls/text_disabled" />
 
     </brls:Box>

@@ -1,6 +1,7 @@
 #include "ui/main_tabs.hpp"
 
 #include "ui/cache_tab.hpp"
+#include "ui/fonts.hpp"
 #include "ui/catalog_tab.hpp"
 #include "ui/library_tab.hpp"
 
@@ -46,7 +47,7 @@ void MainTabs::addTab(const std::string& label, brls::View* content)
 
     auto* button = new brls::Button();
     button->setText(label);
-    button->setFontSize(16);
+    button->setFontSize(fonts::BODY);
     button->setMarginRight(8);
     button->setStyle(&brls::BUTTONSTYLE_BORDERLESS);
     button->registerClickAction([this, index](brls::View*) {

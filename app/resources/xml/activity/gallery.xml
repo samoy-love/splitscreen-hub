@@ -18,7 +18,7 @@
     <brls:Label
         id="gallery/status"
         text="Загрузка…"
-        fontSize="18"
+        fontSize="@style/hub/font/body"
         positionType="absolute"
         positionTop="0"
         positionBottom="0"
@@ -44,7 +44,7 @@
         <brls:Label
             id="gallery/counter"
             text=""
-            fontSize="16"
+            fontSize="@style/hub/font/body"
             textColor="#FFFFFF" />
 
     </brls:Box>
