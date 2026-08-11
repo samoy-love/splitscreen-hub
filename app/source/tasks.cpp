@@ -24,12 +24,15 @@ struct Queue
     std::condition_variable cv;
     std::atomic_bool running { false };
 
-    void push(std::function<void()> task)
+    void push(std::function<void()> task, bool front = false)
     {
         size_t depth;
         {
             std::lock_guard<std::mutex> lock(mutex);
-            items.push_back(std::move(task));
+            if (front)
+                items.push_front(std::move(task));
+            else
+                items.push_back(std::move(task));
             depth = items.size();
         }
         brls::Logger::verbose("tasks[{}]: +задача, в очереди {}", name, depth);
@@ -139,6 +142,11 @@ void stop()
 void io(std::function<void()> task)
 {
     ioQueue.push(std::move(task));
+}
+
+void ioFront(std::function<void()> task)
+{
+    ioQueue.push(std::move(task), true);
 }
 
 void heavy(std::function<void()> task)

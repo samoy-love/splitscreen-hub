@@ -1,6 +1,13 @@
 #include "ui/cover_cache.hpp"
 
+#include <memory>
+
+#include "tasks.hpp"
+#include "ui/async_image.hpp"
+
+#include <fstream>
 #include <list>
+#include <unordered_set>
 #include <unordered_map>
 
 namespace
@@ -16,6 +23,16 @@ struct Entry
 };
 
 std::unordered_map<std::string, Entry> entries;
+
+/// Уже поставленные в очередь на предзагрузку: без этого каждая прокрутка
+/// заказывала бы одни и те же файлы заново.
+std::unordered_set<std::string> queued;
+
+#ifdef __SWITCH__
+const char* ART_DIR = "romfs:/art/";
+#else
+const char* ART_DIR = "resources/art/";
+#endif
 
 }  // namespace
 
@@ -66,6 +83,33 @@ void put(const std::string& file, int texture)
     }
 }
 
+void warm(const std::string& file)
+{
+    if (file.empty() || entries.count(file) || queued.count(file))
+        return;
+
+    queued.insert(file);
+    const std::string path = std::string(ART_DIR) + file;
+
+    tasks::io([file, path]() {
+        std::ifstream in(path, std::ios::binary);
+        if (!in.good())
+            return;
+
+        std::vector<unsigned char> data((std::istreambuf_iterator<char>(in)),
+                                        std::istreambuf_iterator<char>());
+        auto pixels = std::make_shared<asyncimage::Pixels>(
+            asyncimage::decode(data.data(), data.size()));
+        if (!pixels->valid())
+            return;
+
+        brls::sync([file, pixels]() {
+            queued.erase(file);
+            put(file, asyncimage::upload(*pixels));
+        });
+    });
+}
+
 void clear()
 {
     NVGcontext* vg = brls::Application::getNVGContext();
@@ -73,6 +117,7 @@ void clear()
         nvgDeleteImage(vg, entry.texture);
     entries.clear();
     order.clear();
+    queued.clear();
 }
 
 }  // namespace covers

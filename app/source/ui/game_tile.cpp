@@ -1,5 +1,6 @@
 #include "ui/game_tile.hpp"
 
+#include <cmath>
 #include <fstream>
 #include <memory>
 
@@ -67,6 +68,8 @@ void GameTile::loadCover(const std::string& file)
     {
         perf::count(perf::Counter::CoverFromCache);
         cover->innerSetImage(cached);
+        cover->setAlpha(1.0f);
+        fading = false;
         return;
     }
 
@@ -76,7 +79,9 @@ void GameTile::loadCover(const std::string& file)
     auto self = this;
     const std::string path = std::string(ART_DIR) + file;
 
-    tasks::io([flag, self, path, file]() {
+    // В начало очереди: эта плитка на экране прямо сейчас, а в хвосте очереди
+    // ждут предзагрузки соседних строк и запросы, чьи плитки уже уехали.
+    tasks::ioFront([flag, self, path, file]() {
         // Пока задача ждала очереди, строку могли переиспользовать под другую
         // игру: при быстрой прокрутке таких задач набирается больше, чем плиток
         // на экране. Читать и разбирать файл ради выброшенного результата
@@ -128,7 +133,14 @@ void GameTile::loadCover(const std::string& file)
             covers::put(file, texture);
 
             if (*flag && self->pendingArt == file && texture)
+            {
                 self->cover->innerSetImage(texture);
+                // Обложка, прочитанная с карты, появляется плавно: мгновенная
+                // подмена на прокрутке читается как мигание.
+                self->cover->setAlpha(0.0f);
+                self->coverShown = std::chrono::steady_clock::now();
+                self->fading     = true;
+            }
         });
     });
 }
@@ -165,6 +177,40 @@ void GameTile::setGame(const Game& game)
     star->setVisibility(game.favorite ? brls::Visibility::VISIBLE : brls::Visibility::GONE);
     installedMark->setVisibility(game.installed ? brls::Visibility::VISIBLE
                                                 : brls::Visibility::GONE);
+}
+
+void GameTile::draw(NVGcontext* vg, float x, float y, float width, float height,
+                    brls::Style style, brls::FrameContext* ctx)
+{
+    if (fading)
+    {
+        constexpr float FADE_MS = 160.0f;
+        const float elapsed     = std::chrono::duration<float, std::milli>(
+                                  std::chrono::steady_clock::now() - coverShown)
+                                  .count();
+
+        float t = elapsed / FADE_MS;
+        if (t >= 1.0f)
+        {
+            t      = 1.0f;
+            fading = false;
+        }
+        cover->setAlpha(t);
+    }
+
+    // Подъём под курсором. Плавно, а не скачком: рамку выделения borealis рисует
+    // сама, но она одинаковая у кнопки и у плитки, и лёгкое движение отличает
+    // «выбрана игра» от «выбран чип фильтра».
+    const float target = this->isFocused() ? LIFT : 0.0f;
+    if (lift != target)
+    {
+        lift += (target - lift) * 0.35f;   // экспоненциальное приближение
+        if (std::abs(target - lift) < 0.2f)
+            lift = target;
+        this->setTranslationY(-lift);
+    }
+
+    Box::draw(vg, x, y, width, height, style, ctx);
 }
 
 void GameTile::setOnSelect(std::function<void(const Game&)> callback)

@@ -1,5 +1,6 @@
 #include "ui/game_grid.hpp"
 
+#include "ui/cover_cache.hpp"
 #include "ui/game_tile.hpp"
 
 namespace
@@ -100,6 +101,12 @@ void GameRow::setGames(size_t from)
         tile->setFocusable(true);
         tile->setGame(model->games[idx]);
     }
+
+    // Обложки следующей строки читаем заранее: к моменту, когда до неё дойдёт
+    // прокрутка, они уже в кэше, и вместо пустых плиток сразу видны картинки.
+    const size_t next = from + slots.size();
+    for (size_t i = 0; i < slots.size() && next + i < model->games.size(); i++)
+        covers::warm(model->games[next + i].boxArtFile);
 }
 
 namespace

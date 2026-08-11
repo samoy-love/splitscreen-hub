@@ -3,6 +3,7 @@
 #include <borealis.hpp>
 
 #include <atomic>
+#include <chrono>
 #include <functional>
 #include <memory>
 
@@ -30,7 +31,21 @@ class GameTile : public brls::Box
     /// относится «убрать»: к игре под курсором или к папке в списке слева.
     void setOnFocus(std::function<void(const std::string&)> callback);
 
+    /// Плавное проявление обложки и подъём при фокусе. Обе анимации короткие и
+    /// считаются по времени: borealis умеет анимировать только прозрачность
+    /// целых видов, а нам нужно двигать плитку и гасить одну картинку внутри.
+    void draw(NVGcontext* vg, float x, float y, float width, float height, brls::Style style,
+              brls::FrameContext* ctx) override;
+
   private:
+    /// Когда обложка появилась — от этого момента идёт проявление.
+    std::chrono::steady_clock::time_point coverShown;
+    bool fading = false;
+
+    /// Насколько плитка приподнимается под курсором.
+    static constexpr float LIFT = 5.0f;
+    float lift = 0.0f;
+
     /// Обложка читается с romfs в фоновом потоке, а в UI-поток отдаются
     /// готовые байты. Иначе шесть файловых чтений на строку происходили бы
     /// прямо в кадре отрисовки, и прокрутка дёргалась бы на каждой новой
