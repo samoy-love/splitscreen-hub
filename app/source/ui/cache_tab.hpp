@@ -31,6 +31,12 @@ class CacheTab : public brls::Box
     /// Вкладку можно покинуть раньше, чем закончится обход каталога.
     std::shared_ptr<std::atomic_bool> alive;
 
+    /// Кнопки выбора языка и их коды. Смена языка меняет только подсветку:
+    /// пересоздавать кнопку, на которой стоит фокус, нельзя — см.
+    /// highlightLanguage().
+    std::vector<std::pair<std::string, brls::Button*>> languageButtons;
+    void highlightLanguage();
+
     void refresh();
     /// Кнопки выбора языка. Смена требует перезапуска, о чём и говорим.
     void buildLanguage();

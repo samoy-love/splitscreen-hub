@@ -77,6 +77,10 @@ class HttpStream
     int performRange(int64_t from);
     /// Отдаёт данные из уже готового файла в кэше вместо сети.
     void feedFromCache(int64_t from);
+    /// Качает из сети с указанного байта, переподключаясь при обрывах.
+    /// Отдельным методом, чтобы к нему можно было вернуться из feedFromCache(),
+    /// если кэш исчез между проверкой и открытием.
+    void feedFromNetwork(int64_t from);
     void stopWorker();
     size_t onData(const uint8_t* data, size_t size);
 

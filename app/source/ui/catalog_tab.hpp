@@ -17,16 +17,48 @@ class CatalogTab : public brls::Box
 
     /// Перечитывает выборку из базы и обновляет сетку. Сам запрос уходит в
     /// рабочий поток, результат возвращается в UI через applyRows().
-    void reload();
+    /// keepScroll — не сбрасывать позицию прокрутки. Нужен, когда список
+    /// перечитывается не по воле пользователя: спрятанная игра исчезает, а
+    /// остальные должны остаться там же, где были.
+    void reload(bool keepScroll = false);
 
     ~CatalogTab() override;
 
+    /// Поверх сетки рисуется полоса прокрутки — см. тело.
+    void draw(NVGcontext* vg, float x, float y, float width, float height, brls::Style style,
+              brls::FrameContext* ctx) override;
+
   private:
     /// Показывает уже готовую выборку. Только из UI-потока.
-    void applyRows();
+    void applyRows(bool keepScroll);
 
     /// Вкладка может закрыться, пока запрос в работе.
     std::shared_ptr<std::atomic_bool> alive = std::make_shared<std::atomic_bool>(true);
+
+    /// Номер последней запрошенной выборки. Результат с чужим номером
+    /// выбрасывается — см. reload().
+    ///
+    /// shared_ptr, а не поле: рабочий поток сверяет номер, обращаясь к объекту
+    /// вкладки, и делает это вне brls::sync — то есть без всякой синхронизации
+    /// с её разрушением. Счётчик живёт отдельно и переживает вкладку, как model
+    /// и alive.
+    std::shared_ptr<std::atomic<unsigned long long>> queryGeneration
+        = std::make_shared<std::atomic<unsigned long long>>(0);
+
+    /// Версия библиотеки, на которой построена текущая выдача. Игру могли
+    /// спрятать из карточки — тогда в сетке она остаётся до пересчёта.
+    unsigned seenRevision = 0;
+
+    /// Ширина, под которую в последний раз считались кадры ячеек.
+    ///
+    /// RecyclerFrame::checkWidth() в borealis хранит прежнюю ширину в static —
+    /// одной на все экземпляры (recycler.cpp:369). Наши два рециклера, каталог и
+    /// библиотека, переписывают её друг другу, а reloadData() без поднятого
+    /// флага layouted молча ничего не делает. В итоге кадры ячеек остаются
+    /// посчитанными под чужую геометрию, и сетка застывает съехавшей.
+    /// Отслеживаем ширину сами и пересчитываем, когда она изменилась.
+    int gridWidth = 0;
+
 
     std::shared_ptr<GridModel> model;
 
@@ -36,7 +68,6 @@ class CatalogTab : public brls::Box
     void chooseGenre();
     void openGenreDropdown();
     /// Жанры не меняются за время работы — читаем их один раз.
-    std::vector<std::string> genreCache;
     void chooseSort();
     void toggleHidden();
     /// Обновляет отметки одной игры без перезапроса каталога.

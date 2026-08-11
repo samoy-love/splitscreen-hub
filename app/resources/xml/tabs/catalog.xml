@@ -2,7 +2,7 @@
     axis="column"
     width="auto"
     height="auto"
-    paddingTop="@style/hub/space/s"
+    paddingTop="@style/hub/space/xs"
     paddingRight="@style/hub/space/screen"
     paddingBottom="@style/hub/space/xs"
     paddingLeft="@style/hub/space/screen">
@@ -14,30 +14,49 @@
          вправо — а «вниз» уводило сразу в сетку. Здесь ряды вложены в колонку,
          и вверх-вниз ходит между ними как положено. -->
 
+    <!-- Высота задана явно у обеих строк фильтров. Без неё строка тянется по
+         самому высокому содержимому, и любой элемент, выросший на кадр (кнопка
+         с длинной подписью, появившийся индикатор), сдвигал вниз всю сетку. -->
     <brls:Box
         axis="row"
+        height="44"
         alignItems="center"
         marginBottom="@style/hub/space/xs">
+
+        <!-- Подпись к порогам. Без неё на экране стояли чипы «от 3», «от 4»
+             и слово «игроков» не встречалось нигде: от чего именно «от», надо
+             было догадываться. -->
+        <brls:Label
+            text="@i18n/hub/filter/players_caption"
+            fontSize="@style/hub/font/caption"
+            marginRight="@style/hub/space/s"
+            textColor="@theme/brls/text_disabled" />
 
         <brls:Box
             id="catalog/players"
             axis="row"
-            alignItems="center"
-            grow="1.0" />
+            alignItems="center" />
 
         <brls:ProgressSpinner
             id="catalog/spinner"
             width="22"
             height="22"
-            marginRight="@style/hub/space/s"
+            marginLeft="@style/hub/space/s"
             visibility="gone" />
 
+        <!-- Счётчик стоит сразу за фильтрами, которым отвечает, и обычным
+             цветом. Прижатый к правому краю и приглушённый, он оказывался
+             дальше всего от того, что на него влияет, — при том что это
+             единственный отклик на нажатие фильтра. -->
         <brls:Label
             id="catalog/count"
             text=""
             fontSize="@style/hub/font/caption"
-            marginRight="@style/hub/space/m"
-            textColor="@theme/brls/text_disabled" />
+            marginLeft="@style/hub/space/m"
+            textColor="@theme/brls/text" />
+
+        <!-- Распорка: всё, что до неё, прижато влево, сортировка — вправо. -->
+        <brls:Box grow="1.0" />
 
         <!-- Сортировка отделена от фильтров намеренно: она не сужает список, а
              меняет порядок, и раньше её чип стоял в общем ряду и терялся среди
@@ -59,6 +78,7 @@
     <brls:Box
         id="catalog/toggles"
         axis="row"
+        height="44"
         alignItems="center"
         marginBottom="@style/hub/space/s" />
 

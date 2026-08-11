@@ -5,17 +5,26 @@
 namespace fmtx
 {
 
-std::string formatSize(long long bytes)
+bool sizeInGigabytes(long long bytes, double& value)
+{
+    value = static_cast<double>(bytes) / (1024.0 * 1024.0 * 1024.0);
+    if (value >= 1.0)
+        return true;
+    value = static_cast<double>(bytes) / (1024.0 * 1024.0);
+    return false;
+}
+
+std::string formatSize(long long bytes, const char* gigabytes, const char* megabytes)
 {
     if (bytes <= 0)
         return "";
 
+    double value = 0;
+    const bool gb = sizeInGigabytes(bytes, value);
+
     char buf[32];
-    double gb = static_cast<double>(bytes) / (1024.0 * 1024.0 * 1024.0);
-    if (gb >= 1.0)
-        std::snprintf(buf, sizeof(buf), "%.1f ГБ", gb);
-    else
-        std::snprintf(buf, sizeof(buf), "%.0f МБ", static_cast<double>(bytes) / (1024.0 * 1024.0));
+    std::snprintf(buf, sizeof(buf), gb ? "%.1f %s" : "%.0f %s", value,
+                  gb ? gigabytes : megabytes);
     return buf;
 }
 

@@ -605,12 +605,15 @@ void VideoPlayerActivity::onContentAvailable()
             decoder->togglePause();
         return true;
     });
-    this->registerAction("hub/action/back10"_i18n, brls::BUTTON_LEFT, [this](brls::View*) {
+    // BUTTON_NAV_*, а не BUTTON_LEFT/RIGHT: borealis складывает в них
+    // крестовину и левый стик разом (sdl_input.cpp:527). На одной
+    // крестовине листать снимки и перематывать видео стиком было нельзя.
+    this->registerAction("hub/action/back10"_i18n, brls::BUTTON_NAV_LEFT, [this](brls::View*) {
         if (decoder)
             decoder->seekBy(-10.0);
         return true;
     });
-    this->registerAction("hub/action/forward10"_i18n, brls::BUTTON_RIGHT, [this](brls::View*) {
+    this->registerAction("hub/action/forward10"_i18n, brls::BUTTON_NAV_RIGHT, [this](brls::View*) {
         if (decoder)
             decoder->seekBy(10.0);
         return true;

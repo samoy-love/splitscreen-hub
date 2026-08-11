@@ -18,4 +18,19 @@ namespace textfit
 /// возвращает как есть. Только из UI-потока: обращается к контексту nanovg.
 std::string ellipsize(const std::string& text, float maxWidth, float fontSize);
 
+/// Обрезает текст так, чтобы при переносе он уместился в maxHeight.
+///
+/// Не то же самое, что ellipsize до maxWidth, умноженной на число строк:
+/// перенос идёт по словам и делится неравномерно — название шириной в две
+/// строки запросто разложится в три, если длинное слово не влезло в остаток
+/// первой.
+///
+/// Условие здесь ровно то же, которое проверяет borealis, поэтому maxHeight
+/// должна совпадать с высотой Label в разметке. Label включает перенос, только
+/// если текст умещается в заданную высоту (label.cpp, ветка
+/// YGMeasureModeExactly); не уместился — переноса нет вовсе, и подпись
+/// рисуется одной строкой поверх соседей.
+std::string ellipsizeHeight(const std::string& text, float maxWidth, float fontSize,
+                            float lineHeight, float maxHeight);
+
 }  // namespace textfit

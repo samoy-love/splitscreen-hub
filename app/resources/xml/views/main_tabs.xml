@@ -12,19 +12,21 @@
     <brls:Box
         axis="row"
         alignItems="center"
-        height="52"
-        paddingTop="@style/hub/space/s"
+        height="46"
+        paddingTop="@style/hub/space/xs"
         paddingLeft="@style/hub/space/screen"
         paddingRight="@style/hub/space/screen"
-        marginBottom="@style/hub/space/s"
+        marginBottom="@style/hub/space/xs"
         lineColor="@theme/brls/applet_frame/separator"
         lineBottom="1px">
 
         <!-- Название приложения — не служебная подпись: приглушённым цветом оно
              читалось как что-то второстепенное. Полный цвет текста темы. -->
+        <!-- Крупнее вкладок. В один кегль с ними название вставало в общий
+             ряд и читалось как четвёртая вкладка. -->
         <brls:Label
             text="Split Screen Hub"
-            fontSize="@style/hub/font/body"
+            fontSize="@style/hub/font/accent"
             marginRight="@style/hub/space/l"
             textColor="@theme/brls/text" />
 

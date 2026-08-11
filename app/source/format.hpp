@@ -12,7 +12,14 @@ namespace fmtx
 
 /// Размер картриджа человеку: «4.7 ГБ», «512 МБ». Пустая строка, если размер
 /// неизвестен — в базе это ноль.
-std::string formatSize(long long bytes);
+/// Подписи единиц передаёт вызывающий: «ГБ» была вписана прямо сюда, и при
+/// английском интерфейсе карточка показывала «4.7 ГБ». Сама функция остаётся
+/// чистой и проверяемой тестами.
+std::string formatSize(long long bytes, const char* gigabytes, const char* megabytes);
+
+/// true, если размер удобнее показать в гигабайтах; value получает число в
+/// выбранных единицах.
+bool sizeInGigabytes(long long bytes, double& value);
 
 /// Сколько языков в строке вида "ru,en,ja". Ноль, если строка пустая.
 int languageCount(const std::string& languages);

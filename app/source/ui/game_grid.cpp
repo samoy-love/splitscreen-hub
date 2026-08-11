@@ -1,5 +1,6 @@
 #include "ui/game_grid.hpp"
 
+#include "perf.hpp"
 #include "ui/cover_cache.hpp"
 #include "ui/game_tile.hpp"
 
@@ -152,12 +153,15 @@ std::shared_ptr<GridModel> attachGameGrid(brls::RecyclerFrame* recycler, int col
     return model;
 }
 
-void refreshGameGrid(brls::RecyclerFrame* recycler)
+void refreshGameGrid(brls::RecyclerFrame* recycler, bool keepScroll)
 {
+    perf::Scope timer("перестройка сетки", 16.0);
+
+    const float offset = recycler->getContentOffsetY();
     recycler->reloadData();
 
     // Без явного сброса прокрутка оставалась там же, где была до смены фильтра,
     // и первая строка оказывалась выше видимой области — выглядело это как
     // пропавший верхний ряд игр.
-    recycler->setContentOffsetY(0.0f, false);
+    recycler->setContentOffsetY(keepScroll ? offset : 0.0f, false);
 }

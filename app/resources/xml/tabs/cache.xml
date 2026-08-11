@@ -18,7 +18,16 @@
         id="settings/language"
         axis="row"
         alignItems="center"
-        marginBottom="@style/hub/space/l" />
+        marginBottom="@style/hub/space/xs" />
+
+    <!-- Постоянная строка, а не только всплывающее уведомление: оно исчезает
+         через пару секунд, а последствие — до перезапуска язык не сменится —
+         остаётся. -->
+    <brls:Label
+        text="@i18n/hub/settings/restart"
+        fontSize="@style/hub/font/caption"
+        marginBottom="@style/hub/space/l"
+        textColor="@theme/brls/text_disabled" />
 
     <brls:Label
         text="@i18n/hub/settings/cache"
@@ -31,22 +40,33 @@
         marginBottom="@style/hub/space/l"
         textColor="@theme/brls/text_disabled" />
 
+    <!-- Кегль заголовка, а не витринный: на пустом кэше «0 МБ из 700 МБ»
+         набиралось крупнее всех надписей экрана и перетягивало на себя
+         внимание, ничего при этом не сообщая. -->
     <brls:Label
         id="cache/summary"
         text="@i18n/hub/cache/counting"
-        fontSize="@style/hub/font/display"
-        marginBottom="@style/hub/space/m" />
+        fontSize="@style/hub/font/title"
+        marginBottom="@style/hub/space/xs" />
 
     <brls:Label
         id="cache/breakdown"
         text=""
         fontSize="@style/hub/font/body"
+        marginBottom="@style/hub/space/xs"
+        textColor="@theme/brls/text_disabled" />
+
+    <!-- Пояснение стоит рядом с числами, которые объясняет, а не под кнопками,
+         как было: «Кэш пуст» — это ответ на вопрос «почему тут нули». -->
+    <brls:Label
+        id="cache/hint"
+        text=""
+        fontSize="@style/hub/font/caption"
         marginBottom="@style/hub/space/l"
         textColor="@theme/brls/text_disabled" />
 
     <WrapBox
-        axis="row"
-        marginBottom="@style/hub/space/l">
+        axis="row">
 
         <brls:Button
             id="cache/clear_videos"
@@ -55,19 +75,15 @@
             marginRight="@style/hub/space/m"
             text="@i18n/hub/cache/clear_videos" />
 
+        <!-- Без style="highlight": выделенной цветом акцента была та кнопка,
+             которая стирает всё, и из двух глаз выбирал именно её. Опасное
+             действие не должно быть самым привлекательным на экране. -->
         <brls:Button
             id="cache/clear_all"
             width="auto"
             height="auto"
-            style="highlight"
             text="@i18n/hub/cache/clear_all" />
 
     </WrapBox>
-
-    <brls:Label
-        id="cache/hint"
-        text=""
-        fontSize="@style/hub/font/caption"
-        textColor="@theme/brls/text_disabled" />
 
 </brls:Box>

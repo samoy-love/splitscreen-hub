@@ -55,7 +55,8 @@ class GameActivity : public brls::Activity
     void fillGenres(const std::vector<std::string>& list);
     /// Звезда и список папок в шапке — состояние, а не кнопки.
     void refreshHeaderMarks();
-    void fillScreenshots(std::vector<std::string> urls);
+    /// Заполняет полосу снимками, но не больше указанного числа мест.
+    void fillScreenshots(std::vector<std::string> urls, int slots);
     void chooseFolder();
 
     BRLS_BIND(brls::Box, header, "game/header");
@@ -77,6 +78,7 @@ class GameActivity : public brls::Activity
     /// скриншотами, поэтому её нет в разметке.
     brls::Button* trailerButton = nullptr;
 
-    void fillTrailerButton(std::vector<std::string> videos);
+    /// Ставит плитки трейлеров и возвращает, сколько мест они заняли.
+    int fillTrailerButton(std::vector<std::string> videos);
     void openTrailer();
 };

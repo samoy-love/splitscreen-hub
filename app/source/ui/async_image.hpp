@@ -16,9 +16,9 @@ namespace asyncimage
 /// Раскодированное изображение. Владеет буфером, освобождает его сам.
 struct Pixels
 {
-    int width              = 0;
-    int height             = 0;
-    unsigned char* rgba    = nullptr;
+    int width           = 0;
+    int height          = 0;
+    unsigned char* rgba = nullptr;
 
     Pixels()                         = default;
     Pixels(const Pixels&)            = delete;
@@ -31,6 +31,13 @@ struct Pixels
 };
 
 /// Разбирает JPEG или PNG. Можно звать из любого потока.
+///
+/// Всегда четыре канала. Класть непрозрачные картинки в текстуру GL_RGB —
+/// заманчиво (треть памяти), но наружу nanovg умеет только RGBA, а свой
+/// glBindTexture в обход неё сбивает её же кэш привязки
+/// (NANOVG_GL_USE_STATE_FILTER в nanovg_gl.h): библиотека считает нужную
+/// текстуру уже привязанной, пропускает привязку и рисует тем, что осталось в
+/// контексте. На экране это белые плитки и полосы от атласа шрифта.
 Pixels decode(const unsigned char* data, size_t size);
 
 /// Создаёт текстуру из пикселей и возвращает её. Ноль — не получилось.

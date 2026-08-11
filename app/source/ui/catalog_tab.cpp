@@ -28,6 +28,12 @@ constexpr int CONTENT_WIDTH = 1280 - 60;
 /// Шаг постраничной прокрутки — примерно экран строк сетки.
 constexpr float PAGE_STEP = GameRow::HEIGHT * 3;
 
+/// Приписка к чипам, которые открывают список, а не переключаются на месте.
+///
+/// U+25BC, а не более уместный по размеру U+25BE: последнего в romfs:/font/font.ttf
+/// просто нет, и вместо стрелки рисовался пустой квадрат с крестом.
+const std::string DROPDOWN_MARK = "  ▼";
+
 }  // namespace
 
 // --------------------------------------------------------------------------
@@ -165,6 +171,12 @@ void CatalogTab::buildToggles()
     });
     togglesBox->addView(searchButton);
 
+    // Каталог собран из всего, что помечено в eShop как игра на одном экране, и
+    // штамповка вроде десятка «Dirt Racing Bundle» подряд попадает туда наравне
+    // с остальным. Упоминание в независимой подборке — единственный внешний
+    // признак качества, какой у нас есть: таких игр 85.
+    addToggle("hub/filter/notable"_i18n, &Filter::onlyNotable);
+
     retroButton  = addToggle("hub/filter/retro"_i18n, &Filter::showRetro);
     hiddenButton = addToggle("hub/filter/hidden"_i18n, &Filter::showHidden);
 
@@ -183,7 +195,13 @@ void CatalogTab::refreshToggleLabels()
 {
     const Filter& f = AppState::get().filter;
 
-    genreButton->setText(f.genre.empty() ? "hub/filter/genre"_i18n : f.genre);
+    // Стрелка отличает раскрывающийся список от переключателя. «Русский»,
+    // «Ретро» и «Скрытые» переключаются на месте, а «Жанр» и «Сортировка»
+    // открывают отдельный экран со списком — по одинаковым чипам предсказать,
+    // что произойдёт при нажатии, было нельзя.
+    genreButton->setText(
+        (f.genre.empty() ? "hub/filter/genre"_i18n : Catalog::genreLabel(f.genre))
+        + DROPDOWN_MARK);
     genreButton->setStyle(f.genre.empty() ? &brls::BUTTONSTYLE_BORDERLESS
                                           : &brls::BUTTONSTYLE_PRIMARY);
 
@@ -195,7 +213,7 @@ void CatalogTab::refreshToggleLabels()
     // Подписи короткие намеренно: пять чипов с полными фразами не помещались
     // в 820 точек и уезжали за край. Контейнер к тому же переносит строку,
     // если названию жанра всё-таки не хватит места.
-    sortButton->setText(Catalog::sortNames()[f.sort]);
+    sortButton->setText(Catalog::sortNames()[f.sort] + DROPDOWN_MARK);
 
     if (retroButton)
         retroButton->setText(f.showRetro ? "hub/filter/retro_on"_i18n : "hub/filter/retro"_i18n);
@@ -224,43 +242,35 @@ void CatalogTab::promptSearch()
 
 void CatalogTab::chooseGenre()
 {
-    // Список жанров — это DISTINCT по таблице в romfs, то есть последнее место,
-    // где мы ещё читали базу прямо в кадре. Читаем в рабочем потоке и открываем
-    // список, когда он готов: список жанров не меняется, поэтому запоминаем.
-    if (!genreCache.empty())
-    {
-        openGenreDropdown();
-        return;
-    }
-
-    auto flag  = alive;
-    auto* self = this;
-
-    tasks::io([flag, self]() {
-        std::vector<std::string> list = AppState::get().catalog.genres();
-        if (!*flag)
-            return;
-
-        brls::sync([flag, self, list = std::move(list)]() mutable {
-            if (!*flag)
-                return;
-            self->genreCache = std::move(list);
-            self->openGenreDropdown();
-        });
-    });
+    // Жанры уже собраны при загрузке каталога в память, поэтому ни запроса к
+    // базе, ни ухода в рабочий поток здесь больше нет.
+    openGenreDropdown();
 }
 
 void CatalogTab::openGenreDropdown()
 {
-    std::vector<std::string> options = { "hub/filter/genre_any"_i18n };
-    options.insert(options.end(), genreCache.begin(), genreCache.end());
+    // Значения и подписи расходятся: фильтровать надо по тому, что лежит в
+    // базе (жанры там русские), а показывать — на языке интерфейса.
+    const std::vector<std::string> values = AppState::get().catalog.genreNames();
+
+    // Каталог ещё грузится — жанров пока нет. Показывать пустой список хуже,
+    // чем честно сказать «подождите»: он выглядел бы как «жанров не бывает».
+    if (values.empty())
+    {
+        brls::Application::notify("hub/filter/loading"_i18n);
+        return;
+    }
+
+    std::vector<std::string> labels = { "hub/filter/genre_any"_i18n };
+    for (const std::string& value : values)
+        labels.push_back(Catalog::genreLabel(value));
 
     auto* dropdown = new brls::Dropdown(
-        "hub/filter/genre"_i18n, options,
-        [this, options](int selected) {
-            if (selected < 0 || selected >= static_cast<int>(options.size()))
+        "hub/filter/genre"_i18n, labels,
+        [this, values](int selected) {
+            if (selected < 0 || selected > static_cast<int>(values.size()))
                 return;
-            AppState::get().filter.genre = selected == 0 ? "" : options[selected];
+            AppState::get().filter.genre = selected == 0 ? "" : values[selected - 1];
             refreshToggleLabels();
             reload();
         },
@@ -295,7 +305,9 @@ void CatalogTab::refreshTile(const std::string& nsuid)
         state.decorate(g);
         break;
     }
-    recycler->reloadData();
+    // Не голый reloadData(): он заканчивается setContentOffsetY(0) и после
+    // отметки игры в середине списка выбрасывал каталог в начало.
+    refreshGameGrid(recycler, true);
 }
 
 void CatalogTab::toggleHidden()
@@ -311,10 +323,12 @@ void CatalogTab::toggleHidden()
     state.library.toggleHidden(focusedNsuid);
     brls::Application::notify(wasShown ? "hub/filter/hidden_done"_i18n
                                       : "hub/filter/shown_done"_i18n);
-    reload();
+    // Список тот же, из него лишь исчезла одна игра: возвращать пользователя
+    // в начало каталога из-за этого незачем.
+    reload(true);
 }
 
-void CatalogTab::reload()
+void CatalogTab::reload(bool keepScroll)
 {
     // Выборка идёт в рабочем потоке: по 3489 игр это сотни миллисекунд с
     // чтением из romfs, а reload() зовётся из обработчика каждой кнопки
@@ -324,13 +338,35 @@ void CatalogTab::reload()
     Filter filter   = AppState::get().filter;
     auto* self      = this;
 
+    // Номер запроса. Пока выборка идёт (а на консоли это до секунды), фильтр
+    // успевают подвинуть ещё раз, и в работе оказываются два запроса сразу.
+    // Раньше применялся тот, что финишировал последним, — и в сетке оставался
+    // результат уже отменённого фильтра: в журнале видно «показано 1865 игр»
+    // там, где выбранному фильтру отвечает 31.
+    //
+    // Устаревший результат просто выбрасываем. Заодно это снимает половину
+    // нагрузки с базы: запросы делят одно соединение и ждали друг друга под
+    // мьютексом, растягиваясь с 750 мс до трёх с половиной секунд.
+    auto counter                        = queryGeneration;
+    const unsigned long long generation = ++(*counter);
+
+    // Запоминаем сразу: выдача строится по этому состоянию библиотеки, и
+    // повторно перезапрашивать из-за него не нужно.
+    seenRevision = AppState::get().library.revision();
+
     // Выборка идёт в фоне и на консоли занимает заметное время. Без индикатора
     // нажатие на фильтр выглядит как «ничего не произошло».
     spinner->setVisibility(brls::Visibility::VISIBLE);
 
-    tasks::io([self, alive, model, filter]() {
+    tasks::io([self, alive, model, filter, generation, counter, keepScroll]() {
         AppState& state         = AppState::get();
         std::vector<Game> games = state.catalog.queryBrief(filter);
+
+        // Проверка сразу после запроса: отбраковать до сортировки и разметки
+        // дешевле, чем после.
+        if (*counter != generation)
+            return;  // фильтр успели подвинуть, эта выдача уже не нужна
+
         state.decorate(games);
 
         // Установленные и скрытые отсеиваем уже здесь: каталог в romfs не знает
@@ -357,15 +393,78 @@ void CatalogTab::reload()
             std::stable_partition(games.begin(), games.end(),
                                   [](const Game& g) { return g.installed; });
 
-        brls::sync([self, alive, model, games = std::move(games)]() mutable {
+        brls::sync([self, alive, model, generation, counter, keepScroll,
+                    games = std::move(games)]() mutable {
+            // Ещё раз: между рабочим потоком и этим кадром фильтр тоже могли
+            // подвинуть. Здесь уже UI-поток, и обращаться к вкладке можно —
+            // флаг alive проверяется в том же потоке, где её и разрушают.
+            if (!*alive || *counter != generation)
+                return;
+
             model->games = std::move(games);
-            if (*alive)
-                self->applyRows();
+            self->applyRows(keepScroll);
         });
     });
 }
 
-void CatalogTab::applyRows()
+void CatalogTab::draw(NVGcontext* vg, float x, float y, float width, float height,
+                      brls::Style style, brls::FrameContext* ctx)
+{
+    // Игру спрятали или добавили в список из карточки — выдача устарела.
+    // Проверка идёт в отрисовке, а спрятанная вкладка не рисуется, так что
+    // лишней работы это не создаёт.
+    if (AppState::get().library.revision() != seenRevision)
+        reload(true);
+
+    // Ширина сетки изменилась — кадры ячеек посчитаны под прежнюю. Полагаться
+    // на checkWidth() внутри borealis нельзя, см. gridWidth.
+    if ((int)recycler->getWidth() != gridWidth && recycler->getWidth() > 0)
+    {
+        gridWidth = (int)recycler->getWidth();
+        refreshGameGrid(recycler, true);
+    }
+
+    Box::draw(vg, x, y, width, height, style, ctx);
+
+    // Полоса прокрутки. В каталоге больше четырёхсот строк, а на экране их две
+    // с небольшим: без неё непонятно ни где ты находишься, ни сколько осталось.
+    // Высоту содержимого считаем сами из числа игр — так не приходится гадать,
+    // что именно RecyclerFrame считает своим размером в текущем кадре.
+    const size_t games = model->games.size();
+    const float visible = recycler->getHeight();
+    if (games == 0 || visible <= 0)
+        return;
+
+    const int columns = GameRow::columnsFor(CONTENT_WIDTH);
+    const float content =
+        float((games + columns - 1) / columns) * float(GameRow::HEIGHT);
+    if (content <= visible)
+        return;  // всё поместилось, показывать нечего
+
+    const float offset = std::min(std::max(recycler->getContentOffsetY(), 0.0f),
+                                  content - visible);
+
+    constexpr float BAR_WIDTH = 4;
+    constexpr float MIN_THUMB = 24;
+
+    const float trackX = recycler->getX() + recycler->getWidth() - BAR_WIDTH;
+    const float trackY = recycler->getY();
+
+    float thumb = std::max(visible * visible / content, MIN_THUMB);
+    float thumbY = trackY + (visible - thumb) * (offset / (content - visible));
+
+    nvgBeginPath(vg);
+    nvgRoundedRect(vg, trackX, trackY, BAR_WIDTH, visible, BAR_WIDTH / 2);
+    nvgFillColor(vg, nvgRGBA(255, 255, 255, 20));
+    nvgFill(vg);
+
+    nvgBeginPath(vg);
+    nvgRoundedRect(vg, trackX, thumbY, BAR_WIDTH, thumb, BAR_WIDTH / 2);
+    nvgFillColor(vg, nvgRGBA(255, 255, 255, 90));
+    nvgFill(vg);
+}
+
+void CatalogTab::applyRows(bool keepScroll)
 {
     spinner->setVisibility(brls::Visibility::GONE);
 
@@ -381,7 +480,7 @@ void CatalogTab::applyRows()
     recycler->setVisibility(empty ? brls::Visibility::GONE : brls::Visibility::VISIBLE);
 
     if (!empty)
-        refreshGameGrid(recycler);
+        refreshGameGrid(recycler, keepScroll);
 
     brls::Logger::info("каталог: показано {} игр (ваших {}), фильтр: игроков >= {}, жанр «{}», "
                        "поиск «{}», только установленные {}, только с русским {}",

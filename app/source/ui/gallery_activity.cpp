@@ -26,11 +26,14 @@ void GalleryActivity::onContentAvailable()
         brls::Application::popActivity(brls::TransitionAnimation::FADE);
         return true;
     });
-    this->registerAction("hub/action/prev_shot"_i18n, brls::BUTTON_LEFT, [this](brls::View*) {
+    // BUTTON_NAV_*, а не BUTTON_LEFT/RIGHT: borealis складывает в них
+    // крестовину и левый стик разом (sdl_input.cpp:527). На одной
+    // крестовине листать снимки и перематывать видео стиком было нельзя.
+    this->registerAction("hub/action/prev_shot"_i18n, brls::BUTTON_NAV_LEFT, [this](brls::View*) {
         show((current + urls.size() - 1) % urls.size());
         return true;
     });
-    this->registerAction("hub/action/next_shot"_i18n, brls::BUTTON_RIGHT, [this](brls::View*) {
+    this->registerAction("hub/action/next_shot"_i18n, brls::BUTTON_NAV_RIGHT, [this](brls::View*) {
         show((current + 1) % urls.size());
         return true;
     });
@@ -46,7 +49,10 @@ void GalleryActivity::show(size_t index)
     status->setText("hub/gallery/loading"_i18n);
     status->setVisibility(brls::Visibility::VISIBLE);
 
-    holder->clearViews();
+    // Прежнюю картинку убираем только после того, как новая заняла фокус:
+    // clearViews() уничтожает вид, на котором фокус стоит прямо сейчас, и
+    // borealis остаётся с указателем на освобождённую память.
+    RemoteImage* previous = image;
 
     image = new RemoteImage();
     image->setWidthPercentage(100.0f);
@@ -69,7 +75,9 @@ void GalleryActivity::show(size_t index)
     holder->addView(image);
     image->load(urls[current]);
 
-    // clearViews() уничтожил прежнюю картинку вместе с фокусом — возвращаем его
-    // на новую, иначе после первого перелистывания стрелки перестают работать.
+    // Фокус на новую — и только теперь можно убрать старую.
     brls::Application::giveFocus(image);
+
+    if (previous)
+        holder->removeView(previous);
 }

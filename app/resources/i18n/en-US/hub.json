@@ -32,7 +32,28 @@
     "cancel": "Cancel",
     "delete": "Delete"
   },
+  "genre": {
+    "action": "Action",
+    "shooter": "Shooters",
+    "sports": "Sports",
+    "party": "Party",
+    "puzzle": "Puzzle",
+    "adventure": "Adventure",
+    "racing": "Racing",
+    "rpg": "RPG",
+    "fighting": "Fighting",
+    "strategy": "Strategy",
+    "simulation": "Simulation",
+    "board": "Board games",
+    "music": "Music",
+    "story": "Story-driven",
+    "training": "Training",
+    "education": "Education",
+    "pinball": "Pinball",
+    "apps": "Apps"
+  },
   "filter": {
+    "players_caption": "Same screen",
     "at_least": "{}+",
     "mine": "Mine · {}",
     "russian": "Russian",
@@ -52,15 +73,15 @@
     "point_at_game": "Point at a game first",
     "point_to_hide": "Point at a game to hide it",
     "hidden_done": "Game hidden",
-    "shown_done": "Game restored"
+    "shown_done": "Game restored",
+    "loading": "The catalogue is still loading",
+    "notable": "Curated"
   },
   "game": {
     "players": "On one screen",
     "size": "Size",
     "languages": "Languages",
-    "status": "Status",
     "installed": "Installed",
-    "not_installed": "Not installed",
     "unknown": "—",
     "has_russian": "Russian available",
     "has_online": "Online too",
@@ -68,14 +89,14 @@
     "no_tabletop": "No tabletop mode",
     "in_lists": "in lists: {}",
     "in_toplists": "in roundups: {}",
-    "shots_loading": "Loading screenshots…",
     "shots_partial": "Some screenshots failed to load",
     "shots_offline": "Screenshots unavailable — no network",
     "no_trailer": "No trailer",
     "trailer": "▶ Trailer",
     "trailer_n": "▶ Trailer {}",
     "connecting": "Connecting…",
-    "no_network": "No network — cannot open the trailer"
+    "no_network": "No network — cannot open the trailer",
+    "not_found": "This game is not in the catalogue"
   },
   "folders": {
     "title": "Add to which list",
@@ -87,10 +108,11 @@
     "added_to": "Added to «{}»",
     "removed_from": "Removed from «{}»",
     "in_favorites": "In favourites",
-    "out_favorites": "Removed from favourites"
+    "out_favorites": "Removed from favourites",
+    "name_taken": "A folder with that name already exists"
   },
   "library": {
-    "favorites": "★ Favourites",
+    "favorites": "Favourites",
     "hidden": "Hidden",
     "empty_favorites": "Favourites are empty. Mark a game with X.",
     "empty_folder": "The folder is empty. Add a game with X.",
@@ -130,11 +152,15 @@
     "mb": "{:.0f} MB"
   },
   "sort": {
-    "toplists": "From roundups",
+    "toplists": "Popular",
     "alphabet": "Alphabetical",
     "players": "More players",
     "newest": "Newest first",
     "compact": "Compact",
     "mine": "Mine first"
+  },
+  "unit": {
+    "gb": "GB",
+    "mb": "MB"
   }
 }

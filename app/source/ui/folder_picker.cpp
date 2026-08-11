@@ -47,9 +47,12 @@ void pick(const std::string& nsuid, std::function<void()> onChanged)
     // Отметка показывает, где игра уже лежит: без неё приходилось помнить.
     std::vector<std::string> items;
     items.reserve(names.size() + 2);
-    items.push_back((state.library.isFavorite(nsuid) ? "✓ " : "   ") + "hub/folders/favorites"_i18n);
+    // ●/○, а не галочка: U+2713 в romfs:/font/font.ttf отсутствует, и вместо
+    // отметки рисовался пустой квадрат — по списку нельзя было понять, где игра
+    // уже лежит. Пустой кружок заодно показывает, что строка вообще отмечаема.
+    items.push_back((state.library.isFavorite(nsuid) ? "● " : "○ ") + "hub/folders/favorites"_i18n);
     for (const std::string& name : names)
-        items.push_back((state.library.inFolder(name, nsuid) ? "✓ " : "   ") + name);
+        items.push_back((state.library.inFolder(name, nsuid) ? "● " : "○ ") + name);
     items.push_back("hub/folders/new"_i18n);
 
     auto* dropdown = new brls::Dropdown(

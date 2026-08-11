@@ -45,8 +45,10 @@ class GameRow : public brls::RecyclerCell
     static constexpr int TILE_WIDTH = 160;
     static constexpr int TILE_GAP   = 14;
 
-    /// Высота плитки (198) плюс зазор между строками.
-    static constexpr int HEIGHT = 212;
+    /// Высота строки: плитка 218 плюс зазор до следующей. Плитка подросла,
+    /// когда названия получили вторую строку, — иначе подпись обрезалась на
+    /// середине слова у каждой третьей игры.
+    static constexpr int HEIGHT = 232;
 
     /// Сколько плиток шириной TILE_WIDTH влезет в заданную ширину.
     static int columnsFor(int availableWidth);
@@ -76,5 +78,10 @@ class GameRow : public brls::RecyclerCell
 /// наполнить и после этого позвать refreshGameGrid().
 std::shared_ptr<GridModel> attachGameGrid(brls::RecyclerFrame* recycler, int columns);
 
-/// Перерисовывает сетку и возвращает её к первой строке.
-void refreshGameGrid(brls::RecyclerFrame* recycler);
+/// Перестраивает сетку под новое содержимое модели.
+///
+/// keepScroll оставляет позицию прокрутки на месте. Сброс в начало верен, когда
+/// поменялся фильтр — список стал другим, и показывать его с середины незачем.
+/// Но когда пользователь просто спрятал игру, список тот же, и отброс к началу
+/// заставляет искать место заново.
+void refreshGameGrid(brls::RecyclerFrame* recycler, bool keepScroll = false);

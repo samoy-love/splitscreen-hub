@@ -9,16 +9,30 @@
 #include "tasks.hpp"
 #include "ui/async_image.hpp"
 #include "ui/cover_cache.hpp"
+#include "ui/fonts.hpp"
+#include "ui/text_fit.hpp"
 #include "perf.hpp"
 
 namespace
 {
 #ifdef __SWITCH__
-// корень romfs — это содержимое build/resources, см. CATALOG_PATH в main.cpp
+// корень romfs — это содержимое build/resources, см. DATA_DIR в main.cpp
 const char* ART_DIR = "romfs:/art/";
 #else
 const char* ART_DIR = "resources/art/";
 #endif
+
+/// Подпись под обложкой: ширина и межстрочный интервал — те же, что в
+/// game_tile.xml.
+///
+/// NAME_HEIGHT — не размер вида, а предел в две строки. Места под подпись в
+/// плитке 52 точки (218 высоты минус 160 обложки минус отступ), туда влезли бы
+/// и три, но тогда плитки с длинными и короткими названиями смотрелись бы
+/// по-разному. Высоту вида задавать нельзя: при заданных обеих сторонах Yoga не
+/// вызывает измеряющую функцию Label, и тот перестаёт и переносить, и обрезать.
+constexpr float NAME_WIDTH       = 160;
+constexpr float NAME_HEIGHT      = 40;
+constexpr float NAME_LINE_HEIGHT = 1.15f;
 }  // namespace
 
 GameTile::GameTile()
@@ -54,10 +68,18 @@ void GameTile::setOnFocus(std::function<void(const std::string&)> callback)
 GameTile::~GameTile()
 {
     *alive = false;
+    covers::unpin(pendingArt);
 }
 
 void GameTile::loadCover(const std::string& file)
 {
+    // Пока плитка показывает эту обложку, кэш не имеет права её освободить.
+    // Прежнюю отпускаем — её больше никто здесь не рисует.
+    if (pendingArt != file)
+    {
+        covers::unpin(pendingArt);
+        covers::pin(file);
+    }
     pendingArt = file;
 
     // Текстурой владеет кэш, а не вид: одну и ту же обложку показывают разные
@@ -129,8 +151,13 @@ void GameTile::loadCover(const std::string& file)
         brls::sync([flag, self, file, pixels]() {
             // Кладём в кэш в любом случае: даже если плитку успели занять под
             // другую игру, работа уже сделана и пригодится при возврате.
-            const int texture = asyncimage::upload(*pixels);
-            covers::put(file, texture);
+            //
+            // Показываем то, что вернул кэш, а не то, что загрузили: при
+            // одновременной загрузке одного файла — предзагрузкой строки и
+            // самой плиткой — кэш оставляет первую текстуру, а вторую
+            // освобождает. Раньше плитка ставила себе именно освобождённую и
+            // оставалась пустой.
+            const int texture = covers::put(file, asyncimage::upload(*pixels));
 
             if (*flag && self->pendingArt == file && texture)
             {
@@ -161,14 +188,25 @@ void GameTile::setGame(const Game& game)
         loadCover(game.boxArtFile);
     else
     {
+        covers::unpin(pendingArt);
         pendingArt.clear();
         cover->clear();
     }
 
-    name->setText(game.title);
+    // Подпись занимает ровно две строки: место фиксировано, чтобы плитки не
+    // разъезжались по высоте. Обрезаем по числу строк, а не по суммарной
+    // ширине: borealis отключает перенос, если текст не влез в заданную высоту,
+    // и тогда подпись рисуется одной строкой поверх соседних плиток.
+    name->setText(textfit::ellipsizeHeight(game.title, NAME_WIDTH, fonts::CAPTION,
+                                           NAME_LINE_HEIGHT, NAME_HEIGHT));
 
-    // точное число игроков на одном экране; игр без него в базе нет
-    players->setText(std::to_string(game.sameScreenMax));
+    // Диапазон, а не только максимум: «1–4» и «4» — разные обещания, и по
+    // одной верхней границе не понять, сядут ли за игру вдвоём. Когда границы
+    // совпали, печатаем одно число: «2–2» читается как опечатка.
+    players->setText(game.sameScreenMin == game.sameScreenMax
+                         ? std::to_string(game.sameScreenMax)
+                         : std::to_string(game.sameScreenMin) + "–"
+                             + std::to_string(game.sameScreenMax));
 
     // Скрытая игра видна только когда включён её фильтр, и там она должна
     // отличаться от обычных — иначе непонятно, что именно ты вернул на экран.

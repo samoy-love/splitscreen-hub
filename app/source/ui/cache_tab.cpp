@@ -67,16 +67,35 @@ void CacheTab::buildLanguage()
         button->registerClickAction([this, code](brls::View*) {
             if (AppState::get().library.language() == code)
                 return true;
+
             AppState::get().library.setLanguage(code);
-            buildLanguage();
             brls::Application::notify("hub/settings/restart"_i18n);
+
+            // Только подсветка, без пересоздания кнопок.
+            //
+            // Прошлая попытка откладывала buildLanguage() на следующий кадр —
+            // этого мало. Кнопка, по которой нажали, держит фокус, и уничтожить
+            // её нельзя ни сейчас, ни кадром позже: borealis остаётся с
+            // указателем на освобождённую память и роняет вместе с собой
+            // Atmosphere. Менять же здесь нужно ровно две заливки.
+            highlightLanguage();
             return true;
         });
         languageBox->addView(button);
+        languageButtons.emplace_back(code, button);
     };
 
+    languageButtons.clear();
     add("en", "English");
     add("ru", "Русский");  // название языка не переводится
+}
+
+void CacheTab::highlightLanguage()
+{
+    const std::string current = AppState::get().library.language();
+    for (auto& [code, button] : languageButtons)
+        button->setStyle(current == code ? &brls::BUTTONSTYLE_PRIMARY
+                                         : &brls::BUTTONSTYLE_BORDERLESS);
 }
 
 CacheTab::~CacheTab()

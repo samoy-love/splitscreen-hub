@@ -198,81 +198,84 @@ void HttpStream::startWorker(int64_t from)
         closeCache(false);
 
     workerRunning = true;
-    worker = std::thread([this, from]() {
-        int64_t offset  = from;
-        int attempt     = 0;
+    worker        = std::thread([this, from]() { feedFromNetwork(from); });
+}
 
-        while (workerRunning.load() && alive->load())
+void HttpStream::feedFromNetwork(int64_t from)
+{
+    int64_t offset  = from;
+    int attempt     = 0;
+
+    while (workerRunning.load() && alive->load())
+    {
+        requestReceived = 0;
+        const int result = performRange(offset);
+        offset += requestReceived.load();
+
+        const long long length = contentLength.load();
+        const bool complete    = length > 0 && offset >= length;
+
+        // Дочитали до конца — либо по известной длине, либо сервер сам
+        // закрыл соединение без ошибки и длины мы не знаем.
+        if (complete || (result == 0 && length <= 0))
         {
-            requestReceived = 0;
-            const int result = performRange(offset);
-            offset += requestReceived.load();
-
-            const long long length = contentLength.load();
-            const bool complete    = length > 0 && offset >= length;
-
-            // Дочитали до конца — либо по известной длине, либо сервер сам
-            // закрыл соединение без ошибки и длины мы не знаем.
-            if (complete || (result == 0 && length <= 0))
-            {
-                brls::Logger::info("поток: файл дочитан, {} Б, кеширование {}", offset,
-                                   cacheAllowed ? "включено" : "выключено");
-                if (cacheAllowed)
-                    closeCache(true);
-                break;
-            }
-
-            if (!workerRunning.load() || !alive->load())
-                break;
-
-            if (rangeIgnored.load())
-            {
-                // сервер не поддержал докачку — продолжать нечем
-                brls::Logger::error("поток: сервер ответил 200 вместо 206, докачка невозможна");
-                connectionFailed = true;
-                break;
-            }
-
-            // Пауза показа — не обрыв связи: читатель просто перестал
-            // забирать данные, буфер встал полным, и соединение умерло по
-            // таймауту. Ждём снятия паузы, не тратя попыток.
-            if (readerPaused.load())
-            {
-                while (readerPaused.load() && workerRunning.load() && alive->load())
-                    std::this_thread::sleep_for(std::chrono::milliseconds(100));
-                continue;
-            }
-
-            // Обрыв посреди файла: продолжаем с того места, где остановились.
-            // Кэш при этом не портится — байты по-прежнему идут подряд.
-            if (++attempt > MAX_RECONNECTS)
-            {
-                brls::Logger::error("поток: исчерпаны {} попыток переподключения на байте {}",
-                                    MAX_RECONNECTS, offset);
-                if (offset == from)
-                    connectionFailed = true;
-                break;
-            }
-
-            isReconnecting = true;
-            if (onReconnect)
-                onReconnect(true, attempt);
-
-            // нарастающая пауза, но не дольше трёх секунд: ролик ждать нельзя
-            for (int slept = 0; slept < std::min(500 * attempt, 3000)
-                 && workerRunning.load() && alive->load(); slept += 100)
-            {
-                std::this_thread::sleep_for(std::chrono::milliseconds(100));
-            }
-
-            isReconnecting = false;
-            if (onReconnect)
-                onReconnect(false, attempt);
+            brls::Logger::info("поток: файл дочитан, {} Б, кеширование {}", offset,
+                               cacheAllowed ? "включено" : "выключено");
+            if (cacheAllowed)
+                closeCache(true);
+            break;
         }
 
-        finished = true;
-        cv.notify_all();
-    });
+        if (!workerRunning.load() || !alive->load())
+            break;
+
+        if (rangeIgnored.load())
+        {
+            // сервер не поддержал докачку — продолжать нечем
+            brls::Logger::error("поток: сервер ответил 200 вместо 206, докачка невозможна");
+            connectionFailed = true;
+            break;
+        }
+
+        // Пауза показа — не обрыв связи: читатель просто перестал
+        // забирать данные, буфер встал полным, и соединение умерло по
+        // таймауту. Ждём снятия паузы, не тратя попыток.
+        if (readerPaused.load())
+        {
+            while (readerPaused.load() && workerRunning.load() && alive->load())
+                std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            continue;
+        }
+
+        // Обрыв посреди файла: продолжаем с того места, где остановились.
+        // Кэш при этом не портится — байты по-прежнему идут подряд.
+        if (++attempt > MAX_RECONNECTS)
+        {
+            brls::Logger::error("поток: исчерпаны {} попыток переподключения на байте {}",
+                                MAX_RECONNECTS, offset);
+            if (offset == from)
+                connectionFailed = true;
+            break;
+        }
+
+        isReconnecting = true;
+        if (onReconnect)
+            onReconnect(true, attempt);
+
+        // нарастающая пауза, но не дольше трёх секунд: ролик ждать нельзя
+        for (int slept = 0; slept < std::min(500 * attempt, 3000)
+             && workerRunning.load() && alive->load(); slept += 100)
+        {
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        }
+
+        isReconnecting = false;
+        if (onReconnect)
+            onReconnect(false, attempt);
+    }
+
+    finished = true;
+    cv.notify_all();
 }
 
 void HttpStream::feedFromCache(int64_t from)
@@ -283,11 +286,15 @@ void HttpStream::feedFromCache(int64_t from)
     if (!file)
     {
         // Файл мог исчезнуть между проверкой и открытием — например, его убрала
-        // чистка кэша. Тогда честнее перекачать, чем показывать чёрный экран.
+        // чистка кэша. Раньше здесь стояло finished = true: читатель получал
+        // EOF, и плеер показывал ошибку вместо ролика, хотя комментарий рядом
+        // обещал перекачать. Теперь действительно перекачиваем.
         brls::Logger::warning("поток: кэш пропал, возвращаемся к сети");
         cacheComplete = false;
-        finished      = true;
-        cv.notify_all();
+        cacheAllowed  = (from == 0);
+        if (cacheAllowed && !cacheFile)
+            cacheFile = std::fopen(cacheTmp.c_str(), "wb");
+        feedFromNetwork(from);
         return;
     }
 
