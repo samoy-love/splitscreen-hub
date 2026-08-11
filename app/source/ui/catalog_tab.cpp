@@ -3,6 +3,7 @@
 #include <algorithm>
 
 #include "app_state.hpp"
+#include "perf.hpp"
 #include "ui/fonts.hpp"
 #include "tasks.hpp"
 #include "ui/folder_picker.hpp"
@@ -35,17 +36,21 @@ constexpr float PAGE_STEP = GameRow::HEIGHT * 3;
 
 CatalogTab::CatalogTab()
 {
+    perf::Scope timer("создание вкладки каталога");
+
     this->inflateFromXMLRes("xml/tabs/catalog.xml");
 
+    // Чипы добавляем до привязки сетки. Каждый addView пересчитывает раскладку,
+    // и пока сетка уже подключена, этот пересчёт тянет за собой её строки — на
+    // старте в журнале было около двадцати циклов создания и уничтожения ячейки
+    // подряд, ещё до первой выборки.
     buildPlayerFilter();
     buildToggles();
 
     // Сайдбара больше нет, под сетку идёт вся ширина экрана минус боковые
     // отступы из catalog.xml.
     model = attachGameGrid(recycler, GameRow::columnsFor(CONTENT_WIDTH));
-    model->onSelect = [](const Game& game) {
-        brls::Application::pushActivity(new GameActivity(game));
-    };
+    model->onSelect = [](const Game& game) { GameActivity::open(game); };
     model->onFocus = [this](const std::string& nsuid) { focusedNsuid = nsuid; };
 
     this->registerAction("hub/action/search"_i18n, brls::BUTTON_BACK, [this](brls::View*) {

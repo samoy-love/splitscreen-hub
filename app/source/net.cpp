@@ -22,6 +22,7 @@
 #include <curl/curl.h>
 
 #include "tasks.hpp"
+#include "perf.hpp"
 
 namespace
 {
@@ -455,7 +456,11 @@ std::vector<unsigned char> fetch(const std::string& url)
             std::this_thread::sleep_for(std::chrono::milliseconds(50));
         }
 
+        perf::Scope one("");
         std::vector<unsigned char> data = fetchOnce(url, status, result);
+        perf::count(perf::Counter::NetFetches);
+        perf::count(perf::Counter::NetMs, (long long)one.elapsedMs());
+
         if (!data.empty())
         {
             writeFile(path, data);

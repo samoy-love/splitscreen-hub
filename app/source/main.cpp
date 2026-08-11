@@ -17,6 +17,7 @@
 #include "app_state.hpp"
 #include "installed.hpp"
 #include "net.hpp"
+#include "perf.hpp"
 #include "tasks.hpp"
 #include "ui/cache_tab.hpp"
 #include "ui/catalog_tab.hpp"
@@ -308,10 +309,21 @@ int main(int argc, char* argv[])
         logMemory("перед главным циклом");
 
         step("main loop");
+
+        // Первый кадр — момент, когда приложение стало видно. До него всё
+        // остальное для пользователя не существует.
+        bool firstFrame = true;
         while (brls::Application::mainLoop())
-            ;
+        {
+            if (firstFrame)
+            {
+                firstFrame = false;
+                step("первый кадр");
+            }
+        }
 
         step("shutdown");
+        perf::report();
         // До остановки borealis: текстуры принадлежат её контексту nanovg.
         covers::clear();
         tasks::stop();

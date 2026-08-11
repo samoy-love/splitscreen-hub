@@ -8,6 +8,7 @@
 #include "tasks.hpp"
 #include "ui/async_image.hpp"
 #include "ui/cover_cache.hpp"
+#include "perf.hpp"
 
 namespace
 {
@@ -64,6 +65,7 @@ void GameTile::loadCover(const std::string& file)
 
     if (int cached = covers::find(file))
     {
+        perf::count(perf::Counter::CoverFromCache);
         cover->innerSetImage(cached);
         return;
     }
@@ -75,6 +77,16 @@ void GameTile::loadCover(const std::string& file)
     const std::string path = std::string(ART_DIR) + file;
 
     tasks::io([flag, self, path, file]() {
+        // Пока задача ждала очереди, строку могли переиспользовать под другую
+        // игру: при быстрой прокрутке таких задач набирается больше, чем плиток
+        // на экране. Читать и разбирать файл ради выброшенного результата
+        // бессмысленно — проверяем до чтения, а не после.
+        if (!*flag || self->pendingArt != file)
+        {
+            perf::count(perf::Counter::CoverDropped);
+            return;
+        }
+
         std::ifstream in(path, std::ios::binary);
         if (!in.good())
         {
@@ -88,16 +100,26 @@ void GameTile::loadCover(const std::string& file)
             brls::Logger::warning("tile: обложка пуста — {}", path);
             return;
         }
-        if (!*flag)
-            return;  // плитку успели убрать, пока читали файл
+        if (!*flag || self->pendingArt != file)
+        {
+            perf::count(perf::Counter::CoverDropped);
+            return;
+        }
 
         // Разбор JPEG раньше шёл в UI-потоке и на каждой строке сетки съедал
         // несколько кадров. Здесь он в рабочем потоке, а в UI-поток уходят уже
         // готовые пиксели.
+        perf::Scope decode("");
         auto pixels = std::make_shared<asyncimage::Pixels>(
             asyncimage::decode(data.data(), data.size()));
+        perf::count(perf::Counter::CoverFromDisk);
+        perf::count(perf::Counter::CoverDecodeMs, (long long)decode.elapsedMs());
+
         if (!pixels->valid() || !*flag)
+        {
+            perf::count(perf::Counter::CoverDropped);
             return;
+        }
 
         brls::sync([flag, self, file, pixels]() {
             // Кладём в кэш в любом случае: даже если плитку успели занять под

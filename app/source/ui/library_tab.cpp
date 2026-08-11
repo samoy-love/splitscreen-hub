@@ -32,9 +32,7 @@ LibraryTab::LibraryTab()
     this->inflateFromXMLRes("xml/tabs/library.xml");
 
     model = attachGameGrid(grid, GameRow::columnsFor(CONTENT_WIDTH));
-    model->onSelect = [](const Game& game) {
-        brls::Application::pushActivity(new GameActivity(game));
-    };
+    model->onSelect = [](const Game& game) { GameActivity::open(game); };
     model->onFocus = [this](const std::string& nsuid) { focusedNsuid = nsuid; };
 
     rebuildSidebar();

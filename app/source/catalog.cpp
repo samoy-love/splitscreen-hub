@@ -6,6 +6,7 @@
 #include <chrono>
 #include <cstring>
 #include <fstream>
+#include "perf.hpp"
 
 using namespace brls::literals;
 
@@ -401,20 +402,16 @@ std::vector<Game> Catalog::queryBrief(const Filter& f) const
     }
     bindParams(st, params);
 
-    const auto started = std::chrono::steady_clock::now();
+    // Этот запрос идёт на каждое движение фильтра и определяет отзывчивость
+    // сетки, поэтому его время меряем всегда.
+    perf::Scope timer("выборка каталога");
+
     while (sqlite3_step(st) == SQLITE_ROW)
         out.push_back(readGameBrief(st));
     sqlite3_finalize(st);
 
-    // Этот запрос идёт на каждое движение фильтра и определяет отзывчивость
-    // сетки, поэтому его время меряем всегда.
-    brls::Logger::debug("catalog: queryBrief — {} игр за {} мс (игроков >= {}, жанр «{}», "
-                        "сортировка {})",
-                        out.size(),
-                        std::chrono::duration_cast<std::chrono::milliseconds>(
-                            std::chrono::steady_clock::now() - started)
-                            .count(),
-                        f.minPlayers, f.genre, (int)f.sort);
+    perf::count(perf::Counter::DbQueries);
+    perf::count(perf::Counter::DbMs, (long long)timer.elapsedMs());
     return out;
 }
 

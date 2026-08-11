@@ -12,12 +12,16 @@
 class GameActivity : public brls::Activity
 {
   public:
-    explicit GameActivity(const std::string& nsuid);
+    /// Карточка с уже дочитанными деталями: экран рисуется сразу целиком.
+    ///
+    /// Открывает её GameActivity::open() — она читает базу в рабочем потоке и
+    /// только потом создаёт активность. Собирать экран после открытия нельзя:
+    /// вместо появления карточки зритель видел, как она складывается из кусков.
+    GameActivity(Game full, std::vector<std::string> genreList,
+                 std::vector<std::string> shots, std::vector<std::string> videos);
 
-    /// Карточка из уже прочитанной строки каталога: название и обложка
-    /// показываются сразу, остальное догружается. Так экран открывается с
-    /// содержимым, а не пустым на время четырёх запросов.
-    explicit GameActivity(const Game& brief);
+    /// Читает детали и открывает карточку, когда всё готово.
+    static void open(const Game& brief);
 
     // «xml/» подставляет сама borealis, см. main.cpp
     CONTENT_FROM_XML_RES("activity/game.xml");
@@ -30,12 +34,12 @@ class GameActivity : public brls::Activity
     /// Карточку могли закрыть, пока грузилась обложка.
     std::shared_ptr<std::atomic_bool> alive = std::make_shared<std::atomic_bool>(true);
     std::string nsuid;
-    Game brief;   ///< то, что уже знал каталог: заголовок рисуем из него
     Game game;
 
-    /// Раскладывает по экрану то, что дочитал рабочий поток.
-    void applyDetails(Game full, std::vector<std::string> genreList,
-                      std::vector<std::string> shots, std::vector<std::string> videos);
+    /// Всё, что нужно экрану, — известно до его создания.
+    std::vector<std::string> genreList;
+    std::vector<std::string> shots;
+    std::vector<std::string> videos;
     std::string trailerUrl;
 
     // сколько скриншотов ещё грузится и сколько из них не удалось

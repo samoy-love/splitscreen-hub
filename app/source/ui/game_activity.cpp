@@ -7,6 +7,7 @@
 
 #include "app_state.hpp"
 #include "format.hpp"
+#include "perf.hpp"
 #include "ui/folder_picker.hpp"
 #include "ui/fonts.hpp"
 #include "net.hpp"
@@ -69,15 +70,46 @@ brls::Label* tag(const std::string& text)
 
 }  // namespace
 
-GameActivity::GameActivity(const std::string& nsuid)
-    : nsuid(nsuid)
+GameActivity::GameActivity(Game full, std::vector<std::string> genreList,
+                           std::vector<std::string> shots, std::vector<std::string> videos)
+    : nsuid(full.nsuid)
+    , genreList(std::move(genreList))
+    , shots(std::move(shots))
+    , videos(std::move(videos))
 {
+    game = std::move(full);
 }
 
-GameActivity::GameActivity(const Game& brief)
-    : nsuid(brief.nsuid)
-    , brief(brief)
+void GameActivity::open(const Game& brief)
 {
+    // Четыре запроса к базе — в рабочем потоке, и только потом открываем экран.
+    // Задержка в единицы миллисекунд незаметна, а вот сборка карточки по частям
+    // на глазах заметна очень.
+    const std::string nsuid = brief.nsuid;
+
+    tasks::io([nsuid]() {
+        perf::Scope timer("детали карточки");
+
+        AppState& state = AppState::get();
+        Game full       = state.catalog.byNsuid(nsuid);
+        state.decorate(full);
+
+        std::vector<std::string> genreList = state.catalog.genresOf(nsuid);
+        std::vector<std::string> shots     = state.catalog.screenshots(nsuid);
+        std::vector<std::string> videos    = state.catalog.videos(nsuid);
+
+        if (full.nsuid.empty())
+        {
+            brls::Logger::error("карточка: игра {} не найдена в каталоге", nsuid);
+            return;
+        }
+
+        brls::sync([full = std::move(full), genreList = std::move(genreList),
+                    shots = std::move(shots), videos = std::move(videos)]() mutable {
+            brls::Application::pushActivity(new GameActivity(
+                std::move(full), std::move(genreList), std::move(shots), std::move(videos)));
+        });
+    });
 }
 
 GameActivity::~GameActivity()
@@ -100,59 +132,17 @@ void GameActivity::onContentAvailable()
         const bool wasShown = !state.library.isHidden(nsuid);
         state.library.toggleHidden(nsuid);
         game.hidden = !wasShown;
-        brls::Application::notify(wasShown ? "hub/filter/hidden_done"_i18n : "hub/filter/shown_done"_i18n);
+        brls::Application::notify(wasShown ? "hub/filter/hidden_done"_i18n
+                                           : "hub/filter/shown_done"_i18n);
         refreshHeaderMarks();
         return true;
     });
 
-    // Название и обложка известны заранее — их каталог уже прочитал для плитки.
-    // Показываем сразу, чтобы экран открылся с содержимым, а не пустым: раньше
-    // всё, включая заголовок, ждало четырёх запросов к базе.
-    if (!brief.nsuid.empty())
-    {
-        game = brief;
-        fillHeader();
-    }
+    // Всё содержимое уже прочитано в GameActivity::open(), до создания экрана.
+    // Здесь только раскладка — она укладывается в один кадр, и карточка
+    // появляется целиком.
+    perf::Scope timer("сборка карточки");
 
-    // Остальное — описание, жанры, ссылки на медиа — это ещё четыре запроса, и
-    // выполнять их в кадре открытия значило отдать этот кадр целиком под них.
-    auto flag        = alive;
-    auto* self       = this;
-    std::string want = nsuid;
-
-    tasks::io([flag, self, want]() {
-        AppState& state = AppState::get();
-
-        Game full = state.catalog.byNsuid(want);
-        state.decorate(full);
-        std::vector<std::string> genres = state.catalog.genresOf(want);
-        std::vector<std::string> shots  = state.catalog.screenshots(want);
-        std::vector<std::string> videos = state.catalog.videos(want);
-
-        if (!*flag)
-            return;
-
-        brls::sync([flag, self, full = std::move(full), genres = std::move(genres),
-                    shots = std::move(shots), videos = std::move(videos)]() mutable {
-            if (!*flag)
-                return;
-            self->applyDetails(std::move(full), std::move(genres), std::move(shots),
-                               std::move(videos));
-        });
-    });
-}
-
-void GameActivity::applyDetails(Game full, std::vector<std::string> genreList,
-                                std::vector<std::string> shots,
-                                std::vector<std::string> videos)
-{
-    if (full.nsuid.empty())
-    {
-        brls::Logger::error("карточка: игра {} не найдена в каталоге", nsuid);
-        return;
-    }
-
-    game = std::move(full);
     fillHeader();
     fillStats();
     fillTags();
@@ -174,14 +164,6 @@ void GameActivity::applyDetails(Game full, std::vector<std::string> genreList,
     playersNote->setText(game.playersNote);
     playersNote->setVisibility(game.playersNote.empty() ? brls::Visibility::GONE
                                                         : brls::Visibility::VISIBLE);
-
-    // Фокус borealis выдаёт один раз — сразу после onContentAvailable, когда
-    // экран ещё пуст: полосу медиа наполняет рабочий поток. Без этого курсор
-    // оставался на плитке каталога, и нажатия уходили на предыдущий экран.
-    if (brls::View* first = shotsBox->getDefaultFocus())
-        brls::Application::giveFocus(first);
-    else if (brls::View* frame = scroller->getDefaultFocus())
-        brls::Application::giveFocus(frame);
 }
 
 void GameActivity::fillHeader()
