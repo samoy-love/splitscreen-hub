@@ -1,7 +1,12 @@
 #pragma once
 
+#include <condition_variable>
+#include <mutex>
 #include <string>
+#include <unordered_map>
 #include <vector>
+
+#include "catalog_query.hpp"
 
 struct Game
 {
@@ -32,22 +37,12 @@ struct Game
     bool hidden = false;
 };
 
-struct Filter
-{
-    int minPlayers = 2;
-    std::string genre;       // пусто — любой
-    bool onlyInstalled = false;
-    bool onlyRussian = false;
-    std::string search;      // пусто — без поиска
-    /// Переиздания аркад: 474 игры, 13% каталога. По умолчанию скрыты, иначе
-    /// половина выдачи — «Arcade Archives ...».
-    bool showRetro = false;
-    /// Показывать спрятанные вручную. Сами игры хранятся в Library.
-    bool showHidden = false;
-    int sort = 0;            // индекс в Catalog::sortNames()
-};
 
-/// Каталог игр из romfs. Держит открытым один SQLite-коннект на всё время работы.
+/// Каталог игр из romfs.
+///
+/// Данные лежат в двух файлах, а не в базе: catalog.bin читается целиком при
+/// запуске (всё, что показывает сетка, — 0.45 МБ), details.bin отдаёт по записи
+/// на игру при открытии карточки. Почему не SQLite — в make_ship_data.py.
 class Catalog
 {
   public:
@@ -72,46 +67,83 @@ class Catalog
     /// инициализировался бы раньше и остался бы на языке ключей.
     static std::vector<std::string> sortNames();
 
+    /// Подпись жанра на языке интерфейса.
+    ///
+    /// В данных жанры хранятся русскими строками — они же служат значением
+    /// фильтра, и менять их нельзя. Но при английском интерфейсе показывать
+    /// «Экшен» в чипе, в списке и в карточке неправильно, поэтому подпись
+    /// берётся из i18n по слагу, а само значение остаётся прежним.
+    static std::string genreLabel(const std::string& value);
+
     ~Catalog();
 
-    /// Возвращает false, если базу открыть не удалось.
-    bool open(const std::string& path);
+    /// Проверяет, что файлы каталога на месте. directory — с завершающим «/».
+    bool open(const std::string& directory);
 
-    /// Причина неудачи последнего open(): код sqlite и его текст. Ошибка
-    /// возникает до появления интерфейса, поэтому её некуда показать — её
-    /// забирает журнал загрузки.
+    /// Причина неудачи последнего open(). Ошибка возникает до появления
+    /// интерфейса, поэтому её некуда показать — её забирает журнал загрузки.
     std::string lastError;
 
-  private:
-    int countGames();
-    bool openInMemory(const std::string& path);
+    /// Читает catalog.bin в память. Зовётся один раз при старте, в рабочем
+    /// потоке: файл небольшой, но лежит в romfs.
+    void loadBriefs();
 
-  public:
-
-    /// Выборка для сетки: только то, что видно на плитке. Без описаний,
-    /// которые при 3489 играх дают лишние мегабайты на каждый фильтр.
+    /// Выборка для сетки: только то, что видно на плитке. Ждёт готовности
+    /// каталога в памяти, поэтому зовётся из рабочего потока.
     std::vector<Game> queryBrief(const Filter& filter) const;
-    int count(const Filter& filter) const;
+
+    /// Все жанры каталога по алфавиту. Пустой список — каталог ещё грузится.
+    std::vector<std::string> genreNames() const;
 
     Game byNsuid(const std::string& nsuid) const;
-    std::vector<std::string> genres() const;
-    /// Жанры конкретной игры — для чипов в карточке.
+    /// Жанры конкретной игры — для строки в карточке.
     std::vector<std::string> genresOf(const std::string& nsuid) const;
     std::vector<std::string> screenshots(const std::string& nsuid) const;
     std::vector<std::string> videos(const std::string& nsuid) const;
 
   private:
-    struct sqlite3* db = nullptr;
-    Language lang      = Language::English;
+    Language lang = Language::English;
 
-    /// Список полей выборки. Зависит от языка: русский подмешивает перевод
-    /// через coalesce, чтобы игры без перевода показывали оригинал.
-    std::string selectFields() const;
+    std::string catalogPath;
+    std::string detailsPath;
 
-    /// Собирает условие WHERE. Значения не подставляются в текст, а
-    /// складываются в params для последующего bindParams().
-    std::string buildWhere(const Filter& filter, std::vector<std::string>& params) const;
-    static void bindParams(struct sqlite3_stmt* st, const std::vector<std::string>& params);
-    const char* orderBy(const Filter& filter) const;
-    std::vector<std::string> media(const std::string& nsuid, const char* kind) const;
+    /// Всё, что показывает сетка: 3489 записей, около мегабайта вместе с
+    /// накладными расходами std::string.
+    std::vector<catalogq::Brief> briefs;
+    /// nsuid -> номер в briefs. Карточка открывается по нему.
+    std::unordered_map<std::string, size_t> byId;
+    /// Все жанры каталога, по одному разу. Brief::genreIds — индексы в нём.
+    std::vector<std::string> allGenres;
+    /// Общий словарь для распаковки записей карточек.
+    std::vector<unsigned char> dict;
+
+    /// Готовность каталога в памяти. Первый запрос из интерфейса приходит
+    /// раньше, чем чтение закончится, и должен его дождаться.
+    mutable std::mutex briefsMutex;
+    mutable std::condition_variable briefsReady;
+    bool briefsLoaded = false;
+
+    /// Распакованная запись карточки.
+    struct Details
+    {
+        std::string nsuid;
+        std::string publisher;
+        std::string languages;
+        std::string background;
+        std::string playersNote;
+        std::string headline;
+        std::string description;
+        std::vector<std::string> screenshots;
+        std::vector<std::string> videos;
+        bool hasOnline  = false;
+        bool noTabletop = false;
+        bool hasDemo    = false;
+    };
+
+    /// Последняя прочитанная запись. Карточка спрашивает одну и ту же игру
+    /// четырьмя вызовами подряд, и разворачивать её четырежды незачем.
+    mutable std::mutex detailsMutex;
+    mutable Details cached;
+
+    const Details* detailsFor(const std::string& nsuid) const;
 };

@@ -23,29 +23,6 @@ add_subdirectory(${BOREALIS_LIBRARY} borealis)
 find_package(Threads REQUIRED)
 list(APPEND APP_PLATFORM_LIB ${CMAKE_THREAD_LIBS_INIT})
 
-# SQLite собирается из amalgamation: порта switch-sqlite3 в devkitPro нет,
-# а один .c подключается проще, чем внешняя зависимость.
-set(SQLITE_SRC lib/sqlite/sqlite3.c)
-if (PLATFORM_SWITCH)
-    list(APPEND SQLITE_SRC lib/sqlite/nx_compat.c)
-endif ()
-add_library(sqlite3 STATIC ${SQLITE_SRC})
-target_include_directories(sqlite3 PUBLIC lib/sqlite)
-target_compile_definitions(sqlite3 PRIVATE
-    SQLITE_ENABLE_FTS5=1
-    SQLITE_OMIT_LOAD_EXTENSION=1
-    SQLITE_THREADSAFE=1
-    SQLITE_DEFAULT_MEMSTATUS=0
-    SQLITE_OMIT_DEPRECATED=1
-    # в libnx нет sys/mman.h, а база лежит в romfs только на чтение —
-    # ни mmap, ни журнал WAL нам не нужны
-    SQLITE_MAX_MMAP_SIZE=0
-    SQLITE_OMIT_WAL=1
-    # запасной путь: если romfs не даёт нормально читать файл, база целиком
-    # поднимается в память через sqlite3_deserialize
-    SQLITE_ENABLE_DESERIALIZE=1
-)
-
 file(GLOB_RECURSE MAIN_SRC source/*.cpp)
 list(APPEND APP_PLATFORM_INCLUDE ${CMAKE_CURRENT_SOURCE_DIR}/source)
 
@@ -57,7 +34,9 @@ program_target(${PROJECT_NAME} "${MAIN_SRC}")
 set_target_properties(${PROJECT_NAME} PROPERTIES CXX_STANDARD 17)
 
 target_include_directories(${PROJECT_NAME} PRIVATE ${APP_PLATFORM_INCLUDE})
-target_link_libraries(${PROJECT_NAME} PRIVATE borealis sqlite3 ${APP_PLATFORM_LIB})
+# zlib: записи карточек в details.bin сжаты сырым deflate с общим словарём.
+# Лежит в portlibs devkitPro, отдельной сборки не требует.
+target_link_libraries(${PROJECT_NAME} PRIVATE borealis z ${APP_PLATFORM_LIB})
 
 if (PLATFORM_SWITCH)
     # скриншоты качаются по сети: обложки лежат в romfs, а 20 тысяч скриншотов

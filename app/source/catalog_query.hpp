@@ -1,0 +1,93 @@
+#pragma once
+
+#include <string>
+#include <vector>
+
+struct Filter
+{
+    int minPlayers = 2;
+    std::string genre;       // пусто — любой
+    bool onlyInstalled = false;
+    bool onlyRussian = false;
+    std::string search;      // пусто — без поиска
+    /// Переиздания аркад: 474 игры, 13% каталога. По умолчанию скрыты, иначе
+    /// половина выдачи — «Arcade Archives ...».
+    bool showRetro = false;
+    /// Показывать спрятанные вручную. Сами игры хранятся в Library.
+    bool showHidden = false;
+    /// Только те, что названы хотя бы в одной подборке «лучших couch co-op».
+    ///
+    /// Каталог собран из всего, что помечено в eShop как игра на одном экране,
+    /// и штамповка вроде десятка «Dirt Racing Bundle» подряд попадает туда
+    /// наравне с остальным. Упоминание в независимой подборке — единственный
+    /// внешний признак качества, который у нас есть.
+    bool onlyNotable = false;
+    int sort = 0;            // индекс в Catalog::sortNames()
+};
+
+/// Отбор и порядок игр — без borealis, без файлов, без базы.
+///
+/// Вынесено из Catalog отдельным модулем по двум причинам. Во-первых, это
+/// главная логика приложения: каждое движение фильтра проходит здесь, и
+/// проверять её надо тестами, а не запуском на консоли. Во-вторых, чистая
+/// функция над вектором структур не тянет за собой ни borealis, ни romfs, и
+/// собирается обычным g++ вместе с тестами.
+namespace catalogq
+{
+
+/// Одна игра в том объёме, в каком её показывает сетка.
+struct Brief
+{
+    std::string nsuid;
+    std::string title;
+    /// Ключ порядка: приведён к нижнему регистру, без ведущих «the/a/an» и «#».
+    std::string sortTitle;
+    /// Название в нижнем регистре целиком — по нему ищут.
+    ///
+    /// Не sortTitle: из него вырезаны артикли, и запрос «The Jackbox» не
+    /// находил ничего, а «The Battle of Polytopia» лежит там как
+    /// «battle of polytopia».
+    std::string searchTitle;
+    std::string titleId;
+    std::string boxArt;
+    std::vector<int> genreIds;
+
+    int minPlayers = 0;
+    int maxPlayers = 0;
+    int mentions   = 0;
+    int bestPos    = 0;
+    int year       = 0;
+    /// -1 — размер неизвестен. Именно -1, а не 0: при сортировке по размеру
+    /// такие игры уходят в конец, а нулевые встали бы в начало.
+    long long romSize = -1;
+
+    bool hasRussian = false;
+    bool isRetro    = false;
+
+    /// Где лежит запись карточки в details.bin.
+    unsigned long long detailsOffset = 0;
+    unsigned detailsPacked           = 0;
+    unsigned detailsRaw              = 0;
+};
+
+/// Приводит название и поисковый запрос к одному виду.
+///
+/// Названия игр в каталоге английские, поэтому хватает ASCII: русский запрос не
+/// совпал бы ни с чем и при полноценном приведении регистра.
+std::string searchKey(const std::string& text);
+
+/// Номер жанра в списке или -1, если такого нет.
+int findGenre(const std::vector<std::string>& names, const std::string& genre);
+
+/// Отбирает подходящие игры и раскладывает их в нужном порядке.
+///
+/// genreId — результат findGenre(); -1 означает «любой жанр». Отдельным
+/// параметром, а не поиском по строке внутри, чтобы не искать её на каждую из
+/// трёх с половиной тысяч игр.
+///
+/// Возвращает указатели в исходный вектор: копировать записи ради порядка
+/// незачем.
+std::vector<const Brief*> select(const std::vector<Brief>& briefs, const Filter& filter,
+                                 int genreId);
+
+}  // namespace catalogq

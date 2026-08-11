@@ -6,8 +6,9 @@ build-ffmpeg/
 # артефакт сборки FFmpeg: получается из build_ffmpeg_slim.sh
 app/lib/ffmpeg-slim/
 
-# база, которая едет в romfs: делается из catalog.db через make_ship_db.py
-app/resources/catalog.db
+# данные, которые едут в romfs: делаются из catalog.db через make_ship_data.py
+app/resources/catalog.bin
+app/resources/details.bin
 app/resources/art/
 
 # кэш карточек eShop: тяжёлый и восстанавливается повторным прогоном
