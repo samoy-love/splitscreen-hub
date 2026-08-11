@@ -1,5 +1,7 @@
 #include "library.hpp"
 
+#include "tasks.hpp"
+
 #include <borealis.hpp>
 #include <borealis/extern/nlohmann/json.hpp>
 
@@ -11,7 +13,6 @@
 
 using json = nlohmann::json;
 
-const std::vector<std::string> Library::empty;
 
 namespace
 {
@@ -78,96 +79,143 @@ bool Library::load(const std::string& path)
     return true;
 }
 
-bool Library::save() const
+void Library::saveLater() const
 {
+    // Счётчик версии растёт здесь: через эту точку проходит любое изменение.
+    rev++;
+
     if (file.empty())
-        return false;
+        return;
 
-    json j;
-    j["favorites"] = favs;
-    j["hidden"]    = hidden;
-    j["language"]  = lang;
-    j["folders"]   = json::object();
-    for (const auto& [name, items] : folders)
-        j["folders"][name] = items;
+    // JSON собираем под мьютексом и в UI-потоке — это микросекунды на паре
+    // сотен строк. На карту его пишет рабочий поток: ofstream и два rename по
+    // SD в кадре — единственное, что у нас ещё оставалось от носителя в
+    // отрисовке, при том что всё остальное давно вынесено в tasks::io.
+    std::string payload;
+    std::string path;
+    {
+        std::lock_guard<std::mutex> lock(mutex);
 
-    ensureParentDir(file);
+        json j;
+        j["favorites"] = favs;
+        j["hidden"]    = hidden;
+        j["language"]  = lang;
+        j["folders"]   = json::object();
+        for (const auto& [name, items] : folders)
+            j["folders"][name] = items;
+
+        payload = j.dump(1);
+        path    = file;
+    }
+
+    tasks::io([path, payload]() { writeFile(path, payload); });
+}
+
+void Library::writeFile(const std::string& path, const std::string& json)
+{
+    ensureParentDir(path);
 
     // пишем во временный файл и заменяем им основной: обрыв питания посреди
     // записи не должен уносить всю библиотеку
-    const std::string tmp = file + ".tmp";
+    const std::string tmp = path + ".tmp";
     {
         std::ofstream out(tmp, std::ios::trunc);
         if (!out.good())
         {
             brls::Logger::error("Не удалось записать библиотеку в {}", tmp);
-            return false;
+            return;
         }
-        out << j.dump(1);
+        out << json;
         if (!out.good())
-            return false;
+        {
+            brls::Logger::error("Библиотека записалась не полностью");
+            return;
+        }
     }
 
     // На FAT переименование поверх существующего файла не работает, поэтому
     // просто снести старый и переименовать нельзя: между двумя вызовами файла
     // не существует вовсе, и выдернутая в этот момент консоль унесла бы всю
     // библиотеку. Держим предыдущую версию под .bak до успешной замены.
-    const std::string backup = file + ".bak";
+    const std::string backup = path + ".bak";
     std::remove(backup.c_str());
-    const bool hadFile = std::rename(file.c_str(), backup.c_str()) == 0;
+    const bool hadFile = std::rename(path.c_str(), backup.c_str()) == 0;
 
-    if (std::rename(tmp.c_str(), file.c_str()) != 0)
+    if (std::rename(tmp.c_str(), path.c_str()) != 0)
     {
         brls::Logger::error("Не удалось заменить файл библиотеки");
         if (hadFile)
-            std::rename(backup.c_str(), file.c_str());  // возвращаем как было
-        return false;
+            std::rename(backup.c_str(), path.c_str());  // возвращаем как было
+        return;
     }
 
     std::remove(backup.c_str());
-    return true;
 }
 
 bool Library::isFavorite(const std::string& nsuid) const
 {
+    std::lock_guard<std::mutex> lock(mutex);
     return std::find(favs.begin(), favs.end(), nsuid) != favs.end();
 }
 
 void Library::toggleFavorite(const std::string& nsuid)
 {
-    auto it = std::find(favs.begin(), favs.end(), nsuid);
-    if (it == favs.end())
-        favs.push_back(nsuid);
-    else
-        favs.erase(it);
-    save();
+    {
+        std::lock_guard<std::mutex> lock(mutex);
+        auto it = std::find(favs.begin(), favs.end(), nsuid);
+        if (it == favs.end())
+            favs.push_back(nsuid);
+        else
+            favs.erase(it);
+    }
+    saveLater();
 }
 
 void Library::setLanguage(const std::string& code)
 {
-    if (lang == code)
-        return;
-    lang = code;
-    save();
+    {
+        std::lock_guard<std::mutex> lock(mutex);
+        if (lang == code)
+            return;
+        lang = code;
+    }
+    saveLater();
 }
 
 bool Library::isHidden(const std::string& nsuid) const
 {
+    std::lock_guard<std::mutex> lock(mutex);
     return std::find(hidden.begin(), hidden.end(), nsuid) != hidden.end();
 }
 
 void Library::toggleHidden(const std::string& nsuid)
 {
-    auto it = std::find(hidden.begin(), hidden.end(), nsuid);
-    if (it == hidden.end())
-        hidden.push_back(nsuid);
-    else
-        hidden.erase(it);
-    save();
+    {
+        std::lock_guard<std::mutex> lock(mutex);
+        auto it = std::find(hidden.begin(), hidden.end(), nsuid);
+        if (it == hidden.end())
+            hidden.push_back(nsuid);
+        else
+            hidden.erase(it);
+    }
+    saveLater();
+}
+
+std::vector<std::string> Library::favorites() const
+{
+    std::lock_guard<std::mutex> lock(mutex);
+    return favs;
+}
+
+std::vector<std::string> Library::hiddenGames() const
+{
+    std::lock_guard<std::mutex> lock(mutex);
+    return hidden;
 }
 
 std::vector<std::string> Library::folderNames() const
 {
+    std::lock_guard<std::mutex> lock(mutex);
     std::vector<std::string> names;
     names.reserve(folders.size());
     for (const auto& [name, _] : folders)
@@ -175,59 +223,72 @@ std::vector<std::string> Library::folderNames() const
     return names;
 }
 
-const std::vector<std::string>& Library::folder(const std::string& name) const
+std::vector<std::string> Library::folder(const std::string& name) const
 {
+    std::lock_guard<std::mutex> lock(mutex);
     auto it = folders.find(name);
-    return it == folders.end() ? empty : it->second;
+    return it == folders.end() ? std::vector<std::string>() : it->second;
 }
 
 bool Library::inFolder(const std::string& name, const std::string& nsuid) const
 {
-    const auto& items = folder(name);
-    return std::find(items.begin(), items.end(), nsuid) != items.end();
+    std::lock_guard<std::mutex> lock(mutex);
+    auto it = folders.find(name);
+    if (it == folders.end())
+        return false;
+    return std::find(it->second.begin(), it->second.end(), nsuid) != it->second.end();
 }
 
 void Library::createFolder(const std::string& name)
 {
-    if (name.empty() || folders.count(name))
-        return;
-    folders[name];
-    save();
+    {
+        std::lock_guard<std::mutex> lock(mutex);
+        if (name.empty() || folders.count(name))
+            return;
+        folders[name];
+    }
+    saveLater();
 }
 
-void Library::renameFolder(const std::string& from, const std::string& to)
+bool Library::renameFolder(const std::string& from, const std::string& to)
 {
-    if (to.empty() || from == to || !folders.count(from) || folders.count(to))
-        return;
-    folders[to] = folders[from];
-    folders.erase(from);
-    save();
+    {
+        std::lock_guard<std::mutex> lock(mutex);
+        // Занятое имя — отказ, и знать об этом должен вызывающий: экран
+        // библиотеки иначе переключался на несуществующую папку и показывал
+        // пустой раздел, а фокус оставался на удалённой строке.
+        if (to.empty() || from == to || !folders.count(from) || folders.count(to))
+            return false;
+        folders[to] = folders[from];
+        folders.erase(from);
+    }
+    saveLater();
+    return true;
 }
 
 void Library::removeFolder(const std::string& name)
 {
-    if (folders.erase(name))
-        save();
+    {
+        std::lock_guard<std::mutex> lock(mutex);
+        if (!folders.erase(name))
+            return;
+    }
+    saveLater();
 }
 
 void Library::toggleInFolder(const std::string& name, const std::string& nsuid)
 {
-    auto it = folders.find(name);
-    if (it == folders.end())
-        return;
-    auto& items = it->second;
-    auto pos    = std::find(items.begin(), items.end(), nsuid);
-    if (pos == items.end())
-        items.push_back(nsuid);
-    else
-        items.erase(pos);
-    save();
-}
-
-size_t Library::size() const
-{
-    size_t n = favs.size();
-    for (const auto& [_, items] : folders)
-        n += items.size();
-    return n;
+    {
+        std::lock_guard<std::mutex> lock(mutex);
+        auto it = folders.find(name);
+        if (it == folders.end())
+            return;
+        auto& items = it->second;
+        auto pos    = std::find(items.begin(), items.end(), nsuid);
+        if (pos == items.end())
+            items.push_back(nsuid);
+        else
+            items.erase(pos);
+    }
+    saveLater();
 }

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <map>
+#include <mutex>
 #include <string>
 #include <vector>
 
@@ -13,18 +14,22 @@ class Library
 {
   public:
     bool load(const std::string& path);
-    bool save() const;
 
     bool isFavorite(const std::string& nsuid) const;
     void toggleFavorite(const std::string& nsuid);
-    const std::vector<std::string>& favorites() const { return favs; }
+
+    /// Копия, а не ссылка: список читают рабочие потоки, а меняет UI-поток.
+    /// Отдавать наружу ссылку на вектор, который в это время может расти, —
+    /// прямой путь к чтению освобождённой памяти.
+    std::vector<std::string> favorites() const;
 
     std::vector<std::string> folderNames() const;
-    const std::vector<std::string>& folder(const std::string& name) const;
+    std::vector<std::string> folder(const std::string& name) const;
     bool inFolder(const std::string& name, const std::string& nsuid) const;
 
     void createFolder(const std::string& name);
-    void renameFolder(const std::string& from, const std::string& to);
+    /// false, если имя занято или пусто — тогда на экране ничего менять нельзя.
+    bool renameFolder(const std::string& from, const std::string& to);
     void removeFolder(const std::string& name);
     void toggleInFolder(const std::string& name, const std::string& nsuid);
 
@@ -33,7 +38,7 @@ class Library
     /// удалить игру из каталога в romfs нельзя, он только для чтения.
     bool isHidden(const std::string& nsuid) const;
     void toggleHidden(const std::string& nsuid);
-    const std::vector<std::string>& hiddenGames() const { return hidden; }
+    std::vector<std::string> hiddenGames() const;
 
     /// Язык интерфейса и текстов о играх. Хранится здесь же: это единственный
     /// файл пользовательских данных, и заводить второй ради одной строки
@@ -41,15 +46,33 @@ class Library
     const std::string& language() const { return lang; }
     void setLanguage(const std::string& code);
 
-    /// Сколько всего записей — для подписи на вкладке.
-    size_t size() const;
+    /// Номер версии, растущий при каждом изменении.
+    ///
+    /// Вкладки создаются один раз при запуске и дальше только показываются и
+    /// прячутся: конструктор библиотеки отработал, когда избранного ещё не было,
+    /// и переключение на неё ничего не перечитывало. По этому счётчику экраны
+    /// замечают, что данные под ними изменились.
+    unsigned revision() const { return rev; }
 
   private:
+    /// Библиотеку читают рабочие потоки (decorate() на каждой игре выдачи), а
+    /// меняет UI-поток. Раньше это были голые векторы: std::find по favs шёл
+    /// одновременно с push_back в него же.
+    mutable std::mutex mutex;
+
+    /// Пишет файл на карту. Зовётся из рабочего потока, копию данных получает
+    /// готовой — под мьютексом её собирает saveLater().
+    static void writeFile(const std::string& path, const std::string& json);
+    /// Собирает JSON под мьютексом и отправляет запись в рабочий поток.
+    void saveLater() const;
+
     std::string file;
     std::vector<std::string> favs;
     std::map<std::string, std::vector<std::string>> folders;
     std::vector<std::string> hidden;
     std::string lang = "en";
+    /// mutable: save() помечена const, а она — единственная точка, через
+    /// которую проходят все изменения.
+    mutable unsigned rev = 0;
 
-    static const std::vector<std::string> empty;
 };

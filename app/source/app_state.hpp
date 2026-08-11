@@ -27,7 +27,6 @@ struct AppState
 };
 
 /// Человекочитаемый размер: 3.4 ГБ.
-std::string formatSize(long long bytes);
 
 /// Число языков вместо их списка — в плитку список не влезет.
 int languageCount(const std::string& languages);

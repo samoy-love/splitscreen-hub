@@ -29,10 +29,6 @@ int AppState::installedCount(const std::vector<Game>& games) const
     return n;
 }
 
-std::string formatSize(long long bytes)
-{
-    return fmtx::formatSize(bytes);
-}
 
 int languageCount(const std::string& languages)
 {
