@@ -24,7 +24,9 @@ void check(const char* what, bool ok, const std::string& detail = "")
 
 void expectSize(long long bytes, const std::string& expected)
 {
-    const std::string got = fmtx::formatSize(bytes);
+    // Единицы задаёт вызывающий — в приложении они приходят из i18n. В тесте
+    // подставляем русские: ожидания в проверках ниже написаны под них.
+    const std::string got = fmtx::formatSize(bytes, "ГБ", "МБ");
     check(("formatSize(" + std::to_string(bytes) + ")").c_str(), got == expected,
           "получили «" + got + "», ждали «" + expected + "»");
 }

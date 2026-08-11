@@ -19,6 +19,14 @@ import os
 import re
 import sys
 
+# Разметка и сообщения — на русском, а в выводе встречаются ещё и символы вроде
+# «★» из самих XML. Консоль Windows по умолчанию берёт cp866, и печать такой
+# строки роняет проверку с UnicodeEncodeError — то есть инструмент падает не
+# из-за разметки, а из-за собственного вывода.
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
 LIB = "lib/borealis/library/lib"
 
 # Класс -> файл, где он регистрирует свои атрибуты.
