@@ -33,13 +33,13 @@ namespace
 {
 
 // nacptool собирает romfs из содержимого build/resources, поэтому корень romfs —
-// это сама папка resources: внутри лежат catalog.db, art/, xml/ без лишнего
+// это сама папка resources: внутри лежат catalog.bin, art/, xml/ без лишнего
 // уровня. Путь с «resources/» внутри romfs не существует.
 #ifdef __SWITCH__
-const char* CATALOG_PATH = "romfs:/catalog.db";
+const char* DATA_DIR = "romfs:/";
 const char* LIBRARY_PATH = "sdmc:/switch/splitscreen-hub/library.json";
 #else
-const char* CATALOG_PATH = "resources/catalog.db";
+const char* DATA_DIR = "resources/";
 const char* LIBRARY_PATH = "library.json";
 #endif
 
@@ -136,12 +136,24 @@ void openBootLog()
             std::lock_guard<std::mutex> lock(logMutex);
             std::fprintf(bootLog, "[%7lld ms] %-7s %s\n", (long long)ms, name, message.c_str());
 
-            // Сбрасываем на карту только то, что важно увидеть после падения.
-            // Раньше сбрасывалась каждая строка, и при прокрутке сетки запись на
-            // SD шла из UI-потока по нескольку раз на ряд — интерфейс от этого
-            // заметно дёргался. Остальное дойдёт буфером или ближайшей ошибкой.
-            if (level <= brls::LogLevel::LOG_WARNING)
+            // Ошибки — сразу: после них процесса может уже не быть.
+            //
+            // Остальное — не чаще раза в секунду. Сбрасывать каждую строку
+            // нельзя: при прокрутке сетки запись на SD идёт из UI-потока по
+            // нескольку раз на ряд, и интерфейс от этого заметно дёргается. Но и
+            // не сбрасывать вовсе оказалось хуже: выход по HOME убивает процесс,
+            // недописанный буфер пропадает, и журнал обрывался на середине
+            // строки — ровно там, где начиналось интересное.
+            static auto lastFlush = std::chrono::steady_clock::now();
+            const auto stamp      = std::chrono::steady_clock::now();
+
+            if (level <= brls::LogLevel::LOG_WARNING
+                || std::chrono::duration_cast<std::chrono::milliseconds>(stamp - lastFlush).count()
+                    >= 1000)
+            {
+                lastFlush = stamp;
                 std::fflush(bootLog);
+            }
         });
 }
 
@@ -234,23 +246,23 @@ int main(int argc, char* argv[])
 
         step("open catalog");
         AppState& state = AppState::get();
-        if (!state.catalog.open(CATALOG_PATH))
+        if (!state.catalog.open(DATA_DIR))
         {
             if (bootLog)
             {
-                std::fprintf(bootLog, "FAILED: catalog (%s): %s\n", CATALOG_PATH,
+                std::fprintf(bootLog, "FAILED: catalog (%s): %s\n", DATA_DIR,
                              state.catalog.lastError.c_str());
 
-                // Отличаем «файла нет в romfs» от «файл есть, но sqlite его не
+                // Отличаем «файла нет в romfs» от «файл есть, но не читается»:
                 // берёт»: без этого причина неотличима, а перебирать варианты
                 // сборками по 77 МБ дорого.
                 struct stat st {};
-                if (::stat(CATALOG_PATH, &st) != 0)
+                if (::stat((std::string(DATA_DIR) + "catalog.bin").c_str(), &st) != 0)
                     std::fprintf(bootLog, "  stat: errno=%d %s\n", errno, std::strerror(errno));
                 else
                     std::fprintf(bootLog, "  stat: size=%lld\n", (long long)st.st_size);
 
-                std::FILE* probe = std::fopen(CATALOG_PATH, "rb");
+                std::FILE* probe = std::fopen((std::string(DATA_DIR) + "catalog.bin").c_str(), "rb");
                 if (!probe)
                 {
                     std::fprintf(bootLog, "  fopen: errno=%d %s\n", errno, std::strerror(errno));
@@ -285,6 +297,12 @@ int main(int argc, char* argv[])
         state.catalog.setLanguage(russian ? Catalog::Language::Russian
                                           : Catalog::Language::English);
 
+        // Каталог для сетки — в память, одним проходом и в рабочем потоке.
+        // Проход по romfs занимает те же секунды, что раньше занимал каждый
+        // фильтр по отдельности, но происходит один раз: первый запрос из
+        // интерфейса его дожидается, все последующие считаются в памяти.
+        tasks::io([]() { AppState::get().catalog.loadBriefs(); });
+
         step("installed titles");
         state.installedTitleIds = installed::titleIds();
 
@@ -313,12 +331,60 @@ int main(int argc, char* argv[])
         // Первый кадр — момент, когда приложение стало видно. До него всё
         // остальное для пользователя не существует.
         bool firstFrame = true;
+
+        auto previousFrame = std::chrono::steady_clock::now();
+        auto lastComplaint = previousFrame;  // когда в последний раз писали о рывке
+        auto lastSummary   = previousFrame;
+
         while (brls::Application::mainLoop())
         {
             if (firstFrame)
             {
                 firstFrame = false;
                 step("первый кадр");
+                previousFrame = lastComplaint = lastSummary = std::chrono::steady_clock::now();
+                continue;  // в первый кадр входит вся отрисовка стартового экрана
+            }
+
+            const auto now = std::chrono::steady_clock::now();
+            const double frameMs
+                = std::chrono::duration<double, std::milli>(now - previousFrame).count();
+            previousFrame = now;
+
+            perf::count(perf::Counter::Frames);
+
+            // Полсекунды и больше — это не рывок отрисовки, а возврат из сна
+            // или потеря фокуса апплетом: в журнале такой «кадр» был на 2785 мс
+            // и стоял ровно перед AppletFocusState_InFocus. В статистику рывков
+            // ему нельзя, она от одного такого случая перестаёт что-то значить.
+            if (frameMs >= 500.0)
+            {
+                brls::Logger::info("[кадр] пауза {:.1f} с — сон или потеря фокуса",
+                                   frameMs / 1000.0);
+            }
+            else if (frameMs >= perf::SLOW_FRAME_MS)
+            {
+                perf::count(perf::Counter::FramesSlow);
+
+                // Не чаще раза в полсекунды. Когда всё встало, рывок в каждом
+                // кадре, и запись о нём сама становится частью проблемы: строка
+                // идёт на SD из UI-потока.
+                if (std::chrono::duration_cast<std::chrono::milliseconds>(now - lastComplaint)
+                        .count()
+                    >= 500)
+                {
+                    lastComplaint = now;
+                    brls::Logger::info("[кадр] рывок: {:.0f} мс", frameMs);
+                }
+            }
+
+            // Сводку пишем и по ходу работы, а не только при выходе. Выход из
+            // приложения кнопкой HOME процесс просто убивает, и накопленное за
+            // сеанс до журнала не доходило — как раз то, ради чего он и ведётся.
+            if (std::chrono::duration_cast<std::chrono::seconds>(now - lastSummary).count() >= 30)
+            {
+                lastSummary = now;
+                perf::report();
             }
         }
 

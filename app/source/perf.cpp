@@ -16,8 +16,9 @@ long long nowUs()
         .count();
 }
 
-/// Атомарные: обложки считаются из трёх io-потоков одновременно.
-std::array<std::atomic<long long>, 8> counters {};
+/// Атомарные: обложки считаются из трёх io-потоков одновременно. Размер с
+/// запасом — счётчики добавляются чаще, чем про него вспоминают.
+std::array<std::atomic<long long>, 16> counters {};
 
 }  // namespace
 
@@ -39,7 +40,7 @@ double Scope::elapsedMs() const
 Scope::~Scope()
 {
     const double ms = elapsedMs();
-    if (ms >= threshold)
+    if (!what.empty() && ms >= threshold)
         brls::Logger::info("[время] {}: {:.1f} мс", what, ms);
 }
 
@@ -71,10 +72,27 @@ void report()
         brls::Logger::info("[итог] база: {} запросов, {} мс всего, {:.1f} мс в среднем", queries,
                            get(Counter::DbMs), double(get(Counter::DbMs)) / double(queries));
 
+    const long long reads = get(Counter::DbReads);
+    if (reads > 0)
+    {
+        const long long readMs = get(Counter::DbReadMs);
+        // Без доли от времени запросов: она врала. Крупнейшее чтение — разовая
+        // загрузка каталога в память — в счётчик запросов не попадает, и
+        // отношение уходило за сотню процентов, доходя до 357%.
+        brls::Logger::info("[итог] чтение базы с romfs: {} обращений, {} мс, {} КБ", reads,
+                           readMs, get(Counter::DbReadKb));
+    }
+
     const long long fetches = get(Counter::NetFetches);
     if (fetches > 0)
         brls::Logger::info("[итог] сеть: {} загрузок, {} мс всего, {:.0f} мс в среднем", fetches,
                            get(Counter::NetMs), double(get(Counter::NetMs)) / double(fetches));
+
+    const long long frames = get(Counter::Frames);
+    if (frames > 0)
+        brls::Logger::info("[итог] кадры: {} всего, из них с рывком {} ({:.1f}%)", frames,
+                           get(Counter::FramesSlow),
+                           double(get(Counter::FramesSlow)) * 100.0 / double(frames));
 }
 
 }  // namespace perf
