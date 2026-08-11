@@ -1,5 +1,4 @@
-<brls:Box
-    axis="column"
+<HubScreen
     width="auto"
     height="auto"
     backgroundColor="#000000">
@@ -110,4 +109,4 @@
 
     </brls:Box>
 
-</brls:Box>
+</HubScreen>

@@ -23,6 +23,7 @@
 #include "ui/cover_cache.hpp"
 #include "ui/fonts.hpp"
 #include "ui/gallery_activity.hpp"
+#include "ui/hub_screen.hpp"
 #include "ui/library_tab.hpp"
 #include "ui/main_tabs.hpp"
 #include "ui/wrap_box.hpp"
@@ -295,6 +296,7 @@ int main(int argc, char* argv[])
         // WrapBox регистрируем первым: он встречается внутри разметки вкладок,
         // и к моменту их разбора тег уже должен быть известен.
         brls::Application::registerXMLView("WrapBox", WrapBox::create);
+        brls::Application::registerXMLView("HubScreen", HubScreen::create);
         brls::Application::registerXMLView("MainTabs", MainTabs::create);
         brls::Application::registerXMLView("CatalogTab", CatalogTab::create);
         brls::Application::registerXMLView("LibraryTab", LibraryTab::create);

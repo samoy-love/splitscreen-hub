@@ -3,8 +3,8 @@
     headerHidden="true"
     footerHidden="false">
 
-    <brls:Box
-        axis="column"
+    <!-- HubScreen вместо Box: тот же контейнер, но с подъёмом при появлении. -->
+    <HubScreen
         width="auto"
         height="auto">
 
@@ -139,6 +139,6 @@
 
         </brls:ScrollingFrame>
 
-    </brls:Box>
+    </HubScreen>
 
 </brls:AppletFrame>

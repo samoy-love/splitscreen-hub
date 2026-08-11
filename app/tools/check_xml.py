@@ -61,6 +61,7 @@ OURS = {
     "CatalogTab": "Box",
     "LibraryTab": "Box",
     "CacheTab": "Box",
+    "HubScreen": "Box",
 }
 
 

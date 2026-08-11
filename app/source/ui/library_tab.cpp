@@ -5,6 +5,7 @@
 #include "ui/fonts.hpp"
 #include "ui/game_activity.hpp"
 #include "ui/game_tile.hpp"
+#include "ui/text_fit.hpp"
 
 using namespace brls::literals;
 
@@ -19,6 +20,11 @@ const char* HIDDEN = "hidden";
 /// Ширина под сетку: 1280 экрана минус поля по краям (space::SCREEN с обеих
 /// сторон), минус список папок с его правым полем.
 constexpr int CONTENT_WIDTH = 1280 - 30 - 30 - 200 - 20;
+
+/// Ширина списка папок минус боковые отступы кнопки (по 25 с каждой стороны).
+constexpr float SIDEBAR_TEXT_WIDTH = 200 - 50;
+/// Место под счётчик вида «  99» — он приписывается после имени.
+constexpr float TAIL_WIDTH = 30;
 }
 
 LibraryTab::LibraryTab()
@@ -67,7 +73,14 @@ void LibraryTab::rebuildSidebar()
 
     auto addEntry = [this](const std::string& name, const std::string& label, size_t count) {
         auto* button = new brls::Button();
-        button->setText(label + "  " + std::to_string(count));
+
+        // Имя папки задаёт пользователь, до 32 символов, а в списке на него
+        // приходится около 120 точек. Без обрезки Label переносит строку, и
+        // кнопки становятся разной высоты.
+        const std::string tail = "  " + std::to_string(count);
+        button->setText(textfit::ellipsize(label, SIDEBAR_TEXT_WIDTH - TAIL_WIDTH,
+                                           fonts::CAPTION)
+                        + tail);
         button->setFontSize(fonts::CAPTION);
         button->setMarginBottom(4);
         button->setStyle(selected == name ? &brls::BUTTONSTYLE_PRIMARY
