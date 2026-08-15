@@ -70,7 +70,10 @@ class Library
     std::vector<std::string> favs;
     std::map<std::string, std::vector<std::string>> folders;
     std::vector<std::string> hidden;
-    std::string lang = "en";
+    /// Пусто — язык не выбирали. Тогда его берут из языка консоли: русский
+    /// только если консоль русская, иначе английский. Как только человек
+    /// выбрал язык руками, здесь появляется код и система больше не спрашивается.
+    std::string lang;
     /// mutable: save() помечена const, а она — единственная точка, через
     /// которую проходят все изменения.
     mutable unsigned rev = 0;

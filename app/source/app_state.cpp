@@ -1,7 +1,5 @@
 #include "app_state.hpp"
 
-#include "format.hpp"
-
 AppState& AppState::get()
 {
     static AppState state;
@@ -27,10 +25,4 @@ int AppState::installedCount(const std::vector<Game>& games) const
     for (const Game& g : games)
         n += g.installed;
     return n;
-}
-
-
-int languageCount(const std::string& languages)
-{
-    return fmtx::languageCount(languages);
 }

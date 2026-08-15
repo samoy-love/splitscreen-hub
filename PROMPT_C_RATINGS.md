@@ -95,7 +95,7 @@ CREATE TABLE IF NOT EXISTS ratings (
 ## Проверка
 
 ```bash
-python build_db.py && python verify_db.py && python make_ship_db.py
+python build_db.py && python verify_db.py && python make_ship_data.py
 ```
 
 `build_db.py` напечатает, сколько записей подмешано из `ratings.db`.

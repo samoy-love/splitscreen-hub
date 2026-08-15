@@ -19,7 +19,7 @@ namespace
 // четверо, игра на шестерых тоже подходит.
 const std::vector<int> THRESHOLDS = { 2, 3, 4, 6, 8 };
 
-// индекс «сначала мои» в Catalog::SORT_NAMES
+// индекс «сначала установленные» в Catalog::SORT_NAMES
 constexpr int SORT_INSTALLED_FIRST = 5;
 
 /// Ширина под сетку: 1280 экрана минус боковые отступы catalog.xml по 30.
@@ -221,10 +221,10 @@ void CatalogTab::refreshToggleLabels()
         hiddenButton->setText(f.showHidden ? "hub/filter/hidden_on"_i18n
                                            : "hub/filter/hidden"_i18n);
 
-    // счётчик прямо на чипе — как в макете «Только мои · 12»
+    // счётчик прямо на чипе — как в макете «Только установленные · 12»
     if (installedButton)
         installedButton->setText(
-            brls::getStr("hub/filter/mine", AppState::get().installedTitleIds.size()));
+            brls::getStr("hub/filter/installed", AppState::get().installedTitleIds.size()));
 }
 
 void CatalogTab::promptSearch()
@@ -387,7 +387,7 @@ void CatalogTab::reload(bool keepScroll)
             games = std::move(kept);
         }
 
-        // «сначала мои» доупорядочивается здесь, а не в SQL: о том, что
+        // «сначала установленные» доупорядочивается здесь, а не в SQL: о том, что
         // установлено на консоли, знает только приложение
         if (filter.sort == SORT_INSTALLED_FIRST)
             std::stable_partition(games.begin(), games.end(),

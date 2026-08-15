@@ -24,6 +24,7 @@
 #include "ui/cover_cache.hpp"
 #include "ui/fonts.hpp"
 #include "ui/gallery_activity.hpp"
+#include "ui/gradient_label.hpp"
 #include "ui/hub_screen.hpp"
 #include "ui/library_tab.hpp"
 #include "ui/main_tabs.hpp"
@@ -42,6 +43,35 @@ const char* LIBRARY_PATH = "sdmc:/switch/splitscreen-hub/library.json";
 const char* DATA_DIR = "resources/";
 const char* LIBRARY_PATH = "library.json";
 #endif
+
+/// Русская ли консоль.
+///
+/// Спрашивается один раз при запуске и только пока пользователь не выбрал язык
+/// сам. Служба set на этот момент ещё не поднята borealis — она инициализируется
+/// внутри Application::init(), а язык нужен раньше. Счётчик ссылок в libnx
+/// делает повторный setInitialize() безвредным.
+bool systemIsRussian()
+{
+#ifdef __SWITCH__
+    if (R_FAILED(setInitialize()))
+        return false;
+
+    u64 code         = 0;
+    SetLanguage lang = SetLanguage_ENUS;
+    const bool ok    = R_SUCCEEDED(setGetSystemLanguage(&code))
+                    && R_SUCCEEDED(setMakeLanguage(code, &lang));
+    setExit();
+
+    return ok && lang == SetLanguage_RU;
+#else
+    // На настольной сборке консоли нет: смотрим переменные окружения, чтобы
+    // отладка на русской системе шла по той же ветке, что и на консоли.
+    for (const char* name : { "LC_ALL", "LC_MESSAGES", "LANG" })
+        if (const char* value = std::getenv(name))
+            return std::strncmp(value, "ru", 2) == 0;
+    return false;
+#endif
+}
 
 /// Журнал загрузки на SD-карте.
 ///
@@ -181,13 +211,19 @@ int main(int argc, char* argv[])
                 brls::Logger::setLogLevel(brls::LogLevel::LOG_DEBUG);
 
         // Язык берём из настроек пользователя, а не из локали консоли: тексты
-        // о играх переведены не полностью, и выбор должен оставаться за
-        // человеком. По умолчанию английский — он есть у всех игр.
+        // об играх переведены не полностью, и выбор должен оставаться за
+        // человеком.
+        //
+        // Пока выбора нет, спрашиваем консоль — но только чтобы включить
+        // русский на русской консоли. Всё остальное получает английский: он
+        // есть у всех игр, тогда как русский перевод неполон, и подсовывать
+        // его, скажем, французу вместо оригинала было бы хуже, чем ничего.
         //
         // Читаем файл настроек до brls::Application::init(): локаль borealis
         // задаётся один раз при запуске и позже не меняется.
         AppState::get().library.load(LIBRARY_PATH);
-        const bool russian = AppState::get().library.language() == "ru";
+        const std::string chosen = AppState::get().library.language();
+        const bool russian = chosen.empty() ? systemIsRussian() : chosen == "ru";
         brls::Platform::APP_LOCALE_DEFAULT = russian ? brls::LOCALE_RU : brls::LOCALE_EN_US;
 
         step("borealis init");
@@ -203,10 +239,8 @@ int main(int argc, char* argv[])
         // недоступен (она подключена подмодулем), поэтому ужимаем отступы и
         // сокращаем число подсказок — см. hidden=true в экранах.
         //
-        // Метрики надо задать до разбора разметки: значения @style/... в XML
-        // подставляются один раз при инфляции.
-        // Шкала кеглей — до разбора любой разметки: значения @style/... в XML
-        // подставляются один раз при инфляции.
+        // Метрики и шкалу кеглей задаём до разбора любой разметки: значения
+        // @style/... в XML подставляются один раз при инфляции.
         fonts::registerMetrics();
         space::registerMetrics();
 
@@ -254,8 +288,8 @@ int main(int argc, char* argv[])
                              state.catalog.lastError.c_str());
 
                 // Отличаем «файла нет в romfs» от «файл есть, но не читается»:
-                // берёт»: без этого причина неотличима, а перебирать варианты
-                // сборками по 77 МБ дорого.
+                // без этого причина неотличима, а перебирать варианты сборками
+                // по 77 МБ дорого.
                 struct stat st {};
                 if (::stat((std::string(DATA_DIR) + "catalog.bin").c_str(), &st) != 0)
                     std::fprintf(bootLog, "  stat: errno=%d %s\n", errno, std::strerror(errno));
@@ -315,6 +349,7 @@ int main(int argc, char* argv[])
         // WrapBox регистрируем первым: он встречается внутри разметки вкладок,
         // и к моменту их разбора тег уже должен быть известен.
         brls::Application::registerXMLView("WrapBox", WrapBox::create);
+        brls::Application::registerXMLView("GradientLabel", GradientLabel::create);
         brls::Application::registerXMLView("HubScreen", HubScreen::create);
         brls::Application::registerXMLView("MainTabs", MainTabs::create);
         brls::Application::registerXMLView("CatalogTab", CatalogTab::create);

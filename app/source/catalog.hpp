@@ -145,5 +145,11 @@ class Catalog
     mutable std::mutex detailsMutex;
     mutable Details cached;
 
-    const Details* detailsFor(const std::string& nsuid) const;
+    /// Копия, а не указатель на cached: запись читают три io-потока сразу
+    /// (карточка и список библиотеки), и указатель наружу оставался бы жить
+    /// после снятия detailsMutex — соседний поток успевал подменить cached
+    /// прямо во время копирования строк из него.
+    ///
+    /// false — записи нет или она не развернулась.
+    bool detailsFor(const std::string& nsuid, Details& out) const;
 };

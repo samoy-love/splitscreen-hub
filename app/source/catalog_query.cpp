@@ -56,14 +56,18 @@ std::vector<const Brief*> select(const std::vector<Brief>& briefs, const Filter&
 
     switch (filter.sort)
     {
-        case 0:  // популярные: сначала те, что названы в подборках
+        case 0:  // популярные: сначала те, о которых сошлись внешние источники
+            //
+            // Порядок задаёт готовый счёт согласия, а не число упоминаний.
+            // Считать упоминания напрямую нельзя: список из 75 игр называет
+            // всё подряд, пять статей одного сайта — это одно мнение, а тред на
+            // 900 комментариев дешевле треда на 60. Всё это сведено в score при
+            // сборке данных; здесь остаётся сравнить два числа.
             std::sort(hits.begin(), hits.end(), [&](const Brief* a, const Brief* b) {
                 if ((a->mentions == 0) != (b->mentions == 0))
                     return b->mentions == 0;
-                if (a->mentions != b->mentions)
-                    return a->mentions > b->mentions;
-                if (a->bestPos != b->bestPos)
-                    return a->bestPos < b->bestPos;
+                if (a->score != b->score)
+                    return a->score > b->score;
                 return byTitle(a, b);
             });
             break;
@@ -95,7 +99,7 @@ std::vector<const Brief*> select(const std::vector<Brief>& briefs, const Filter&
             });
             break;
 
-        default:  // название А→Я и «сначала мои» — тот доупорядочивается снаружи
+        default:  // название А→Я и «сначала установленные» — тот доупорядочивается снаружи
             std::sort(hits.begin(), hits.end(), byTitle);
             break;
     }

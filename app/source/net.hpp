@@ -29,17 +29,13 @@ void wakeWaiters();
 bool isReady();
 
 /// Путь в кэше для адреса. Имя файла — хэш адреса, сами адреса длинные.
-/// Расширение разделяет виды: по нему менеджер кэша считает картинки и
-/// ролики отдельно, не гадая по размеру файла.
 std::string cachePath(const std::string& url, const char* suffix = ".img");
 
-/// Сколько всего занято в кэше и чем именно.
+/// Сколько всего занято в кэше.
 struct CacheStats
 {
-    int files          = 0;
-    long long bytes    = 0;
-    int videoFiles     = 0;
-    long long videoBytes = 0;
+    int files            = 0;
+    long long bytes      = 0;
     long long limitBytes = 0;
 };
 
@@ -47,8 +43,8 @@ struct CacheStats
 /// потока, не из отрисовки.
 CacheStats cacheStats();
 
-/// Удаляет кэш целиком или только ролики. Возвращает число удалённых файлов.
-int clearCache(bool onlyVideos);
+/// Удаляет кэш целиком. Возвращает число удалённых файлов.
+int clearCache();
 
 /// Проверяет суммарный размер каталога кэша и удаляет самые старые файлы,
 /// если он превышен. Вызывать после ручной записи в кэш в обход fetch()

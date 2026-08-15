@@ -165,13 +165,15 @@ void testSorting()
         game("Mango", 4),
     };
     games[0].year = 2020; games[0].romSize = 100; games[0].mentions = 0;
-    games[1].year = 2018; games[1].romSize = -1;  games[1].mentions = 5; games[1].bestPos = 2;
-    games[2].year = 2022; games[2].romSize = 50;  games[2].mentions = 5; games[2].bestPos = 1;
+    games[1].year = 2018; games[1].romSize = -1;  games[1].mentions = 5; games[1].score = 300;
+    games[2].year = 2022; games[2].romSize = 50;  games[2].mentions = 2; games[2].score = 700;
 
     Filter f;
 
     f.sort = 0;
-    expect("популярные: упоминания вниз, при равенстве — место в подборке",
+    // Порядок задаёт счёт, а не число источников: у Mango источников меньше,
+    // чем у Apple, но согласия между ними больше.
+    expect("популярные: сначала по счёту согласия, безымянные — в конец",
            titles(catalogq::select(games, f, -1)), { "Mango", "Apple", "Zebra" });
 
     f.sort = 1;
@@ -191,7 +193,7 @@ void testSorting()
            { "Mango", "Zebra", "Apple" });
 
     f.sort = 5;
-    expect("«сначала мои» упорядочивается по алфавиту, остальное делает вкладка",
+    expect("«сначала установленные» упорядочивается по алфавиту, остальное делает вкладка",
            titles(catalogq::select(games, f, -1)), { "Apple", "Mango", "Zebra" });
 }
 
@@ -209,7 +211,7 @@ void testSortStability()
         b.year     = 2020;
         b.romSize  = 42;
         b.mentions = 1;
-        b.bestPos  = 1;
+        b.score    = 100;
     }
 
     Filter f;

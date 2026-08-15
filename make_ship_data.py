@@ -37,7 +37,7 @@ DETAILS = os.path.join(OUT_DIR, "details.bin")
 
 CATALOG_MAGIC = b"SSHC"
 DETAILS_MAGIC = b"SSHD"
-VERSION = 1
+VERSION = 2
 
 # 64 КБ словаря — предел zlib (окно 32 КБ учитывает только хвост, но больший
 # буфер не мешает). Больше брать некуда, меньше — заметно хуже сжатие.
@@ -110,7 +110,8 @@ def detail_record(row, tr, genres, shots, videos):
     (
         _nsuid, _title, _sort, _title_id, _min, _max, players_note, _art,
         background, headline, description, publisher, _year, languages,
-        _size, has_online, no_tabletop, has_demo, _has_ru, _mentions, _best, _retro,
+        _size, has_online, no_tabletop, has_demo, _has_ru, _mentions, _best, _score,
+        _retro,
     ) = row
 
     headline_ru, players_note_ru, description_ru = tr
@@ -200,7 +201,7 @@ def main():
     for row, (offset, size, raw) in zip(rows, offsets):
         (nsuid, title, sort_title, title_id, min_p, max_p, _note, art,
          _bg, _hl, _desc, _pub, year, _langs, rom_size, _online, _tab, _demo,
-         has_russian, mentions, best_pos, is_retro) = row
+         has_russian, mentions, _best_pos, score, is_retro) = row
 
         catalog.write(s16(nsuid))
         catalog.write(s16(title))
@@ -210,7 +211,9 @@ def main():
         catalog.write(u16(min_p or 0))
         catalog.write(u16(max_p or 0))
         catalog.write(u16(mentions or 0))
-        catalog.write(u16(best_pos or 0))
+        # Счёт согласия ×10. Раньше здесь лежало лучшее место в подборке —
+        # оно было вторым ключом сортировки, а теперь весь порядок задаёт счёт.
+        catalog.write(u16(min(score or 0, 65535)))
         catalog.write(u16(year or 0))
         # -1 — размер неизвестен: при сортировке такие уходят в конец, а ноль
         # встал бы в начало

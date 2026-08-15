@@ -70,6 +70,8 @@ OURS = {
     "LibraryTab": "Box",
     "CacheTab": "Box",
     "HubScreen": "Box",
+    # Наследует Label, а не Box: атрибуты text и fontSize приходят от него.
+    "GradientLabel": "Label",
 }
 
 

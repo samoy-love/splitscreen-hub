@@ -1,5 +1,6 @@
 #include "format.hpp"
 
+#include <cmath>
 #include <cstdio>
 
 namespace fmtx
@@ -63,6 +64,84 @@ bool parseHexColor(const std::string& hex, unsigned char& r, unsigned char& g, u
     g = static_cast<unsigned char>((value >> 8) & 0xFF);
     b = static_cast<unsigned char>(value & 0xFF);
     return true;
+}
+
+namespace
+{
+
+/// Канал из sRGB в линейный свет. Экран отдаёт не то, что записано в байте:
+/// зависимость примерно степенная, и без её обращения синий фон считался бы
+/// светлее, чем он есть.
+double linearize(unsigned char channel)
+{
+    const double v = channel / 255.0;
+    return v <= 0.04045 ? v / 12.92 : std::pow((v + 0.055) / 1.055, 2.4);
+}
+
+/// Цвет светлеет к белому на долю k, тон при этом сохраняется: все каналы
+/// идут к 255 пропорционально оставшемуся до него расстоянию.
+void lighten(unsigned char& r, unsigned char& g, unsigned char& b, double k)
+{
+    auto mix = [k](unsigned char c) {
+        return static_cast<unsigned char>(c + (255.0 - c) * k + 0.5);
+    };
+    r = mix(r);
+    g = mix(g);
+    b = mix(b);
+}
+
+/// То же к чёрному: каналы умножаются на общий множитель, поэтому их отношение,
+/// то есть тон, не меняется.
+void darken(unsigned char& r, unsigned char& g, unsigned char& b, double k)
+{
+    auto mix = [k](unsigned char c) { return static_cast<unsigned char>(c * (1.0 - k)); };
+    r = mix(r);
+    g = mix(g);
+    b = mix(b);
+}
+
+}  // namespace
+
+double relativeLuminance(unsigned char r, unsigned char g, unsigned char b)
+{
+    return 0.2126 * linearize(r) + 0.7152 * linearize(g) + 0.0722 * linearize(b);
+}
+
+double contrastRatio(double luminanceA, double luminanceB)
+{
+    const double lighter = luminanceA > luminanceB ? luminanceA : luminanceB;
+    const double darker  = luminanceA > luminanceB ? luminanceB : luminanceA;
+    return (lighter + 0.05) / (darker + 0.05);
+}
+
+bool readableOn(unsigned char& r, unsigned char& g, unsigned char& b)
+{
+    // Не чистые чёрный и белый: текст в интерфейсе нигде не берёт крайние
+    // значения, иначе он режет глаз на цветной заливке. Те же, что у меток на
+    // кнопках.
+    const double lightText = relativeLuminance(0xFF, 0xFF, 0xFF);
+    const double darkText  = relativeLuminance(0x16, 0x18, 0x1C);
+
+    double background     = relativeLuminance(r, g, b);
+    const bool preferDark = contrastRatio(background, darkText) > contrastRatio(background, lightText);
+    const double text     = preferDark ? darkText : lightText;
+
+    // Шаг мелкий: цвет должен отойти ровно настолько, чтобы текст стало видно,
+    // и ни оттенком больше. Сорока шагов по 4% хватает, чтобы дойти от любого
+    // цвета до края шкалы, — цикл всегда завершается.
+    for (int step = 0; step < 40 && contrastRatio(background, text) < MIN_CONTRAST; step++)
+    {
+        // Уводим фон от текста: под тёмным текстом фон светлеет, под светлым —
+        // темнеет. Тон при этом сохраняется, меняется только светлота.
+        if (preferDark)
+            lighten(r, g, b, 0.04);
+        else
+            darken(r, g, b, 0.04);
+
+        background = relativeLuminance(r, g, b);
+    }
+
+    return preferDark;
 }
 
 }  // namespace fmtx

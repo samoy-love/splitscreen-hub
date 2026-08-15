@@ -61,7 +61,7 @@ bool Library::load(const std::string& path)
         in >> j;
         favs   = j.value("favorites", std::vector<std::string>{});
         hidden = j.value("hidden", std::vector<std::string>{});
-        lang   = j.value("language", std::string("en"));
+        lang   = j.value("language", std::string());
         for (auto& [name, items] : j.value("folders", json::object()).items())
             folders[name] = items.get<std::vector<std::string>>();
     }

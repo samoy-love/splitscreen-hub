@@ -54,6 +54,43 @@ void expectColor(const std::string& hex, bool valid, int r = 0, int g = 0, int b
           std::to_string(gr) + "," + std::to_string(gg) + "," + std::to_string(gb));
 }
 
+/// Главное свойство readableOn: что бы ни пришло из eShop, подпись на шапке
+/// после неё читается. Проверяем именно контраст, а не конкретные числа, —
+/// иначе тест сломается от любой правки шага подгонки, ничего не сказав о сути.
+void expectReadable(const std::string& hex)
+{
+    unsigned char r = 0, g = 0, b = 0;
+    fmtx::parseHexColor(hex, r, g, b);
+
+    const unsigned char wasR = r, wasG = g, wasB = b;
+    const bool dark          = fmtx::readableOn(r, g, b);
+
+    const double text = dark ? fmtx::relativeLuminance(0x16, 0x18, 0x1C)
+                             : fmtx::relativeLuminance(0xFF, 0xFF, 0xFF);
+    const double ratio = fmtx::contrastRatio(fmtx::relativeLuminance(r, g, b), text);
+
+    char detail[160];
+    std::snprintf(detail, sizeof(detail), "%02x%02x%02x → %02x%02x%02x, текст %s, контраст %.2f",
+                  wasR, wasG, wasB, r, g, b, dark ? "тёмный" : "светлый", ratio);
+
+    check(("readableOn(\"" + hex + "\")").c_str(), ratio >= fmtx::MIN_CONTRAST, detail);
+}
+
+/// Цвета, на которых хватает выбора текста, обязаны остаться нетронутыми:
+/// фирменный цвет игры — это продолжение её обложки, и трогать его без нужды
+/// нельзя.
+void expectKept(const std::string& hex)
+{
+    unsigned char r = 0, g = 0, b = 0;
+    fmtx::parseHexColor(hex, r, g, b);
+
+    const unsigned char wasR = r, wasG = g, wasB = b;
+    fmtx::readableOn(r, g, b);
+
+    check(("readableOn(\"" + hex + "\") не трогает цвет").c_str(),
+          r == wasR && g == wasG && b == wasB);
+}
+
 }  // namespace
 
 int main()
@@ -83,6 +120,37 @@ int main()
     expectColor("0x3366", false);     // strtol проглатывал бы префикс
     expectColor("00 336f", false);    // и пробел тоже
     expectColor("gggggg", false);
+
+    std::printf("\nrelativeLuminance:\n");
+    check("чёрный — ноль", fmtx::relativeLuminance(0, 0, 0) == 0.0);
+    check("белый — единица", fmtx::relativeLuminance(255, 255, 255) == 1.0);
+    // Не среднее каналов: глаз втрое чувствительнее к зелёному, чем к красному,
+    // и вчетверо — чем к синему.
+    check("зелёный светлее красного",
+          fmtx::relativeLuminance(0, 255, 0) > fmtx::relativeLuminance(255, 0, 0));
+    check("красный светлее синего",
+          fmtx::relativeLuminance(255, 0, 0) > fmtx::relativeLuminance(0, 0, 255));
+    check("чёрное на белом — 21",
+          fmtx::contrastRatio(0.0, 1.0) > 20.9 && fmtx::contrastRatio(0.0, 1.0) < 21.1);
+    check("цвет сам с собой — 1", fmtx::contrastRatio(0.3, 0.3) == 1.0);
+
+    std::printf("\nreadableOn — текст читается на любом цвете:\n");
+    expectReadable("0f336f");  // тёмно-синий, обычный случай
+    expectReadable("ffffff");  // белая обложка — на ней и падал белый текст
+    expectReadable("000000");
+    expectReadable("f7e7c3");  // песочный, Animal Crossing
+    expectReadable("ff0000");  // средний по яркости: не годится ни тот, ни другой
+    expectReadable("e63946");
+    expectReadable("00c2ff");
+    expectReadable("7f7f7f");  // ровно середина шкалы — худший возможный случай
+    expectReadable("ffff00");  // самый светлый из насыщенных
+    expectReadable("0000ff");  // самый тёмный из насыщенных
+
+    std::printf("\nreadableOn — цвет остаётся прежним, где это возможно:\n");
+    expectKept("0f336f");
+    expectKept("ffffff");
+    expectKept("000000");
+    expectKept("f7e7c3");
 
     std::printf("\n%s\n", failures ? "ЕСТЬ ПРОВАЛЫ" : "все проверки прошли");
     return failures ? 1 : 0;

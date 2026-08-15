@@ -18,7 +18,7 @@ namespace
 
 const char CATALOG_MAGIC[4] = { 'S', 'S', 'H', 'C' };
 const char DETAILS_MAGIC[4] = { 'S', 'S', 'H', 'D' };
-constexpr unsigned FORMAT_VERSION = 1;
+constexpr unsigned FORMAT_VERSION = 2;
 
 /// Последовательное чтение из буфера в памяти.
 ///
@@ -145,9 +145,9 @@ std::vector<unsigned char> readWhole(const std::string& path)
 // служебное
 // --------------------------------------------------------------------------
 
-// «Популярные», а не «по обзорам»: упоминания есть у 85 игр из 3489, то есть
-// осмысленно упорядочены первые несколько десятков, а остальные идут по
-// алфавиту. Прежнее название обещало сортировку всего каталога по качеству.
+// «Популярные», а не «по обзорам»: внешние источники знают 188 игр из 3491, то
+// есть осмысленно упорядочена лишь верхушка, а остальные идут по алфавиту.
+// Прежнее название обещало сортировку всего каталога по качеству.
 std::vector<std::string> Catalog::sortNames()
 {
     return {
@@ -156,7 +156,7 @@ std::vector<std::string> Catalog::sortNames()
         "hub/sort/players"_i18n,
         "hub/sort/newest"_i18n,
         "hub/sort/compact"_i18n,
-        "hub/sort/mine"_i18n,
+        "hub/sort/installed"_i18n,
     };
 }
 
@@ -254,7 +254,7 @@ void Catalog::loadBriefs()
             b.minPlayers = (int)r.u16();
             b.maxPlayers = (int)r.u16();
             b.mentions   = (int)r.u16();
-            b.bestPos    = (int)r.u16();
+            b.score      = (int)r.u16();
             b.year       = (int)r.u16();
             b.romSize    = r.i64();
 
@@ -390,7 +390,7 @@ std::vector<std::string> Catalog::genreNames() const
 // карточка
 // --------------------------------------------------------------------------
 
-const Catalog::Details* Catalog::detailsFor(const std::string& nsuid) const
+bool Catalog::detailsFor(const std::string& nsuid, Details& out) const
 {
     std::lock_guard<std::mutex> lock(detailsMutex);
 
@@ -398,7 +398,10 @@ const Catalog::Details* Catalog::detailsFor(const std::string& nsuid) const
     // жанры, снимки, ролики. Читать и разворачивать запись четырежды незачем,
     // поэтому держим последнюю.
     if (!nsuid.empty() && cached.nsuid == nsuid)
-        return &cached;
+    {
+        out = cached;
+        return true;
+    }
 
     unsigned long long offset = 0;
     unsigned packed = 0, raw = 0;
@@ -406,7 +409,7 @@ const Catalog::Details* Catalog::detailsFor(const std::string& nsuid) const
         std::lock_guard<std::mutex> briefLock(briefsMutex);
         auto it = byId.find(nsuid);
         if (it == byId.end() || dict.empty())
-            return nullptr;
+            return false;
         offset = briefs[it->second].detailsOffset;
         packed = briefs[it->second].detailsPacked;
         raw    = briefs[it->second].detailsRaw;
@@ -415,14 +418,14 @@ const Catalog::Details* Catalog::detailsFor(const std::string& nsuid) const
     std::vector<unsigned char> blob(packed);
     std::FILE* file = std::fopen(detailsPath.c_str(), "rb");
     if (!file)
-        return nullptr;
+        return false;
     std::fseek(file, static_cast<long>(offset), SEEK_SET);
     const bool read = std::fread(blob.data(), 1, packed, file) == packed;
     std::fclose(file);
     if (!read)
     {
         brls::Logger::error("карточка: не прочиталась запись {} из {}", nsuid, detailsPath);
-        return nullptr;
+        return false;
     }
 
     // Сырой deflate с общим словарём: записи короткие, и поодиночке они жались
@@ -430,7 +433,7 @@ const Catalog::Details* Catalog::detailsFor(const std::string& nsuid) const
     std::vector<unsigned char> body(raw);
     z_stream z {};
     if (inflateInit2(&z, -15) != Z_OK)
-        return nullptr;
+        return false;
     inflateSetDictionary(&z, dict.data(), (uInt)dict.size());
 
     z.next_in   = blob.data();
@@ -444,7 +447,7 @@ const Catalog::Details* Catalog::detailsFor(const std::string& nsuid) const
     if (rc != Z_STREAM_END)
     {
         brls::Logger::error("карточка: запись {} не развернулась (zlib {})", nsuid, rc);
-        return nullptr;
+        return false;
     }
 
     Details d;
@@ -491,11 +494,12 @@ const Catalog::Details* Catalog::detailsFor(const std::string& nsuid) const
     if (!r.ok())
     {
         brls::Logger::error("карточка: запись {} оборвана", nsuid);
-        return nullptr;
+        return false;
     }
 
     cached = std::move(d);
-    return &cached;
+    out    = cached;
+    return true;
 }
 
 Game Catalog::byNsuid(const std::string& nsuid) const
@@ -522,17 +526,18 @@ Game Catalog::byNsuid(const std::string& nsuid) const
         g.topMentions            = b.mentions;
     }
 
-    if (const Details* d = detailsFor(nsuid))
+    Details d;
+    if (detailsFor(nsuid, d))
     {
-        g.playersNote     = d->playersNote;
-        g.backgroundColor = d->background;
-        g.headline        = d->headline;
-        g.description     = d->description;
-        g.publisher       = d->publisher;
-        g.languages       = d->languages;
-        g.hasOnline       = d->hasOnline;
-        g.noTabletop      = d->noTabletop;
-        g.hasDemo         = d->hasDemo;
+        g.playersNote     = std::move(d.playersNote);
+        g.backgroundColor = std::move(d.background);
+        g.headline        = std::move(d.headline);
+        g.description     = std::move(d.description);
+        g.publisher       = std::move(d.publisher);
+        g.languages       = std::move(d.languages);
+        g.hasOnline       = d.hasOnline;
+        g.noTabletop      = d.noTabletop;
+        g.hasDemo         = d.hasDemo;
     }
 
     perf::count(perf::Counter::DbQueries);
@@ -557,12 +562,12 @@ std::vector<std::string> Catalog::genresOf(const std::string& nsuid) const
 
 std::vector<std::string> Catalog::screenshots(const std::string& nsuid) const
 {
-    const Details* d = detailsFor(nsuid);
-    return d ? d->screenshots : std::vector<std::string>();
+    Details d;
+    return detailsFor(nsuid, d) ? std::move(d.screenshots) : std::vector<std::string>();
 }
 
 std::vector<std::string> Catalog::videos(const std::string& nsuid) const
 {
-    const Details* d = detailsFor(nsuid);
-    return d ? d->videos : std::vector<std::string>();
+    Details d;
+    return detailsFor(nsuid, d) ? std::move(d.videos) : std::vector<std::string>();
 }

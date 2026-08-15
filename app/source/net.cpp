@@ -274,14 +274,16 @@ void wakeWaiters()
 
 void shutdown()
 {
-    if (!ready)
-        return;
-    curl_global_cleanup();
+    // Сокеты закрываем и тогда, когда сеть так и не поднялась: curl мог не
+    // инициализироваться уже после успешного socketInitializeDefault(), и
+    // ранний выход по !ready оставлял бы наши сокеты открытыми.
+    if (ready.exchange(false))
+        curl_global_cleanup();
+
 #ifdef __SWITCH__
-    if (weOwnSockets)
+    if (weOwnSockets.exchange(false))
         socketExit();
 #endif
-    ready = false;
 }
 
 bool isReady()
@@ -318,17 +320,12 @@ CacheStats cacheStats()
 
         stats.files++;
         stats.bytes += st.st_size;
-        if (name.size() > 4 && name.substr(name.size() - 4) == ".mp4")
-        {
-            stats.videoFiles++;
-            stats.videoBytes += st.st_size;
-        }
     }
     ::closedir(dir);
     return stats;
 }
 
-int clearCache(bool onlyVideos)
+int clearCache()
 {
     DIR* dir = ::opendir(CACHE_DIR);
     if (!dir)
@@ -346,9 +343,6 @@ int clearCache(bool onlyVideos)
         if (name.size() > 5 && name.substr(name.size() - 5) == ".part")
             continue;
 
-        const bool isVideo = name.size() > 4 && name.substr(name.size() - 4) == ".mp4";
-        if (onlyVideos && !isVideo)
-            continue;
         victims.push_back(std::string(CACHE_DIR) + "/" + name);
     }
     ::closedir(dir);

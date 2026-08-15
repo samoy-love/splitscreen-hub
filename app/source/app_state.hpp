@@ -25,8 +25,3 @@ struct AppState
     /// Сколько из подходящих под фильтр игр уже стоит на консоли.
     int installedCount(const std::vector<Game>& games) const;
 };
-
-/// Человекочитаемый размер: 3.4 ГБ.
-
-/// Число языков вместо их списка — в плитку список не влезет.
-int languageCount(const std::string& languages);

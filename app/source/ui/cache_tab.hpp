@@ -36,16 +36,18 @@ class CacheTab : public brls::Box
     /// highlightLanguage().
     std::vector<std::pair<std::string, brls::Button*>> languageButtons;
     void highlightLanguage();
+    /// Язык, который приложение показывает сейчас: выбранный вручную, а если
+    /// выбора не было — тот, что достался от языка консоли.
+    static std::string effectiveLanguage();
 
     void refresh();
     /// Кнопки выбора языка. Смена требует перезапуска, о чём и говорим.
     void buildLanguage();
-    void confirmClear(bool onlyVideos);
+    void confirmClear();
 
     BRLS_BIND(brls::Box, languageBox, "settings/language");
     BRLS_BIND(brls::Label, summary, "cache/summary");
     BRLS_BIND(brls::Label, breakdown, "cache/breakdown");
     BRLS_BIND(brls::Label, hint, "cache/hint");
-    BRLS_BIND(brls::Button, clearVideosButton, "cache/clear_videos");
     BRLS_BIND(brls::Button, clearAllButton, "cache/clear_all");
 };

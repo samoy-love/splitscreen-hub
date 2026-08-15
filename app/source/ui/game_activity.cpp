@@ -28,11 +28,42 @@ const char* ART_DIR = "romfs:/art/";
 const char* ART_DIR = "resources/art/";
 #endif
 
-/// Фирменный цвет игры приходит из eShop строкой вида "0f336f".
-NVGcolor parseColor(const std::string& hex, NVGcolor fallback)
+/// Заливка шапки и цвет надписей на ней.
+///
+/// Цвет фирменный, из карточки eShop, и менять его не хочется: он и есть
+/// продолжение обложки. Но белый текст поверх него был вписан в разметку
+/// намертво, а у доброй трети каталога обложка светлая — на песочном фоне
+/// Animal Crossing название игры пропадало совсем.
+///
+/// Поэтому цвет остаётся тем же, а меняется текст: на светлой заливке он
+/// тёмный. Осветлять или затемнять сам фон приходится только для средних по
+/// яркости цветов, где ни белый, ни чёрный не дотягивают до нормы.
+struct HeaderColors
+{
+    NVGcolor background;
+    NVGcolor text;
+    NVGcolor dimText;  ///< для подзаголовка и списка папок — та же краска бледнее
+};
+
+HeaderColors headerColors(const std::string& hex)
 {
     unsigned char r = 0, g = 0, b = 0;
-    return fmtx::parseHexColor(hex, r, g, b) ? nvgRGB(r, g, b) : fallback;
+    if (!fmtx::parseHexColor(hex, r, g, b))
+    {
+        // Цвета у игры нет — берём фон темы, а с ним и её же цвет текста.
+        return { brls::Application::getTheme()["brls/background"],
+                 brls::Application::getTheme()["brls/text"],
+                 brls::Application::getTheme()["brls/text_disabled"] };
+    }
+
+    const bool dark = fmtx::readableOn(r, g, b);
+
+    // Подзаголовок бледнее заголовка, но не настолько, чтобы самому стать
+    // нечитаемым: 0xB0 — это 69% и запас контраста ниже нормы, поэтому 0xD0.
+    const NVGcolor text = dark ? nvgRGB(0x16, 0x18, 0x1C) : nvgRGB(0xFF, 0xFF, 0xFF);
+    const NVGcolor dim  = dark ? nvgRGBA(0x16, 0x18, 0x1C, 0xD0) : nvgRGBA(0xFF, 0xFF, 0xFF, 0xD0);
+
+    return { nvgRGB(r, g, b), text, dim };
 }
 
 /// Ширина карточки характеристики. Фиксированная, а не растянутая: с grow=1
@@ -215,8 +246,17 @@ void GameActivity::onContentAvailable()
 
 void GameActivity::fillHeader()
 {
-    header->setBackgroundColor(
-        parseColor(game.backgroundColor, brls::Application::getTheme()["brls/background"]));
+    // Цвет заливки и цвета надписей считаются вместе: второе зависит от
+    // первого, и разнести их значит однажды поменять фон, забыв про текст.
+    const HeaderColors colors = headerColors(game.backgroundColor);
+    header->setBackgroundColor(colors.background);
+
+    // Цвета из разметки (белый и белый с прозрачностью) перекрываются здесь:
+    // в XML их не выразить, они зависят от игры.
+    title->setTextColor(colors.text);
+    star->setTextColor(colors.text);
+    subtitle->setTextColor(colors.dimText);
+    folders->setTextColor(colors.dimText);
 
     // setImageFromRes читает файл и разбирает JPEG прямо здесь, в UI-потоке.
     // Для шапки это лишние кадры на каждом открытии карточки.
@@ -312,7 +352,7 @@ void GameActivity::fillStats()
     statsBox->addView(statTile("hub/game/size"_i18n,
                                size.empty() ? "hub/game/unknown"_i18n : size));
 
-    int langs = languageCount(game.languages);
+    int langs = fmtx::languageCount(game.languages);
     statsBox->addView(statTile("hub/game/languages"_i18n,
                                langs ? std::to_string(langs) : "hub/game/unknown"_i18n));
 

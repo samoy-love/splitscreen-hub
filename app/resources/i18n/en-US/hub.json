@@ -55,7 +55,7 @@
   "filter": {
     "players_caption": "Same screen",
     "at_least": "{}+",
-    "mine": "Mine · {}",
+    "installed": "Installed · {}",
     "russian": "Russian",
     "retro": "Retro",
     "retro_on": "Retro: shown",
@@ -66,8 +66,8 @@
     "search": "Search",
     "search_on": "Search: {}",
     "sort": "Sort",
-    "count": "{} · mine {}",
-    "empty": "Nothing found. Loosen a filter — for example, turn off «Mine».",
+    "count": "{} · installed {}",
+    "empty": "Nothing found. Loosen a filter — for example, turn off «Installed».",
     "search_title": "Search by title",
     "search_hint": "An empty line clears the filter",
     "point_at_game": "Point at a game first",
@@ -75,7 +75,7 @@
     "hidden_done": "Game hidden",
     "shown_done": "Game restored",
     "loading": "The catalogue is still loading",
-    "notable": "Curated"
+    "notable": "Recommended"
   },
   "game": {
     "players": "On one screen",
@@ -88,7 +88,7 @@
     "has_demo": "Demo available",
     "no_tabletop": "No tabletop mode",
     "in_lists": "in lists: {}",
-    "in_toplists": "in roundups: {}",
+    "in_toplists": "sources: {}",
     "shots_partial": "Some screenshots failed to load",
     "shots_offline": "Screenshots unavailable — no network",
     "no_trailer": "No trailer",
@@ -136,16 +136,14 @@
     "offline": "No network"
   },
   "cache": {
-    "subtitle": "Screenshots and trailers downloaded while browsing games",
+    "subtitle": "Screenshots downloaded while browsing games",
     "counting": "Counting…",
-    "clear_videos": "Delete trailers",
     "clear_all": "Clear the whole cache",
     "of": "{} of {}",
-    "breakdown": "Screenshots: {}, {}\nTrailers: {}, {}",
+    "breakdown": "Screenshots: {}, {}",
     "empty": "The cache is empty. It fills up as you open game pages.",
     "hint": "Cover art ships inside the app and is not counted here — the catalogue keeps working with an empty cache. Deleted files download again next time you open a game.",
-    "confirm_videos": "Delete all downloaded trailers?",
-    "confirm_all": "Delete the whole cache — screenshots and trailers?",
+    "confirm_all": "Delete the whole cache?",
     "clearing": "Deleting…",
     "cleared": "Files deleted: {}",
     "gb": "{:.1f} GB",
@@ -157,7 +155,7 @@
     "players": "More players",
     "newest": "Newest first",
     "compact": "Compact",
-    "mine": "Mine first"
+    "installed": "Installed first"
   },
   "unit": {
     "gb": "GB",

@@ -30,12 +30,8 @@ CacheTab::CacheTab()
     breakdown->setText("");
     hint->setText("");
 
-    clearVideosButton->registerClickAction([this](brls::View*) {
-        confirmClear(true);
-        return true;
-    });
     clearAllButton->registerClickAction([this](brls::View*) {
-        confirmClear(false);
+        confirmClear();
         return true;
     });
 
@@ -55,7 +51,10 @@ void CacheTab::buildLanguage()
     // Язык применяется при запуске: локаль borealis задаётся один раз, до
     // создания окна, и менять её на ходу она не умеет. Поэтому просим
     // перезапустить, а не делаем вид, что переключили.
-    const std::string current = AppState::get().library.language();
+    // Пока язык не выбран, подсвечиваем тот, что применён на самом деле:
+    // пустая настройка означает «как на консоли», и обе кнопки без заливки
+    // выглядели бы как поломка.
+    const std::string current = effectiveLanguage();
 
     auto add = [this, current](const char* code, const char* label) {
         auto* button = new brls::Button();
@@ -90,9 +89,17 @@ void CacheTab::buildLanguage()
     add("ru", "Русский");  // название языка не переводится
 }
 
+std::string CacheTab::effectiveLanguage()
+{
+    const std::string chosen = AppState::get().library.language();
+    if (!chosen.empty())
+        return chosen;
+    return brls::Application::getLocale() == brls::LOCALE_RU ? "ru" : "en";
+}
+
 void CacheTab::highlightLanguage()
 {
-    const std::string current = AppState::get().library.language();
+    const std::string current = effectiveLanguage();
     for (auto& [code, button] : languageButtons)
         button->setStyle(current == code ? &brls::BUTTONSTYLE_PRIMARY
                                          : &brls::BUTTONSTYLE_BORDERLESS);
@@ -116,9 +123,7 @@ void CacheTab::refresh()
             if (!*flag)
                 return;  // вкладку успели покинуть
 
-            const long long images = stats.bytes - stats.videoBytes;
-            const int imageFiles   = stats.files - stats.videoFiles;
-            const int percent      = stats.limitBytes > 0
+            const int percent = stats.limitBytes > 0
                      ? static_cast<int>(stats.bytes * 100 / stats.limitBytes)
                      : 0;
 
@@ -126,32 +131,28 @@ void CacheTab::refresh()
                                           megabytes(stats.limitBytes))
                              + "  (" + std::to_string(percent) + "%)");
 
-            breakdown->setText(brls::getStr("hub/cache/breakdown", imageFiles,
-                                            megabytes(images), stats.videoFiles,
-                                            megabytes(stats.videoBytes)));
+            breakdown->setText(brls::getStr("hub/cache/breakdown", stats.files,
+                                            megabytes(stats.bytes)));
 
             // Объясняем, что удаление безопасно: без этого чистить страшно.
             hint->setText(stats.files == 0 ? "hub/cache/empty"_i18n : "hub/cache/hint"_i18n);
 
-            clearVideosButton->setState(stats.videoFiles > 0 ? brls::ButtonState::ENABLED
-                                                             : brls::ButtonState::DISABLED);
             clearAllButton->setState(stats.files > 0 ? brls::ButtonState::ENABLED
                                                      : brls::ButtonState::DISABLED);
         });
     });
 }
 
-void CacheTab::confirmClear(bool onlyVideos)
+void CacheTab::confirmClear()
 {
-    auto* dialog = new brls::Dialog(onlyVideos ? "hub/cache/confirm_videos"_i18n
-                                               : "hub/cache/confirm_all"_i18n);
+    auto* dialog = new brls::Dialog("hub/cache/confirm_all"_i18n);
     dialog->addButton("hub/action/cancel"_i18n, []() {});
-    dialog->addButton("hub/action/delete"_i18n, [this, onlyVideos]() {
+    dialog->addButton("hub/action/delete"_i18n, [this]() {
         auto flag = alive;
         summary->setText("hub/cache/clearing"_i18n);
 
-        tasks::io([this, flag, onlyVideos]() {
-            const int removed = net::clearCache(onlyVideos);
+        tasks::io([this, flag]() {
+            const int removed = net::clearCache();
 
             brls::sync([this, flag, removed]() {
                 if (!*flag)

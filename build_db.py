@@ -41,8 +41,15 @@ CREATE TABLE games (
   -- LEFT JOIN она обходилась в секунду на консоли: соединение не давало
   -- воспользоваться индексом, и 3489 строк каждый раз уходили во временное
   -- B-дерево. Своя колонка в games делает порядок индексируемым.
+  -- Теперь это число независимых источников, назвавших игру, а не число
+  -- подборок: к редакционным спискам добавились треды, и считать их одной
+  -- шкалой с сайтами было бы нечестно — см. rank_toplists.py.
   mentions         INTEGER NOT NULL DEFAULT 0,
   best_pos         INTEGER NOT NULL DEFAULT 0,
+  -- Счёт согласия источников, умноженный на 10 (0..1000). По нему идёт
+  -- сортировка «популярные». Целое, а не дробь: значение уезжает в catalog.bin
+  -- как u16, и на консоли сравнивать целые дешевле.
+  score            INTEGER NOT NULL DEFAULT 0,
   -- Переиздание аркадного автомата или консоли прошлого века. Таких в каталоге
   -- 474 штуки — 13%, и почти все от одного издателя. Формально они подходят под
   -- «вдвоём на одном экране», но когда ищешь во что поиграть вечером, полтысячи
@@ -109,6 +116,14 @@ CREATE TABLE toplists (
   sources  TEXT NOT NULL
 );
 
+CREATE TABLE ranking (
+  nsuid     TEXT PRIMARY KEY,
+  score     REAL NOT NULL,   -- 0..100, среднее геометрическое двух каналов
+  editorial REAL NOT NULL,
+  community REAL NOT NULL,
+  families  INTEGER NOT NULL -- независимых источников
+);
+
 CREATE TABLE ratings (
   nsuid  TEXT PRIMARY KEY,
   rating INTEGER,   -- 0-100
@@ -124,11 +139,17 @@ SIDECARS = {
                         "nsuid, headline_ru, players_note_ru, description_ru"),
     "ratings.db": ("ratings", "nsuid, rating, votes, source"),
     "toplists.db": ("toplists", "nsuid, mentions, best_pos, sources"),
+    # Тот же файл, вторая таблица: рейтинг считается отдельным проходом
+    # (rank_toplists.py) уже поверх собранных подборок и тредов.
+    "toplists.db:ranking": ("ranking",
+                            "nsuid, score, editorial, community, families"),
 }
 
 
 def merge_sidecars(db):
-    for path, (table, columns) in SIDECARS.items():
+    for key, (table, columns) in SIDECARS.items():
+        # «файл:таблица» — когда из одного файла берём не одну таблицу
+        path = key.split(":")[0]
         if not os.path.exists(path):
             continue
         db.execute("ATTACH DATABASE ? AS side", (path,))
@@ -310,14 +331,20 @@ def main():
 
     merge_sidecars(db)
 
-    # Переносим упоминания в games — см. комментарий у колонок.
+    # Переносим рейтинг в games — см. комментарий у колонок.
+    #
+    # mentions берётся из ranking.families, а не из toplists.mentions: игру
+    # могли не назвать ни в одной редакционной подборке, но обсуждать в пяти
+    # тредах, и для фильтра «советуют» это ровно такой же довод.
     db.execute("""
         UPDATE games SET
-          mentions = coalesce((SELECT t.mentions FROM toplists t WHERE t.nsuid = games.nsuid), 0),
-          best_pos = coalesce((SELECT t.best_pos FROM toplists t WHERE t.nsuid = games.nsuid), 0)
+          mentions = coalesce((SELECT r.families FROM ranking r WHERE r.nsuid = games.nsuid), 0),
+          best_pos = coalesce((SELECT t.best_pos FROM toplists t WHERE t.nsuid = games.nsuid), 0),
+          score    = coalesce((SELECT cast(round(r.score * 10) AS INTEGER) FROM ranking r
+                               WHERE r.nsuid = games.nsuid), 0)
     """)
     db.execute("CREATE INDEX IF NOT EXISTS idx_top ON games("
-               "mentions = 0, mentions DESC, best_pos, sort_title)")
+               "mentions = 0, score DESC, sort_title)")
     db.commit()
     db.commit()
 

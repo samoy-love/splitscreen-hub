@@ -72,17 +72,6 @@ void report()
         brls::Logger::info("[итог] база: {} запросов, {} мс всего, {:.1f} мс в среднем", queries,
                            get(Counter::DbMs), double(get(Counter::DbMs)) / double(queries));
 
-    const long long reads = get(Counter::DbReads);
-    if (reads > 0)
-    {
-        const long long readMs = get(Counter::DbReadMs);
-        // Без доли от времени запросов: она врала. Крупнейшее чтение — разовая
-        // загрузка каталога в память — в счётчик запросов не попадает, и
-        // отношение уходило за сотню процентов, доходя до 357%.
-        brls::Logger::info("[итог] чтение базы с romfs: {} обращений, {} мс, {} КБ", reads,
-                           readMs, get(Counter::DbReadKb));
-    }
-
     const long long fetches = get(Counter::NetFetches);
     if (fetches > 0)
         brls::Logger::info("[итог] сеть: {} загрузок, {} мс всего, {:.0f} мс в среднем", fetches,
