@@ -104,8 +104,12 @@ elif command -v docker >/dev/null 2>&1; then
         apt-get update -qq && apt-get install -y -qq ninja-build make patch xz-utils curl >/dev/null
         bash app/tools/build_release.sh
     '
+    # Всё дерево, а не только build/ и lib/: контейнер пишет ещё в
+    # build-ffmpeg/ и подмодули, а любой файл root в рабочем каталоге
+    # раннера потом ломает post-шаги кеша — их hashFiles обходит дерево
+    # целиком и на нечитаемом падает.
     if command -v id >/dev/null 2>&1; then
-        docker run --rm -v "$ROOT:/work" -w /work "$IMAGE" chown -R "$(id -u):$(id -g)" app/build app/lib || true
+        docker run --rm -v "$ROOT:/work" -w /work "$IMAGE" chown -R "$(id -u):$(id -g)" . || true
     fi
 else
     echo "нет ни devkitPro, ни docker — собирать нечем" >&2
