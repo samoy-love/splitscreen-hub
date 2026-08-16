@@ -3,7 +3,13 @@
     "language": "Язык",
     "cache": "Кэш загрузок",
     "restart": "Язык сменится после перезапуска",
-    "update": "Обновления"
+    "update": "Обновления",
+    "about": "О приложении"
+  },
+  "about": {
+    "disclaimer": "SplitScreen Hub — независимый хоумбрю-проект. Не связан с Nintendo, не одобрен и не спонсируется ею. Nintendo Switch, Nintendo eShop и Joy-Con — товарные знаки Nintendo.",
+    "content": "Названия игр, обложки, описания и медиа принадлежат их издателям и показаны только для идентификации. Данные — из открытого каталога nintendo.com.",
+    "licenses": "Исходный код: MIT, github.com/tr0llex/splitscreen-hub. Собрано на borealis (Apache-2.0), FFmpeg (LGPL-2.1+), curl, mbedTLS, SDL2, libnx и других открытых библиотеках — см. docs/third-party-licenses.md."
   },
   "update": {
     "version": "Версия {}",

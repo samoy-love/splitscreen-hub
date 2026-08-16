@@ -257,6 +257,8 @@ int main(int argc, char* argv[])
 
         step("create window");
         brls::Application::createWindow("SplitScreen Hub");
+        // Шрифт — системный, из pl:u; в romfs своего нет (см. fonts.cpp).
+        fonts::useConsoleFont();
         brls::Application::setGlobalQuit(true);
 
         step("threads");

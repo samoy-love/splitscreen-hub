@@ -4,7 +4,6 @@ English · [Русский](README.ru.md)
 
 [![checks](https://github.com/tr0llex/splitscreen-hub/actions/workflows/checks.yml/badge.svg)](https://github.com/tr0llex/splitscreen-hub/actions/workflows/checks.yml)
 [![deploy](https://github.com/tr0llex/splitscreen-hub/actions/workflows/deploy.yml/badge.svg)](https://github.com/tr0llex/splitscreen-hub/actions/workflows/deploy.yml)
-[![release](https://img.shields.io/github/v/release/tr0llex/splitscreen-hub)](https://github.com/tr0llex/splitscreen-hub/releases/latest)
 [![prod](https://img.shields.io/website?url=https%3A%2F%2Fsamoy.love%2Fsplitscreen-hub%2FSplitScreenHub.nro.json&up_message=online&up_color=2ea043&down_message=offline&label=samoy.love%2Fsplitscreen-hub)](https://samoy.love/splitscreen-hub/SplitScreenHub.nro.json)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
@@ -16,7 +15,9 @@ custom folders, trailers and screenshots right in the game card.
 The app is C++17 on top of [borealis](https://github.com/xfangfang/borealis)
 (devkitPro). The data is collected by a set of Python scripts from the public
 nintendo.com APIs and lives in two binary files in romfs — the console needs
-neither a database nor a network connection to browse the catalog. MIT licensed.
+neither a database nor a network connection to browse the catalog. The code
+is MIT licensed; game covers and texts belong to their publishers and are not
+part of the repository (see [License](#license)).
 
 About 3,500 games; for every one the exact number of players on a single
 console is known — not "has multiplayer" but "1–4". Arcade re-releases
@@ -61,10 +62,12 @@ default and enabled with a separate filter.
 
 ## Install
 
-Download `SplitScreenHub.nro` from the
-[releases](https://github.com/tr0llex/splitscreen-hub/releases/latest) and put
-it into `/switch/` on the SD card. Launch it from the Homebrew Menu; in applet
-mode (over a running game) there is less memory, but the catalog works.
+Download [`SplitScreenHub.nro`](https://samoy.love/splitscreen-hub/SplitScreenHub.nro)
+(the [`.sha256`](https://samoy.love/splitscreen-hub/SplitScreenHub.nro.sha256)
+is next to it) and put it into `/switch/` on the SD card. The build is served
+from the project's own server only — GitHub Releases carry no binaries.
+Launch it from the Homebrew Menu; in applet mode (over a running game) there is
+less memory, but the catalog works.
 
 ## Updates and deployment
 
@@ -86,8 +89,16 @@ swaps it atomically (the previous build stays as `.prev` for instant rollback),
 publishes `.sha256` and the manifest, and verifies that the server serves
 exactly the checksum the runner computed. The target is described once in
 [`.deploy-kit/nro.env`](.deploy-kit/nro.env) and is used both by CI and by a
-local `dk deploy`. GitHub Releases are cut by hand for milestones; the server is
-what the app trusts.
+local `dk deploy`. The server is the only distribution channel.
+
+Catalog data (covers, `catalog.bin`, `details.bin`, `translations.db`) is not
+in git — it is publisher material. It travels as a separate bundle,
+[`splitscreen-hub-data.tar.gz`](https://samoy.love/splitscreen-hub/splitscreen-hub-data.tar.gz),
+published by hand after a pipeline run with `dk deploy splitscreen-hub-data`
+([`.deploy-kit/data.env`](.deploy-kit/data.env), packed by
+[`pack_data.sh`](app/tools/pack_data.sh)). `build_release.sh` downloads and
+checks it when the files are missing, so CI builds the same `.nro` as a
+developer machine.
 
 ## Repository layout
 
@@ -95,18 +106,20 @@ what the app trusts.
 app/                      the Switch application
   source/                 C++: catalog, library, network, player
     ui/                   borealis screens and widgets
-  resources/              romfs: xml layouts, i18n, font, icon;
-                          plus catalog.bin, details.bin, art/ produced by the pipeline (committed)
+  resources/              romfs: xml layouts, i18n, icon;
+                          catalog.bin, details.bin, art/ come from the pipeline (not in git)
   tests/                  tests of pure functions (no borealis, no console)
   tools/                  check_xml.py, run_tests.sh, build_ffmpeg_slim.sh,
-                          build_release.sh, make_icon.py
+                          build_release.sh, pack_data.sh, make_icon.py
   lib/borealis            UI library submodule
   lib/ffmpeg-slim/        trimmed FFmpeg, built locally (gitignored)
 pipeline/                 data collection: eShop → catalog.db → catalog.bin
   paths.py                shared paths; scripts run from any directory
   overrides.json          manual player-count corrections (committed)
-  translations.db         Russian game texts (committed)
-.deploy-kit/nro.env       the deploy target: how to build, where to publish
+  translations.db         Russian game texts (in the data bundle, not in git)
+docs/third-party-licenses.md  what the .nro is built from and under which terms
+.deploy-kit/nro.env       the .nro target: how to build, where to publish
+.deploy-kit/data.env      the catalog data bundle target
 .github/workflows/        checks on every push, deploy on push to master
 ```
 
@@ -269,8 +282,15 @@ points become 240 physical ones).
 
 Russian game texts live in `pipeline/translations.db` (table `translations`:
 `nsuid, headline_ru, players_note_ru, description_ru`). The file was machine
-translated once and is committed as is — there is no producing script; without
-it the catalog builds with English texts.
+translated once; there is no producing script. It is not in git (it is a
+derivative of publisher texts) and comes with the data bundle — without it the
+catalog builds with English texts.
+
+Everything this section produces is publisher material and stays out of git:
+`app/resources/art/`, `catalog.bin`, `details.bin`, `translations.db` are
+ignored and shipped as a bundle instead (see [Updates and
+deployment](#updates-and-deployment)). Without a pipeline run,
+`build_release.sh` fetches the current bundle from the server.
 
 ### Application
 
@@ -304,6 +324,12 @@ cmake --build build --target SplitScreenHub.nro
 ```
 
 The output is `app/build/SplitScreenHub.nro` (~58 MB, mostly covers in romfs).
+
+There is no font in romfs: text is drawn with the console's own system font,
+which the app takes from the console at runtime via `pl:u`
+([`fonts.cpp`](app/source/ui/fonts.cpp)). borealis loads it but does not make
+it the default, so the app re-points the default itself; on the desktop build
+borealis uses its bundled font.
 
 Why a home-grown player rather than `libmpv` as in NXMP and SwitchWave: there is
 no `switch-mpv` package in pacman, and building mpv with the patched FFmpeg for
@@ -407,5 +433,21 @@ Settings: X recalculates the cache size.
 
 ## License
 
-MIT. Catalog data is public eShop information; covers and screenshots belong to
-their publishers and are not in the repository.
+The source code is [MIT](LICENSE). Third-party libraries in the built `.nro`
+(borealis, FFmpeg under LGPL-2.1+, curl, Mbed TLS, SDL2, libnx and others) keep
+their own licenses — the full list and how the LGPL terms are met are in
+[docs/third-party-licenses.md](docs/third-party-licenses.md).
+
+Game titles, cover art, descriptions, screenshots, trailers and their Russian
+translations belong to their respective publishers and are used solely to
+identify games. They are **not part of the licensed work and are not stored in
+this repository**; the pipeline collects only facts about products (player
+count, genre, size, year, publisher) from the public nintendo.com APIs. If you
+are a rights holder and want a game's materials removed from the app, open an
+issue or e-mail the address on the author's GitHub profile — it will be dropped
+in the next build.
+
+SplitScreen Hub is an independent homebrew project. It is not affiliated with,
+endorsed or sponsored by Nintendo. Nintendo Switch, Nintendo eShop and Joy-Con
+are trademarks of Nintendo. The console's system font is used at runtime and is
+not distributed with the app.

@@ -4,7 +4,6 @@
 
 [![checks](https://github.com/tr0llex/splitscreen-hub/actions/workflows/checks.yml/badge.svg)](https://github.com/tr0llex/splitscreen-hub/actions/workflows/checks.yml)
 [![deploy](https://github.com/tr0llex/splitscreen-hub/actions/workflows/deploy.yml/badge.svg)](https://github.com/tr0llex/splitscreen-hub/actions/workflows/deploy.yml)
-[![release](https://img.shields.io/github/v/release/tr0llex/splitscreen-hub)](https://github.com/tr0llex/splitscreen-hub/releases/latest)
 [![prod](https://img.shields.io/website?url=https%3A%2F%2Fsamoy.love%2Fsplitscreen-hub%2FSplitScreenHub.nro.json&up_message=online&up_color=2ea043&down_message=offline&label=samoy.love%2Fsplitscreen-hub)](https://samoy.love/splitscreen-hub/SplitScreenHub.nro.json)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
@@ -16,7 +15,8 @@ Homebrew-каталог игр Nintendo Switch с мультиплеером **�
 Приложение — C++17 поверх [borealis](https://github.com/xfangfang/borealis)
 (devkitPro). Данные собираются набором Python-скриптов из публичных API
 nintendo.com и живут в двух двоичных файлах в romfs — на консоли нет ни базы,
-ни сети для работы каталога. Лицензия MIT.
+ни сети для работы каталога. Код — под MIT; обложки и тексты игр принадлежат
+издателям и в репозиторий не входят (см. [Лицензия](#лицензия)).
 
 В каталоге около 3500 игр; у каждой известно точное число игроков на одной
 консоли — не «мультиплеер есть», а «1–4». Переиздания аркадных автоматов
@@ -61,7 +61,10 @@ nintendo.com и живут в двух двоичных файлах в romfs �
 
 ## Установка
 
-Скачайте `SplitScreenHub.nro` из [релизов](https://github.com/tr0llex/splitscreen-hub/releases/latest) и положите в `/switch/` на SD-карте.
+Скачайте [`SplitScreenHub.nro`](https://samoy.love/splitscreen-hub/SplitScreenHub.nro)
+(рядом лежит [`.sha256`](https://samoy.love/splitscreen-hub/SplitScreenHub.nro.sha256))
+и положите в `/switch/` на SD-карте. Сборка раздаётся только с сервера
+проекта — в GitHub Releases бинарников нет.
 Приложение запускается через Homebrew Menu; в applet-режиме (поверх игры)
 памяти меньше, но каталог работает.
 
@@ -85,8 +88,16 @@ workflow артефакта из [deploy-kit](https://github.com/tr0llex/deploy-
 публикует `.sha256` и манифест и сверяет, что сервер раздаёт ровно ту сумму,
 которую посчитал раннер. Цель описана один раз в
 [`.deploy-kit/nro.env`](.deploy-kit/nro.env) и одинаково читается CI и
-локальным `dk deploy`. GitHub Releases делаются руками под вехи; приложение
-доверяет серверу.
+локальным `dk deploy`. Сервер — единственный канал распространения.
+
+Данные каталога (обложки, `catalog.bin`, `details.bin`, `translations.db`) в
+git не лежат — это материалы издателей. Они едут отдельным бандлом
+[`splitscreen-hub-data.tar.gz`](https://samoy.love/splitscreen-hub/splitscreen-hub-data.tar.gz),
+который публикуется руками после прогона пайплайна:
+`dk deploy splitscreen-hub-data` ([`.deploy-kit/data.env`](.deploy-kit/data.env),
+упаковывает [`pack_data.sh`](app/tools/pack_data.sh)). `build_release.sh`
+скачивает и сверяет бандл, если файлов нет на месте, — так CI собирает тот же
+`.nro`, что и машина разработчика.
 
 ## Структура репозитория
 
@@ -94,18 +105,20 @@ workflow артефакта из [deploy-kit](https://github.com/tr0llex/deploy-
 app/                      приложение для Switch
   source/                 C++: каталог, библиотека, сеть, плеер
     ui/                   экраны и виджеты borealis
-  resources/              romfs: xml-разметка, i18n, шрифт, иконка;
-                          и catalog.bin, details.bin, art/ из пайплайна (коммитятся)
+  resources/              romfs: xml-разметка, i18n, иконка;
+                          catalog.bin, details.bin, art/ приходят из пайплайна (не в git)
   tests/                  тесты чистых функций (без borealis и консоли)
   tools/                  check_xml.py, run_tests.sh, build_ffmpeg_slim.sh,
-                          build_release.sh, make_icon.py
+                          build_release.sh, pack_data.sh, make_icon.py
   lib/borealis            сабмодуль UI-библиотеки
   lib/ffmpeg-slim/        урезанный FFmpeg, собирается локально (в .gitignore)
 pipeline/                 сбор данных: eShop → catalog.db → catalog.bin
   paths.py                общие пути; скрипты запускаются из любой папки
   overrides.json          ручные поправки числа игроков (коммитится)
-  translations.db         русские тексты об играх (коммитится)
-.deploy-kit/nro.env       цель выкатки: как собрать и куда публиковать
+  translations.db         русские тексты об играх (в бандле данных, не в git)
+docs/third-party-licenses.md  из чего собран .nro и на каких условиях
+.deploy-kit/nro.env       цель .nro: как собрать и куда публиковать
+.deploy-kit/data.env      цель бандла данных каталога
 .github/workflows/        проверки на каждый push, выкатка при push в master
 ```
 
@@ -267,8 +280,15 @@ python pipeline/make_ship_data.py            # catalog.bin и details.bin -> app
 
 Русские тексты об играх лежат в `pipeline/translations.db` (таблица
 `translations`: `nsuid, headline_ru, players_note_ru, description_ru`). Файл
-сделан машинным переводом один раз и закоммичен как есть — скрипта-производителя
-нет; без него каталог соберётся с английскими текстами.
+сделан машинным переводом один раз, скрипта-производителя нет. В git его нет
+(это производное от текстов издателей) — он приходит с бандлом данных; без
+него каталог соберётся с английскими текстами.
+
+Всё, что производит этот раздел, — материалы издателей, и в git не попадает:
+`app/resources/art/`, `catalog.bin`, `details.bin`, `translations.db`
+игнорируются и едут бандлом (см. [Обновления и
+выкатка](#обновления-и-выкатка)). Без прогона пайплайна `build_release.sh`
+скачает текущий бандл с сервера.
 
 ### Приложение
 
@@ -302,6 +322,12 @@ cmake --build build --target SplitScreenHub.nro
 ```
 
 На выходе `app/build/SplitScreenHub.nro` (~58 МБ, в основном обложки в romfs).
+
+Шрифта в romfs нет: текст рисуется системным шрифтом консоли, который
+приложение берёт у неё в рантайме через `pl:u`
+([`fonts.cpp`](app/source/ui/fonts.cpp)). borealis его загружает, но основным
+не делает — приложение переназначает основной шрифт само; десктопная сборка
+берёт шрифт из ресурсов borealis.
 
 Почему свой плеер, а не `libmpv`, как в NXMP и SwitchWave: готового пакета
 `switch-mpv` в pacman нет, а сборка mpv вместе с патченным FFmpeg под
@@ -404,5 +430,21 @@ C++, потому что там `/usr` указывает на каталог с
 
 ## Лицензия
 
-MIT. Данные каталога — публичная информация из eShop; обложки и скриншоты
-принадлежат издателям и в репозиторий не входят.
+Исходный код — [MIT](LICENSE). Библиотеки в собранном `.nro` (borealis,
+FFmpeg под LGPL-2.1+, curl, Mbed TLS, SDL2, libnx и другие) сохраняют свои
+лицензии — полный список и то, как выполнены условия LGPL, в
+[docs/third-party-licenses.md](docs/third-party-licenses.md).
+
+Названия игр, обложки, описания, скриншоты, трейлеры и их русские переводы
+принадлежат соответствующим издателям и используются только для
+идентификации игр. Они **не входят в лицензируемое произведение и не хранятся
+в этом репозитории**; пайплайн берёт из публичных API nintendo.com только
+факты о продуктах (число игроков, жанр, размер, год, издатель). Если вы
+правообладатель и хотите убрать материалы игры из приложения — откройте issue
+или напишите на адрес из профиля автора на GitHub; в ближайшей сборке их не
+будет.
+
+SplitScreen Hub — независимый хоумбрю-проект. Он не связан с Nintendo, не
+одобрен и не спонсируется ею. Nintendo Switch, Nintendo eShop и Joy-Con —
+товарные знаки Nintendo. Системный шрифт консоли используется в рантайме и с
+приложением не распространяется.

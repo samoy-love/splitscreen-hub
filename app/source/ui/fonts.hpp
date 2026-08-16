@@ -41,6 +41,12 @@ inline void registerMetrics()
     style.addMetric("hub/font/title", TITLE);
 }
 
+/// Делает основным шрифтом системный шрифт консоли, а не файл из romfs.
+/// Звать сразу после brls::Application::createWindow() и до первого Label.
+/// На десктопе ничего не делает — там borealis сам берёт Inter из своих
+/// ресурсов.
+void useConsoleFont();
+
 }  // namespace fonts
 
 /// Единая шкала отступов.

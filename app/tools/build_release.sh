@@ -14,15 +14,37 @@
 #
 # FFmpeg собирается на месте, если lib/ffmpeg-slim ещё нет: в контейнере это
 # несколько минут, зато .nro на выходе ровно тот, что и локально.
+#
+# Данные каталога (обложки, catalog.bin, details.bin) в git не лежат — это
+# материалы издателей, см. .gitignore. Если их нет на месте, сборка скачивает
+# бандл с сервера выкатки (его публикует цель .deploy-kit/data.env) и сверяет
+# с опубликованной рядом суммой; на раннере это единственный источник.
 set -Eeuo pipefail
 
 APP="$(cd "$(dirname "$0")/.." && pwd)"
 IMAGE="devkitpro/devkita64:latest"
+DATA_URL="${DATA_URL:-https://samoy.love/splitscreen-hub/splitscreen-hub-data.tar.gz}"
+
+fetch_data() {
+    [ -s "$APP/resources/catalog.bin" ] && [ -s "$APP/resources/details.bin" ] \
+        && [ -n "$(ls "$APP/resources/art" 2>/dev/null)" ] && return 0
+    echo "данных каталога нет в дереве — скачиваю $DATA_URL"
+    local tmp; tmp="$(mktemp -d)"
+    curl -fsSL --retry 3 -o "$tmp/data.tar.gz" "$DATA_URL"
+    curl -fsSL --retry 3 -o "$tmp/data.tar.gz.sha256" "$DATA_URL.sha256"
+    local want got
+    want="$(awk '{print tolower($1); exit}' "$tmp/data.tar.gz.sha256")"
+    got="$(sha256sum "$tmp/data.tar.gz" | cut -d' ' -f1)"
+    [ "$want" = "$got" ] || { echo "бандл данных не совпал с суммой: ждали $want, получили $got" >&2; exit 1; }
+    tar -xzf "$tmp/data.tar.gz" -C "$APP/.."
+    rm -rf "$tmp"
+}
 
 build_native() {
     export DEVKITPRO="${DEVKITPRO:-/opt/devkitpro}"
     cd "$APP"
     git -C "$APP/.." submodule update --init --recursive
+    fetch_data
     if [ ! -f lib/ffmpeg-slim/lib/libavcodec.a ]; then
         bash tools/build_ffmpeg_slim.sh
     fi

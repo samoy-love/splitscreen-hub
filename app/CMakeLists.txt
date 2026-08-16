@@ -8,7 +8,7 @@ include(${BOREALIS_LIBRARY}/cmake/toolchain.cmake)
 project(SplitScreenHub)
 set(VERSION_MAJOR "1")
 set(VERSION_MINOR "1")
-set(VERSION_ALTER "0")
+set(VERSION_ALTER "1")
 set(PROJECT_AUTHOR "splitscreen-hub")
 set(PROJECT_TITLEID "0x010FF000CC000000")
 set(PROJECT_ICON ${CMAKE_CURRENT_SOURCE_DIR}/resources/icon.jpg)
@@ -81,10 +81,16 @@ endif ()
 # borealis нужны только переводы её строк, иконки материала, служебные icon и
 # img/sys — индикаторы Wi-Fi и батареи в шапке и курсор для тача; без них
 # borealis на каждом открытии экрана пишет «Cannot set texture: 0». Демо-картинки
-# (1.8 МБ) не берём. Шрифт лежит в resources/font/font.ttf: без него borealis
-# подставляет китайский системный, и кириллица с цифрами рисуются
-# полноширинными формами.
+# (1.8 МБ) не берём. Своего шрифта в romfs нет: текст рисуется системным
+# шрифтом консоли, который приложение берёт у неё в рантайме
+# (source/ui/fonts.cpp) — иначе borealis подставляет китайский системный, и
+# кириллица с цифрами рисуются полноширинными формами.
+#
+# Каталог romfs перед копированием вычищается: copy_directory только
+# добавляет, и файл, удалённый из resources/, иначе жил бы в build/ и уезжал
+# в каждый следующий .nro — так уже пережил свою отмену шрифт font.ttf.
 set(COPY_RESOURCES
+    COMMAND ${CMAKE_COMMAND} -E rm -rf ${CMAKE_BINARY_DIR}/resources
     COMMAND ${CMAKE_COMMAND} -E copy_directory ${BOREALIS_RESOURCES}/i18n ${CMAKE_BINARY_DIR}/resources/i18n
     COMMAND ${CMAKE_COMMAND} -E copy_directory ${BOREALIS_RESOURCES}/material ${CMAKE_BINARY_DIR}/resources/material
     COMMAND ${CMAKE_COMMAND} -E copy_directory ${BOREALIS_RESOURCES}/icon ${CMAKE_BINARY_DIR}/resources/icon

@@ -144,4 +144,34 @@
 
     </brls:Box>
 
+    <!-- О приложении: кто автор, чьи материалы, на чём собрано. Тексты
+         короткие и постоянные — юридические оговорки должны быть видны
+         пользователю, а не только читателю README. Полный список лицензий —
+         docs/third-party-licenses.md в репозитории. -->
+    <brls:Box
+        axis="column"
+        paddingTop="@style/hub/space/m"
+        paddingBottom="@style/hub/space/m">
+
+        <brls:Label
+            text="@i18n/hub/settings/about"
+            fontSize="@style/hub/font/accent" />
+        <brls:Label
+            text="@i18n/hub/about/disclaimer"
+            fontSize="@style/hub/font/caption"
+            marginTop="@style/hub/space/xs"
+            textColor="@theme/brls/text_disabled" />
+        <brls:Label
+            text="@i18n/hub/about/content"
+            fontSize="@style/hub/font/caption"
+            marginTop="@style/hub/space/xs"
+            textColor="@theme/brls/text_disabled" />
+        <brls:Label
+            text="@i18n/hub/about/licenses"
+            fontSize="@style/hub/font/caption"
+            marginTop="@style/hub/space/xs"
+            textColor="@theme/brls/text_disabled" />
+
+    </brls:Box>
+
 </brls:Box>

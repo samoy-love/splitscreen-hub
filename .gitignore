@@ -7,12 +7,22 @@ app/build-ffmpeg/
 # урезанный FFmpeg: собирается build_ffmpeg_slim.sh
 app/lib/ffmpeg-slim/
 
-# app/resources/{catalog.bin,details.bin,art/} — вход сборки .nro, поэтому
-# коммитятся: пайплайн (pipeline/make_ship_data.py, download_art.py) их
-# обновляет, а CI собирает из того, что лежит в репозитории.
+# Материалы издателей: обложки, описания игр и их переводы. В репозиторий
+# не попадают — на них у проекта нет прав, MIT их не покрывает. Собираются
+# пайплайном (download_art.py, make_ship_data.py) и уезжают на сервер выкатки
+# бандлом (.deploy-kit/data.env); сборка .nro скачивает бандл сама, если
+# файлов нет (app/tools/build_release.sh).
+app/resources/art/
+app/resources/catalog.bin
+app/resources/details.bin
+pipeline/translations.db
+
+# Шрифт в romfs не кладём: текст рисуется системным шрифтом консоли, который
+# borealis берёт у неё в рантайме (source/ui/fonts.cpp).
+app/resources/font/
 
 # кэш карточек eShop и сгенерированные базы: пересобираются скриптами пайплайна
-# (translations.db и overrides.json — ручная работа, коммитятся)
+# (overrides.json — ручная работа, коммитится)
 pipeline/products_cache.json
 pipeline/catalog.db
 pipeline/toplists.db

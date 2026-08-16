@@ -47,7 +47,7 @@ void pick(const std::string& nsuid, std::function<void()> onChanged)
     // Отметка показывает, где игра уже лежит: без неё приходилось помнить.
     std::vector<std::string> items;
     items.reserve(names.size() + 2);
-    // ●/○, а не галочка: U+2713 в romfs:/font/font.ttf отсутствует, и вместо
+    // ●/○, а не галочка: U+2713 в системном шрифте консоли отсутствует, и вместо
     // отметки рисовался пустой квадрат — по списку нельзя было понять, где игра
     // уже лежит. Пустой кружок заодно показывает, что строка вообще отмечаема.
     items.push_back((state.library.isFavorite(nsuid) ? "● " : "○ ") + "hub/folders/favorites"_i18n);
