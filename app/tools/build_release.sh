@@ -25,19 +25,32 @@ APP="$(cd "$(dirname "$0")/.." && pwd)"
 IMAGE="devkitpro/devkita64:latest"
 DATA_URL="${DATA_URL:-https://samoy.love/splitscreen-hub/splitscreen-hub-data.tar.gz}"
 
+# Скачанные бандлы лежат в app/build/data-cache/<sha256>.tar.gz: на раннере
+# этот каталог (вместе с lib/ffmpeg-slim) сохраняет кеш пайплайна
+# (CACHE_PATHS в .deploy-kit/nro.env), и при неизменных данных сборка не
+# ходит за 46 МБ вовсе — только за суммой.
+DATA_CACHE="$APP/build/data-cache"
+
 fetch_data() {
     [ -s "$APP/resources/catalog.bin" ] && [ -s "$APP/resources/details.bin" ] \
         && [ -n "$(ls "$APP/resources/art" 2>/dev/null)" ] && return 0
-    echo "данных каталога нет в дереве — скачиваю $DATA_URL"
-    local tmp; tmp="$(mktemp -d)"
-    curl -fsSL --retry 3 -o "$tmp/data.tar.gz" "$DATA_URL"
-    curl -fsSL --retry 3 -o "$tmp/data.tar.gz.sha256" "$DATA_URL.sha256"
-    local want got
-    want="$(awk '{print tolower($1); exit}' "$tmp/data.tar.gz.sha256")"
-    got="$(sha256sum "$tmp/data.tar.gz" | cut -d' ' -f1)"
-    [ "$want" = "$got" ] || { echo "бандл данных не совпал с суммой: ждали $want, получили $got" >&2; exit 1; }
-    tar -xzf "$tmp/data.tar.gz" -C "$APP/.."
-    rm -rf "$tmp"
+    echo "данных каталога нет в дереве — беру бандл $DATA_URL"
+    local want
+    want="$(curl -fsSL --retry 3 "$DATA_URL.sha256" | awk '{print tolower($1); exit}')"
+    [ -n "$want" ] || { echo "сервер не отдал сумму бандла данных" >&2; exit 1; }
+    mkdir -p "$DATA_CACHE"
+    local tgz="$DATA_CACHE/$want.tar.gz"
+    if [ -s "$tgz" ]; then
+        echo "бандл $want есть в кеше"
+    else
+        curl -fsSL --retry 3 -o "$tgz.part" "$DATA_URL"
+        local got; got="$(sha256sum "$tgz.part" | cut -d' ' -f1)"
+        [ "$want" = "$got" ] || { rm -f "$tgz.part"; echo "бандл данных не совпал с суммой: ждали $want, получили $got" >&2; exit 1; }
+        mv "$tgz.part" "$tgz"
+        # Старые бандлы в кеше не нужны: ключ кеша всё равно один на цель.
+        find "$DATA_CACHE" -name '*.tar.gz' ! -name "$want.tar.gz" -delete
+    fi
+    tar -xzf "$tgz" -C "$APP/.."
 }
 
 build_native() {
@@ -61,11 +74,14 @@ elif command -v docker >/dev/null 2>&1; then
     # Контейнер пишет в каталог репозитория; на раннере он и так наш, а
     # владельца файлов возвращаем себе после сборки.
     ROOT="$(cd "$APP/.." && pwd)"
+    #
+    # Portlibs (curl, mbedtls, SDL2, zlib, bzip2) в образе уже есть — он
+    # ставит группу switch-portlibs целиком. dkp-pacman отсюда не зовём:
+    # pkg.devkitpro.org отвечает CI-раннерам 403, ради чего образы и сделаны.
     docker run --rm -v "$ROOT:/work" -w /work "$IMAGE" bash -c '
         set -e
         git config --global --add safe.directory "*"
         apt-get update -qq && apt-get install -y -qq ninja-build make patch xz-utils curl >/dev/null
-        dkp-pacman -Syu --noconfirm --needed switch-curl switch-mbedtls switch-sdl2 switch-zlib switch-bzip2
         bash app/tools/build_release.sh
     '
     if command -v id >/dev/null 2>&1; then
