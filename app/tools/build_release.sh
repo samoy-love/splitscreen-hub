@@ -36,14 +36,14 @@ fetch_data() {
         && [ -n "$(ls "$APP/resources/art" 2>/dev/null)" ] && return 0
     echo "данных каталога нет в дереве — беру бандл $DATA_URL"
     local want
-    want="$(curl -fsSL --retry 3 "$DATA_URL.sha256" | awk '{print tolower($1); exit}')"
+    want="$(curl -fsSL --retry 3 --connect-timeout 20 --max-time 60 "$DATA_URL.sha256" | awk '{print tolower($1); exit}')"
     [ -n "$want" ] || { echo "сервер не отдал сумму бандла данных" >&2; exit 1; }
     mkdir -p "$DATA_CACHE"
     local tgz="$DATA_CACHE/$want.tar.gz"
     if [ -s "$tgz" ]; then
         echo "бандл $want есть в кеше"
     else
-        curl -fsSL --retry 3 -o "$tgz.part" "$DATA_URL"
+        curl -fsSL --retry 3 --connect-timeout 20 --max-time 900 -o "$tgz.part" "$DATA_URL"
         local got; got="$(sha256sum "$tgz.part" | cut -d' ' -f1)"
         [ "$want" = "$got" ] || { rm -f "$tgz.part"; echo "бандл данных не совпал с суммой: ждали $want, получили $got" >&2; exit 1; }
         mv "$tgz.part" "$tgz"
@@ -57,7 +57,6 @@ build_native() {
     export DEVKITPRO="${DEVKITPRO:-/opt/devkitpro}"
     cd "$APP"
     git -C "$APP/.." submodule update --init --recursive
-    fetch_data
     if [ ! -f lib/ffmpeg-slim/lib/libavcodec.a ]; then
         bash tools/build_ffmpeg_slim.sh
     fi
@@ -65,6 +64,11 @@ build_native() {
     cmake --build build --target SplitScreenHub.nro
     ls -l build/SplitScreenHub.nro
 }
+
+# Данные скачиваются здесь, до выбора окружения: с хоста, а не из контейнера
+# (у контейнера на раннере сеть до samoy.love оказалась ненадёжной — curl
+# отваливался по таймауту), и в тот же каталог, который сохраняет кеш.
+fetch_data
 
 if [ -d "${DEVKITPRO:-/opt/devkitpro}/devkitA64" ] && command -v cmake >/dev/null 2>&1; then
     build_native
