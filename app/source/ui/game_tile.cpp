@@ -15,13 +15,6 @@
 
 namespace
 {
-#ifdef __SWITCH__
-// корень romfs — это содержимое build/resources, см. DATA_DIR в main.cpp
-const char* ART_DIR = "romfs:/art/";
-#else
-const char* ART_DIR = "resources/art/";
-#endif
-
 /// Подпись под обложкой: ширина и межстрочный интервал — те же, что в
 /// game_tile.xml.
 ///
@@ -37,6 +30,7 @@ constexpr float NAME_LINE_HEIGHT = 1.15f;
 
 GameTile::GameTile()
     : alive(std::make_shared<std::atomic_bool>(true))
+    , artGeneration(std::make_shared<std::atomic<uint64_t>>(0))
 {
     this->inflateFromXMLRes("xml/views/game_tile.xml");
 
@@ -81,6 +75,10 @@ void GameTile::loadCover(const std::string& file)
         covers::pin(file);
     }
     pendingArt = file;
+    // Новое поколение при каждой смене обложки: задачи в очереди сверяют его,
+    // а не строку, — строка принадлежит UI-потоку.
+    const uint64_t generation = ++(*artGeneration);
+    auto gen                  = artGeneration;
 
     // Текстурой владеет кэш, а не вид: одну и ту же обложку показывают разные
     // плитки, и освобождать её по своему усмотрению нельзя.
@@ -99,16 +97,17 @@ void GameTile::loadCover(const std::string& file)
 
     auto flag = alive;
     auto self = this;
-    const std::string path = std::string(ART_DIR) + file;
+    const std::string path = std::string(covers::ART_DIR) + file;
 
     // В начало очереди: эта плитка на экране прямо сейчас, а в хвосте очереди
     // ждут предзагрузки соседних строк и запросы, чьи плитки уже уехали.
-    tasks::ioFront([flag, self, path, file]() {
+    tasks::ioFront([flag, gen, generation, self, path, file]() {
         // Пока задача ждала очереди, строку могли переиспользовать под другую
         // игру: при быстрой прокрутке таких задач набирается больше, чем плиток
         // на экране. Читать и разбирать файл ради выброшенного результата
-        // бессмысленно — проверяем до чтения, а не после.
-        if (!*flag || self->pendingArt != file)
+        // бессмысленно — проверяем до чтения, а не после. Здесь рабочий поток,
+        // поэтому сравниваем поколение, а не pendingArt (см. artGeneration).
+        if (!*flag || *gen != generation)
         {
             perf::count(perf::Counter::CoverDropped);
             return;
@@ -127,15 +126,15 @@ void GameTile::loadCover(const std::string& file)
             brls::Logger::warning("tile: обложка пуста — {}", path);
             return;
         }
-        if (!*flag || self->pendingArt != file)
+        if (!*flag || *gen != generation)
         {
             perf::count(perf::Counter::CoverDropped);
             return;
         }
 
-        // Разбор JPEG раньше шёл в UI-потоке и на каждой строке сетки съедал
-        // несколько кадров. Здесь он в рабочем потоке, а в UI-поток уходят уже
-        // готовые пиксели.
+        // Разбор JPEG — в рабочем потоке, в UI-поток уходят уже готовые
+        // пиксели: в кадре отрисовки он съедал бы по несколько кадров на
+        // каждую строку сетки.
         perf::Scope decode("");
         auto pixels = std::make_shared<asyncimage::Pixels>(
             asyncimage::decode(data.data(), data.size()));
@@ -155,10 +154,10 @@ void GameTile::loadCover(const std::string& file)
             // Показываем то, что вернул кэш, а не то, что загрузили: при
             // одновременной загрузке одного файла — предзагрузкой строки и
             // самой плиткой — кэш оставляет первую текстуру, а вторую
-            // освобождает. Раньше плитка ставила себе именно освобождённую и
-            // оставалась пустой.
+            // освобождает; поставить себе освобождённую значит остаться пустой.
             const int texture = covers::put(file, asyncimage::upload(*pixels));
 
+            // UI-поток: здесь pendingArt читать уже можно.
             if (*flag && self->pendingArt == file && texture)
             {
                 self->cover->innerSetImage(texture);
@@ -190,6 +189,7 @@ void GameTile::setGame(const Game& game)
     {
         covers::unpin(pendingArt);
         pendingArt.clear();
+        ++(*artGeneration);  // задачи прежней обложки уже не нужны
         cover->clear();
     }
 

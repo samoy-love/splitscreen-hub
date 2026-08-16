@@ -1,13 +1,122 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
-  <rect width="256" height="256" fill="#1b2a4a"/>
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Иконка приложения. Исходник для icon.jpg (256×256, формат иконки .nro):
+  рендерится в PNG и пережимается в JPEG — см. app/tools/make_icon.py.
 
-  <!-- central shared screen -->
-  <rect x="88" y="88" width="80" height="80" rx="10" fill="#f2f4f8"/>
-  <rect x="100" y="100" width="56" height="56" rx="4" fill="#1b2a4a"/>
+  Идея: один экран, поделенный на четверых, — «нас четверо, во что поиграть».
+  Панели в цветах игроков P1–P4 (красный, синий, жёлтый, зелёный — порядок как
+  в сплитскрине Nintendo), в каждой — силуэт игрока. Тёмный фон — как тема
+  приложения; за экраном ореол в фирменном градиенте мята → васильковый,
+  которым в интерфейсе залито название.
 
-  <!-- four player dots converging toward the screen, one per corner -->
-  <circle cx="52" cy="52" r="30" fill="#e84545"/>
-  <circle cx="204" cy="52" r="30" fill="#3aa6ff"/>
-  <circle cx="52" cy="204" r="30" fill="#f4c542"/>
-  <circle cx="204" cy="204" r="30" fill="#3ec97a"/>
+  Экран 212×162 с рамкой 6, разделители 6: при 140 точках в hbmenu крест и
+  силуэты ещё читаются, при 64 остаётся четыре цветных панели на тёмном.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#161C3C"/>
+      <stop offset="1" stop-color="#0A0D1F"/>
+    </linearGradient>
+
+    <!-- Фирменный градиент, чуть светлее, чем в GradientLabel: после размытия
+         на тёмном васильковый иначе почти не виден. -->
+    <linearGradient id="brand" x1="0" y1="1" x2="1" y2="0">
+      <stop offset="0" stop-color="#4DF2CF"/>
+      <stop offset="1" stop-color="#86A4FF"/>
+    </linearGradient>
+
+    <radialGradient id="vignette" cx="0.5" cy="0.5" r="0.75">
+      <stop offset="0.45" stop-color="#000000" stop-opacity="0"/>
+      <stop offset="1" stop-color="#000000" stop-opacity="0.45"/>
+    </radialGradient>
+
+    <!-- Панели: диагональный градиент от светлого к насыщенному. -->
+    <linearGradient id="p1" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#FF7A70"/>
+      <stop offset="1" stop-color="#F2495F"/>
+    </linearGradient>
+    <linearGradient id="p2" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#7A9BFF"/>
+      <stop offset="1" stop-color="#5266F0"/>
+    </linearGradient>
+    <linearGradient id="p3" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#FFD46A"/>
+      <stop offset="1" stop-color="#FFAB2E"/>
+    </linearGradient>
+    <linearGradient id="p4" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#4BF0CB"/>
+      <stop offset="1" stop-color="#20C69B"/>
+    </linearGradient>
+
+    <!-- Блик по стеклу экрана. -->
+    <linearGradient id="sheen" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.20"/>
+      <stop offset="0.45" stop-color="#FFFFFF" stop-opacity="0.04"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+
+    <!-- Область изображения внутри рамки. -->
+    <clipPath id="display">
+      <rect x="28" y="53" width="200" height="150" rx="12" ry="12"/>
+    </clipPath>
+
+    <filter id="halo" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="22"/>
+    </filter>
+    <filter id="drop" x="-30%" y="-30%" width="160%" height="170%">
+      <feDropShadow dx="0" dy="5" stdDeviation="6" flood-color="#000000" flood-opacity="0.5"/>
+    </filter>
+    <filter id="glyph-shadow" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="1" stdDeviation="1.2" flood-color="#000000" flood-opacity="0.28"/>
+    </filter>
+
+    <!-- Силуэт игрока: голова и плечи, центр в (0, 0). -->
+    <g id="player">
+      <circle cx="0" cy="-8" r="8.5"/>
+      <path d="M-16 20 C-16 8.5 -9 2.5 0 2.5 C9 2.5 16 8.5 16 20 Z"/>
+    </g>
+  </defs>
+
+  <!-- Фон -->
+  <rect width="256" height="256" fill="url(#bg)"/>
+
+  <!-- Ореол: размытая копия экрана в фирменном градиенте -->
+  <rect x="18" y="45" width="220" height="170" rx="22" ry="22"
+        fill="url(#brand)" filter="url(#halo)"/>
+  <rect width="256" height="256" fill="url(#vignette)"/>
+
+  <!-- Рамка экрана -->
+  <rect x="22" y="47" width="212" height="162" rx="18" ry="18"
+        fill="#0A0D1C" filter="url(#drop)"/>
+
+  <!-- Четыре панели -->
+  <g clip-path="url(#display)">
+    <rect x="28"  y="53"  width="97" height="72" fill="url(#p1)"/>
+    <rect x="131" y="53"  width="97" height="72" fill="url(#p2)"/>
+    <rect x="28"  y="131" width="97" height="72" fill="url(#p3)"/>
+    <rect x="131" y="131" width="97" height="72" fill="url(#p4)"/>
+
+    <!-- Светлая кромка сверху каждой панели -->
+    <g fill="#FFFFFF" fill-opacity="0.30">
+      <rect x="28"  y="53"  width="97" height="1.5"/>
+      <rect x="131" y="53"  width="97" height="1.5"/>
+      <rect x="28"  y="131" width="97" height="1.5"/>
+      <rect x="131" y="131" width="97" height="1.5"/>
+    </g>
+
+    <rect x="28" y="53" width="200" height="150" fill="url(#sheen)"/>
+  </g>
+
+  <!-- Кромка рамки -->
+  <rect x="22.5" y="47.5" width="211" height="161" rx="17.5" ry="17.5"
+        fill="none" stroke="#FFFFFF" stroke-opacity="0.14" stroke-width="1"/>
+
+  <!-- Игроки -->
+  <g fill="#FFFFFF" fill-opacity="0.96" filter="url(#glyph-shadow)">
+    <use href="#player" x="76.5"  y="88"/>
+    <use href="#player" x="179.5" y="88"/>
+    <use href="#player" x="76.5"  y="166"/>
+    <use href="#player" x="179.5" y="166"/>
+  </g>
 </svg>

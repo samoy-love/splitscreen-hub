@@ -40,9 +40,9 @@ struct Game
 
 /// Каталог игр из romfs.
 ///
-/// Данные лежат в двух файлах, а не в базе: catalog.bin читается целиком при
-/// запуске (всё, что показывает сетка, — 0.45 МБ), details.bin отдаёт по записи
-/// на игру при открытии карточки. Почему не SQLite — в make_ship_data.py.
+/// Данные лежат в двух файлах: catalog.bin читается целиком при запуске (всё,
+/// что показывает сетка, — меньше мегабайта), details.bin отдаёт по записи на
+/// игру при открытии карточки. Почему не база — в make_ship_data.py и README.
 class Catalog
 {
   public:
@@ -75,8 +75,6 @@ class Catalog
     /// берётся из i18n по слагу, а само значение остаётся прежним.
     static std::string genreLabel(const std::string& value);
 
-    ~Catalog();
-
     /// Проверяет, что файлы каталога на месте. directory — с завершающим «/».
     bool open(const std::string& directory);
 
@@ -107,8 +105,8 @@ class Catalog
     std::string catalogPath;
     std::string detailsPath;
 
-    /// Всё, что показывает сетка: 3489 записей, около мегабайта вместе с
-    /// накладными расходами std::string.
+    /// Всё, что показывает сетка: несколько тысяч записей, около мегабайта
+    /// вместе с накладными расходами std::string.
     std::vector<catalogq::Brief> briefs;
     /// nsuid -> номер в briefs. Карточка открывается по нему.
     std::unordered_map<std::string, size_t> byId;

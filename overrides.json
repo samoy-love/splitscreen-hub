@@ -8,21 +8,21 @@
  },
  "70010000001801": {
   "title": "Stardew Valley",
-  "same_screen_min": 2,
+  "same_screen_min": 1,
   "same_screen_max": 2,
   "players_note": "На Nintendo Switch сплитскрин на двоих; 4 игрока — только в издании для Switch 2.",
   "source": "stardewvalleywiki.com + анонс издания для Switch 2"
  },
  "70010000001702": {
   "title": "Terraria",
-  "same_screen_min": 2,
+  "same_screen_min": 1,
   "same_screen_max": 2,
   "players_note": "Сплитскрин на двоих в док-режиме. 4 игрока — на Xbox и PlayStation, не на Switch.",
   "source": "thegamer.com — Switch split-screen update"
  },
  "70010000000484": {
   "title": "Cave Story+",
-  "same_screen_min": 2,
+  "same_screen_min": 1,
   "same_screen_max": 2,
   "players_note": null,
   "source": "gematsu.com — local two-player co-op update"
@@ -36,21 +36,21 @@
  },
  "70010000009834": {
   "title": "Risk of Rain",
-  "same_screen_min": 2,
+  "same_screen_min": 1,
   "same_screen_max": 2,
   "players_note": "Локально двое; четверо — в Risk of Rain Returns, это другая игра.",
   "source": "gameskinny.com / wikipedia"
  },
  "70010000003582": {
   "title": "Titan Quest",
-  "same_screen_min": 2,
+  "same_screen_min": 1,
   "same_screen_max": 2,
   "players_note": null,
   "source": "nintendolife.com — two player couch co-op, 6 только по сети"
  },
  "70010000074046": {
   "title": "Inkulinati",
-  "same_screen_min": 2,
+  "same_screen_min": 1,
   "same_screen_max": 2,
   "players_note": "Режим hotseat: игроки ходят по очереди на одном экране.",
   "source": "playco-opgame.com / steam FAQ"
@@ -64,14 +64,14 @@
  },
  "70010000022998": {
   "title": "Oddworld: New 'n' Tasty",
-  "same_screen_min": 2,
+  "same_screen_min": 1,
   "same_screen_max": 2,
   "players_note": "Кооп с передачей управления: второй игрок перехватывает после смерти первого.",
   "source": "gonintendo.com dev blog"
  },
  "70010000062533": {
   "title": "Bang-On Balls: Chronicles",
-  "same_screen_min": 2,
+  "same_screen_min": 1,
   "same_screen_max": 2,
   "players_note": "Сплитскрин на двоих; вчетвером — только по сети.",
   "source": "co-optimus.com"
@@ -120,7 +120,7 @@
  },
  "70010000100246": {
   "title": "All Hands on Deck",
-  "same_screen_min": 2,
+  "same_screen_min": 1,
   "same_screen_max": 2,
   "players_note": null,
   "source": "описание издателя: «a 2-player cooperative puzzle platformer»"
@@ -155,14 +155,14 @@
  },
  "70010000064421": {
   "title": "How 2 Escape",
-  "same_screen_min": 2,
+  "same_screen_min": 1,
   "same_screen_max": 2,
   "players_note": "Второй игрок подключается смартфоном через приложение-компаньон.",
   "source": "описание издателя: «2 players, 2 ways to play»"
  },
  "70010000095745": {
   "title": "How 2 Escape: Lost Submarine",
-  "same_screen_min": 2,
+  "same_screen_min": 1,
   "same_screen_max": 2,
   "players_note": "Второй игрок подключается смартфоном через приложение-компаньон.",
   "source": "описание издателя: «2 players, 2 ways to play»"
@@ -176,7 +176,7 @@
  },
  "70010000022069": {
   "title": "Outbuddies DX",
-  "same_screen_min": 2,
+  "same_screen_min": 1,
   "same_screen_max": 2,
   "players_note": null,
   "source": "co-optimus.com — local co-op, второй игрок управляет Buddy"
@@ -197,84 +197,84 @@
  },
  "70010000027828": {
   "title": "Battleground",
-  "same_screen_min": 2,
+  "same_screen_min": 1,
   "same_screen_max": 2,
   "players_note": null,
   "source": "Nintendo eShop — «play against either another player or an AI»"
  },
  "70010000025028": {
   "title": "Bowling",
-  "same_screen_min": 2,
+  "same_screen_min": 1,
   "same_screen_max": 2,
   "players_note": null,
   "source": "Nintendo eShop — «play against a friend or against the computer»"
  },
  "70010000006251": {
   "title": "Arcade Archives EXCITEBIKE",
-  "same_screen_min": 2,
+  "same_screen_min": 1,
   "same_screen_max": 2,
   "players_note": null,
   "source": "Nintendo eShop — Single System (1-2)"
  },
  "70010000102218": {
   "title": "Arcade Archives TOKYO WARS",
-  "same_screen_min": 2,
+  "same_screen_min": 1,
   "same_screen_max": 2,
   "players_note": null,
   "source": "Nintendo eShop — Single System (1-2)"
  },
  "70010000021162": {
   "title": "Arcade Archives VS. CASTLEVANIA",
-  "same_screen_min": 2,
+  "same_screen_min": 1,
   "same_screen_max": 2,
   "players_note": null,
   "source": "Nintendo eShop — Single System (1-2)"
  },
  "70010000056813": {
   "title": "Battleship War: Time to Sink the Fleet",
-  "same_screen_min": 2,
+  "same_screen_min": 1,
   "same_screen_max": 2,
   "players_note": null,
   "source": "Nintendo EU (2-2) + playerCount 2+"
  },
  "70010000100062": {
   "title": "Duo Games",
-  "same_screen_min": 2,
+  "same_screen_min": 1,
   "same_screen_max": 2,
   "players_note": null,
   "source": "Nintendo EU (2) + playerCount 2+"
  },
  "70010000030071": {
   "title": "Let's Cook Together",
-  "same_screen_min": 2,
+  "same_screen_min": 1,
   "same_screen_max": 2,
   "players_note": null,
   "source": "Nintendo EU (2-2) + playerCount 2+"
  },
  "70010000061040": {
   "title": "Red Hands - 2 Player Games",
-  "same_screen_min": 2,
+  "same_screen_min": 1,
   "same_screen_max": 2,
   "players_note": null,
   "source": "Nintendo EU (2-2) + playerCount 2+"
  },
  "70010000019389": {
   "title": "Soccer Pinball",
-  "same_screen_min": 2,
+  "same_screen_min": 1,
   "same_screen_max": 2,
   "players_note": null,
   "source": "Nintendo EU (2-2) + playerCount 2+"
  },
  "70010000021802": {
   "title": "Talk it Out: Handheld Game",
-  "same_screen_min": 2,
+  "same_screen_min": 1,
   "same_screen_max": 2,
   "players_note": null,
   "source": "Nintendo EU (2-2) + playerCount 2+"
  },
  "70010000053946": {
   "title": "The Viking's Games: Madness Fight",
-  "same_screen_min": 2,
+  "same_screen_min": 1,
   "same_screen_max": 2,
   "players_note": null,
   "source": "Nintendo EU (2-2) + playerCount 2+"

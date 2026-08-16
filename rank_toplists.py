@@ -39,12 +39,11 @@
 """
 
 import math
-import os
-import re
 import sqlite3
 import sys
 
-CATALOG = "catalog.db"
+from toplist_sources import SOURCES, load_catalog, norm
+
 OUT = "toplists.db"
 
 # --- метаданные источников -----------------------------------------------
@@ -75,6 +74,7 @@ SOURCE_META = {
 
 NOW = 2026
 HALF_LIFE = 8.0
+REF_COMMENTS = 200  # тред такого размера и меньше весит полностью
 
 # Насколько дорого обходится молчание одного из каналов.
 #
@@ -258,31 +258,10 @@ FAMIBOARDS = [
     ]),
 ]
 
-ARTICLES = re.compile(r"^(the|a|an)\s+", re.I)
-
-
-def norm(title):
-    t = title.lower().replace("™", "").replace("®", "")
-    t = t.replace("&", "and").replace("’", "'")
-    t = ARTICLES.sub("", t)
-    return re.sub(r"[^a-z0-9]", "", t)
-
-
-def load_catalog():
-    db = sqlite3.connect(CATALOG)
-    rows = db.execute("SELECT nsuid, title FROM games").fetchall()
-    db.close()
-    exact, prefix = {}, {}
-    for nsuid, title in rows:
-        n = norm(title)
-        exact.setdefault(n, (nsuid, title))
-        prefix.setdefault(n[:14], (nsuid, title))
-    return exact, prefix
-
-
 def resolve(title, exact, prefix):
-    if title in ALIASES:
-        alias = ALIASES[title]
+    key = title if title in ALIASES else norm(title)
+    if key in ALIASES:
+        alias = ALIASES[key]
         if not alias:
             return None
         title = alias
@@ -310,12 +289,6 @@ def main():
     exact, prefix = load_catalog()
 
     # --- пул кандидатов: всё, что названо хоть где-то ----------------------
-    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-    src = open("build_toplists.py", encoding="utf-8").read()
-    ns = {}
-    exec(src[src.index("SOURCES = ["):src.index("SCHEMA = ")], ns)
-    SOURCES = ns["SOURCES"]
-
     pool = set()
     for s in SOURCES:
         for t in s["games"]:
@@ -362,9 +335,13 @@ def main():
             families.setdefault(nsuid, set()).add(fam)
 
     # --- канал 2: обсуждения ------------------------------------------------
-    def add_thread(fam, year, named, n_games, disliked=()):
+    def add_thread(fam, year, comments, named, n_games, disliked=()):
         w = math.log(P / max(n_games, 1)) if n_games < P else 0.1
         w = max(w, 0.1) * recency(year)
+        # В большом треде назвать игру дешевле: чем длиннее обсуждение, тем
+        # больше в нём случайных упоминаний. Гасим корнем от размера сверх
+        # опорного, маленькие треды не раздуваем.
+        w *= min(1.0, math.sqrt(REF_COMMENTS / max(comments, 1)))
         top = max(named.values()) if named else 1
         for nsuid, d in named.items():
             rel = math.log1p(d) / math.log1p(top)
@@ -372,7 +349,7 @@ def main():
             community[nsuid] = community.get(nsuid, 0.0) + w * rel * sign
             families.setdefault(nsuid, set()).add(fam)
 
-    for tid, _, year, plat, row in THREADS:
+    for tid, comments, year, _plat, row in THREADS:
         _, counts = decode_row(row)
         by_key = {KEYS[i]: c for i, c in counts.items()}
         for base, longer in CONTAINED_IN.items():
@@ -395,16 +372,16 @@ def main():
             hit = resolve(t, exact, prefix)
             if hit:
                 bad.add(hit[0])
-        add_thread("reddit:" + tid, year, named, len(named), bad)
+        add_thread("reddit:" + tid, year, comments, named, len(named), bad)
 
-    for tid, _, year, games in FAMIBOARDS:
+    for tid, comments, year, games in FAMIBOARDS:
         named = {}
         for g in games:
             hit = resolve(g, exact, prefix)
             if hit:
                 named[hit[0]] = 1
                 titles[hit[0]] = hit[1]
-        add_thread("fami:" + tid, year, named, len(named))
+        add_thread("fami:" + tid, year, comments, named, len(named))
 
     # --- сведение каналов ---------------------------------------------------
     #
@@ -436,17 +413,19 @@ def main():
     for score, e, c, fam, title, _ in tail[:12]:
         print(f"       {score:>6.1f}  {e:>5.1f}  {c:>5.1f}  {fam:>4}  {title[:46]}")
 
-    if "--write" in sys.argv:
-        db = sqlite3.connect(OUT)
-        db.execute("DROP TABLE IF EXISTS ranking")
-        db.execute("CREATE TABLE ranking (nsuid TEXT PRIMARY KEY, score REAL, "
-                   "editorial REAL, community REAL, families INTEGER)")
-        for score, e, c, fam, _, nsuid in rows:
-            db.execute("INSERT INTO ranking VALUES (?,?,?,?,?)",
-                       (nsuid, score, e, c, fam))
-        db.commit()
-        db.close()
-        print(f"\nзаписано в {OUT}: таблица ranking, {len(rows)} строк")
+    if "--dry-run" in sys.argv:
+        return
+
+    db = sqlite3.connect(OUT)
+    db.execute("DROP TABLE IF EXISTS ranking")
+    db.execute("CREATE TABLE ranking (nsuid TEXT PRIMARY KEY, score REAL, "
+               "editorial REAL, community REAL, families INTEGER)")
+    for score, e, c, fam, _, nsuid in rows:
+        db.execute("INSERT INTO ranking VALUES (?,?,?,?,?)",
+                   (nsuid, score, e, c, fam))
+    db.commit()
+    db.close()
+    print(f"\nзаписано в {OUT}: таблица ranking, {len(rows)} строк")
 
 
 if __name__ == "__main__":

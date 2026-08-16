@@ -203,8 +203,8 @@ void init()
 #ifdef __SWITCH__
     // borealis поднимает сокеты сама в userAppInit, до входа в main. Наш вызов
     // приходит вторым и возвращает LibnxError_AlreadyInitialized — это не
-    // отказ, а признак того, что сеть уже готова. Раньше мы принимали его за
-    // ошибку и выключали загрузку картинок совсем.
+    // отказ, а признак того, что сеть уже готова; принять его за ошибку —
+    // значит выключить загрузку картинок совсем.
     Result socketResult = socketInitializeDefault();
     const bool alreadyUp =
         R_MODULE(socketResult) == Module_Libnx && R_DESCRIPTION(socketResult) == LibnxError_AlreadyInitialized;
@@ -357,10 +357,9 @@ int clearCache()
     return removed;
 }
 
-
 /// Одна попытка. Код ответа отдаём наружу, чтобы вызывающий решил, имеет ли
 /// смысл повторять.
-std::vector<unsigned char> fetchOnce(const std::string& url, long& status, CURLcode& result)
+static std::vector<unsigned char> fetchOnce(const std::string& url, long& status, CURLcode& result)
 {
     std::vector<unsigned char> data;
     CURL* curl = curl_easy_init();
@@ -377,6 +376,9 @@ std::vector<unsigned char> fetchOnce(const std::string& url, long& status, CURLc
     curl_easy_setopt(curl, CURLOPT_TIMEOUT, 20L);
     curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 10L);
     curl_easy_setopt(curl, CURLOPT_USERAGENT, "splitscreen-hub/1.0");
+    // Проверка сертификата отключена намеренно: в libnx нет системного
+    // хранилища корневых сертификатов, а вшитый бандл со временем протухает и
+    // молча ломает загрузку.
     curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
 
     // FOLLOWLOCATION без ограничений — это цепочка любой длины и переход на
@@ -409,7 +411,7 @@ std::vector<unsigned char> fetchOnce(const std::string& url, long& status, CURLc
 }
 
 /// 404 повторять бессмысленно, обрыв и временную ошибку сервера — стоит.
-bool worthRetrying(long status, CURLcode result)
+static bool worthRetrying(long status, CURLcode result)
 {
     if (result != CURLE_OK)
         return true;

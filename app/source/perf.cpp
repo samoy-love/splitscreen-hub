@@ -67,10 +67,10 @@ void report()
                            get(Counter::CoverDecodeMs),
                            double(get(Counter::CoverDecodeMs)) / double(fromDisk));
 
-    const long long queries = get(Counter::DbQueries);
+    const long long queries = get(Counter::CatalogQueries);
     if (queries > 0)
-        brls::Logger::info("[итог] база: {} запросов, {} мс всего, {:.1f} мс в среднем", queries,
-                           get(Counter::DbMs), double(get(Counter::DbMs)) / double(queries));
+        brls::Logger::info("[итог] каталог: {} выборок, {} мс всего, {:.1f} мс в среднем", queries,
+                           get(Counter::CatalogMs), double(get(Counter::CatalogMs)) / double(queries));
 
     const long long fetches = get(Counter::NetFetches);
     if (fetches > 0)

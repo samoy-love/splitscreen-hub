@@ -49,9 +49,9 @@ std::vector<const Brief*> select(const std::vector<Brief>& briefs, const Filter&
         hits.push_back(&b);
     }
 
-    // Порядок повторяет прежние ORDER BY один в один, вторым ключом всюду
-    // sortTitle: без него игры с одинаковым числом игроков или годом выпуска
-    // перемешивались бы от запроса к запросу.
+    // Вторым ключом всюду sortTitle, чтобы порядок был устойчив: без него игры
+    // с одинаковым числом игроков или годом выпуска перемешивались бы от
+    // запроса к запросу.
     auto byTitle = [](const Brief* a, const Brief* b) { return a->sortTitle < b->sortTitle; };
 
     switch (filter.sort)
@@ -84,17 +84,6 @@ std::vector<const Brief*> select(const std::vector<Brief>& briefs, const Filter&
             std::sort(hits.begin(), hits.end(), [&](const Brief* a, const Brief* b) {
                 if (a->year != b->year)
                     return a->year > b->year;
-                return byTitle(a, b);
-            });
-            break;
-
-        case 4:  // что влезет на карту: сначала маленькие, неизвестные в конец
-            std::sort(hits.begin(), hits.end(), [&](const Brief* a, const Brief* b) {
-                const bool aUnknown = a->romSize < 0, bUnknown = b->romSize < 0;
-                if (aUnknown != bUnknown)
-                    return bUnknown;
-                if (!aUnknown && a->romSize != b->romSize)
-                    return a->romSize < b->romSize;
                 return byTitle(a, b);
             });
             break;

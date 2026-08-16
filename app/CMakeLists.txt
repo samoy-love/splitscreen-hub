@@ -74,49 +74,34 @@ if (PLATFORM_SWITCH)
         z bz2)
 endif ()
 
+# Ресурсы romfs (или папки рядом с бинарником на десктопе). Из ресурсов
+# borealis нужны только переводы её строк, иконки материала, служебные icon и
+# img/sys — индикаторы Wi-Fi и батареи в шапке и курсор для тача; без них
+# borealis на каждом открытии экрана пишет «Cannot set texture: 0». Демо-картинки
+# (1.8 МБ) не берём. Шрифт лежит в resources/font/font.ttf: без него borealis
+# подставляет китайский системный, и кириллица с цифрами рисуются
+# полноширинными формами.
+set(COPY_RESOURCES
+    COMMAND ${CMAKE_COMMAND} -E copy_directory ${BOREALIS_RESOURCES}/i18n ${CMAKE_BINARY_DIR}/resources/i18n
+    COMMAND ${CMAKE_COMMAND} -E copy_directory ${BOREALIS_RESOURCES}/material ${CMAKE_BINARY_DIR}/resources/material
+    COMMAND ${CMAKE_COMMAND} -E copy_directory ${BOREALIS_RESOURCES}/icon ${CMAKE_BINARY_DIR}/resources/icon
+    COMMAND ${CMAKE_COMMAND} -E copy_directory ${BOREALIS_RESOURCES}/img/sys ${CMAKE_BINARY_DIR}/resources/img/sys
+    COMMAND ${CMAKE_COMMAND} -E copy_directory ${PROJECT_RESOURCES} ${CMAKE_BINARY_DIR}/resources
+)
+
 if (PLATFORM_SWITCH)
     # ALL обязателен: без него обычный `cmake --build .` собирает только .elf и
-    # молча оставляет рядом .nro от прошлой сборки — на консоль уезжает старый
-    # файл, а причину ищут в коде.
+    # молча оставляет рядом .nro от прошлой сборки.
     add_custom_target(${PROJECT_NAME}.nro ALL DEPENDS ${PROJECT_NAME}
         COMMAND ${NX_NACPTOOL_EXE} --create "SplitScreen Hub" "${PROJECT_AUTHOR}"
                 "${VERSION_MAJOR}.${VERSION_MINOR}.${VERSION_ALTER}" ${PROJECT_NAME}.nacp
                 --titleid=${PROJECT_TITLEID}
-        # из ресурсов borealis нужны только переводы её собственных строк,
-        # иконки материала и служебные icon — демо-картинки в релиз не тащим.
-        # Шрифт лежит в resources/font/font.ttf: без него borealis подставляет
-        # в слот основного шрифта китайский системный, и кириллица с цифрами
-        # рисуются полноширинными формами.
-        COMMAND ${CMAKE_COMMAND} -E copy_directory ${BOREALIS_RESOURCES}/i18n ${CMAKE_BINARY_DIR}/resources/i18n
-        COMMAND ${CMAKE_COMMAND} -E copy_directory ${BOREALIS_RESOURCES}/material ${CMAKE_BINARY_DIR}/resources/material
-        COMMAND ${CMAKE_COMMAND} -E copy_directory ${BOREALIS_RESOURCES}/icon ${CMAKE_BINARY_DIR}/resources/icon
-        # img/sys — не демо-картинки, а индикаторы Wi-Fi и батареи в шапке
-        # AppletFrame и курсор для тача. Без них borealis на каждом открытии
-        # экрана шесть раз писала «Cannot set texture: 0». Весит 26 КБ,
-        # остальные 1.8 МБ из img/ по-прежнему не берём.
-        COMMAND ${CMAKE_COMMAND} -E copy_directory ${BOREALIS_RESOURCES}/img/sys ${CMAKE_BINARY_DIR}/resources/img/sys
-        COMMAND ${CMAKE_COMMAND} -E copy_directory ${PROJECT_RESOURCES} ${CMAKE_BINARY_DIR}/resources
+        ${COPY_RESOURCES}
         COMMAND ${NX_ELF2NRO_EXE} ${PROJECT_NAME}.elf ${PROJECT_NAME}.nro
                 --icon=${PROJECT_ICON} --nacp=${PROJECT_NAME}.nacp
                 --romfsdir=${CMAKE_BINARY_DIR}/resources
     )
 else ()
-    # отладочная сборка на десктопе: ресурсы просто кладём рядом с бинарником
-    add_custom_target(${PROJECT_NAME}.data
-        # из ресурсов borealis нужны только переводы её собственных строк,
-        # иконки материала и служебные icon — демо-картинки в релиз не тащим.
-        # Шрифт лежит в resources/font/font.ttf: без него borealis подставляет
-        # в слот основного шрифта китайский системный, и кириллица с цифрами
-        # рисуются полноширинными формами.
-        COMMAND ${CMAKE_COMMAND} -E copy_directory ${BOREALIS_RESOURCES}/i18n ${CMAKE_BINARY_DIR}/resources/i18n
-        COMMAND ${CMAKE_COMMAND} -E copy_directory ${BOREALIS_RESOURCES}/material ${CMAKE_BINARY_DIR}/resources/material
-        COMMAND ${CMAKE_COMMAND} -E copy_directory ${BOREALIS_RESOURCES}/icon ${CMAKE_BINARY_DIR}/resources/icon
-        # img/sys — не демо-картинки, а индикаторы Wi-Fi и батареи в шапке
-        # AppletFrame и курсор для тача. Без них borealis на каждом открытии
-        # экрана шесть раз писала «Cannot set texture: 0». Весит 26 КБ,
-        # остальные 1.8 МБ из img/ по-прежнему не берём.
-        COMMAND ${CMAKE_COMMAND} -E copy_directory ${BOREALIS_RESOURCES}/img/sys ${CMAKE_BINARY_DIR}/resources/img/sys
-        COMMAND ${CMAKE_COMMAND} -E copy_directory ${PROJECT_RESOURCES} ${CMAKE_BINARY_DIR}/resources
-    )
+    add_custom_target(${PROJECT_NAME}.data ${COPY_RESOURCES})
     add_dependencies(${PROJECT_NAME} ${PROJECT_NAME}.data)
 endif ()

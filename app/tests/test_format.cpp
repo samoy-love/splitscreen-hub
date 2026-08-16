@@ -4,7 +4,7 @@
 // тулчейна Switch: см. tools/run_tests.sh. Проверять это на железе — минуты
 // на прогон ради функций, которые считаются за микросекунды.
 
-#include "../source/format.hpp"
+#include "format.hpp"
 
 #include <cstdio>
 #include <string>
@@ -96,7 +96,7 @@ void expectKept(const std::string& hex)
 int main()
 {
     std::printf("formatSize:\n");
-    expectSize(0, "");             // размер неизвестен — в базе это ноль
+    expectSize(0, "");             // размер неизвестен — romSizeBytes равен нулю
     expectSize(-1, "");            // мусор в данных не должен рисоваться
     expectSize(512LL * 1024 * 1024, "512 МБ");
     expectSize(2LL * 1024 * 1024 * 1024, "2.0 ГБ");

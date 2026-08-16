@@ -11,16 +11,15 @@
 и не сопоставилась с каталогом. Поэтому здесь — добор по списку названий:
 что не находится перечислением, ищется поиском поштучно.
 
-Названия берутся из подборок (build_toplists.py) и из файла extra_titles.txt,
-если он есть.
+Названия берутся из подборок (toplist_sources.py) и из файла extra_titles.txt,
+если он есть — по строке на название.
 """
 
 import json
-import re
 import sys
 
 import fetch_local_multiplayer as F
-from build_toplists import SOURCES, norm
+from toplist_sources import SOURCES, norm
 
 EXTRA_FILE = "extra_titles.txt"
 SOURCE = "local_multiplayer.json"
@@ -82,11 +81,6 @@ def main():
     F.fetch_missing_from_pages(found, products, failed)
 
     rows = F.build_rows(found, products, failed)
-    # build_rows не знает про featured — признак берём из ответа Algolia
-    featured = {h["nsuid"]: bool(h.get("featuredProduct")) for h in found}
-    for r in rows:
-        r["featured"] = featured.get(r["nsuid"], False)
-
     games.extend(rows)
     with open(SOURCE, "w", encoding="utf-8") as f:
         json.dump(games, f, ensure_ascii=False, indent=1)

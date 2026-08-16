@@ -1,6 +1,7 @@
 """
-Прогоняет по catalog.db ровно те запросы, которые выполняет приложение
-(см. app/source/catalog.cpp), и проверяет, что выборки осмысленные.
+Проверяет catalog.db на осмысленность перед упаковкой в catalog.bin: фильтры
+сужают выборку, известные игры стоят на своих местах, одиночные и бандлы не
+просочились, обложки на диске совпадают с базой.
 
 Работу с железом — nsListApplicationRecord и память в applet-режиме — так
 проверить нельзя, это только запуском на консоли.
@@ -12,10 +13,6 @@ import sys
 
 DB = "catalog.db"
 
-# Ровно то, что выбирает приложение: SELECT_FIELDS из app/source/catalog.cpp,
-# вместе с джойном подборок. Джойна ratings здесь нет намеренно — таблица пуста,
-# и приложение к ней больше не обращается.
-# Соединений в запросах приложения больше нет: упоминания лежат в самой games.
 FROM_JOIN = " FROM games g"
 
 FIELDS = ("g.nsuid, g.title, g.title_id, g.same_screen_min, g.same_screen_max,"
@@ -24,14 +21,13 @@ FIELDS = ("g.nsuid, g.title, g.title_id, g.same_screen_min, g.same_screen_max,"
           " g.rom_size_bytes, g.has_online, g.no_tabletop, g.has_demo,"
           " g.has_russian, g.mentions")
 
-# ORDER_BY[] из app/source/catalog.cpp, в том же порядке, что SORT_NAMES.
+# Те же порядки, что предлагает приложение (catalog_query.cpp).
 ORDER_BY = (
-    " ORDER BY g.mentions = 0, g.mentions DESC, g.best_pos, g.sort_title",
+    " ORDER BY g.mentions = 0, g.score DESC, g.sort_title",
     " ORDER BY g.sort_title",
     " ORDER BY g.same_screen_max DESC, g.sort_title",
     " ORDER BY g.release_year DESC, g.sort_title",
     " ORDER BY g.rom_size_bytes IS NULL, g.rom_size_bytes, g.sort_title",
-    " ORDER BY g.sort_title",
 )
 
 failures = []
@@ -45,7 +41,7 @@ def check(label, condition, detail=""):
 
 
 def where(min_players, genre=None, russian=False, search=None, retro=False):
-    """Повторяет Catalog::buildWhere. Псевдоним g — как в запросах приложения."""
+    """Условия фильтра приложения на языке SQL."""
     w = f" WHERE g.same_screen_max >= {min_players}"
     if genre:
         w += f" AND g.nsuid IN (SELECT nsuid FROM genres WHERE genre = '{genre}')"
@@ -90,7 +86,7 @@ def main():
     english = db.execute("SELECT count(*) FROM genres WHERE genre GLOB '*[A-Za-z]*'").fetchone()[0]
     check("английских названий не осталось", english == 0)
 
-    print("\nВсе сортировки из ORDER_BY выполняются:")
+    print("\nВсе сортировки выполняются:")
     for i, order in enumerate(ORDER_BY):
         try:
             rows = db.execute(f"SELECT g.nsuid{FROM_JOIN}{where(2)}{order} LIMIT 5").fetchall()
@@ -135,10 +131,11 @@ def main():
     need = [r[0] for r in db.execute("SELECT box_art_file FROM games WHERE box_art_file IS NOT NULL")]
     missing = [f for f in need if not os.path.exists(os.path.join(art_dir, f))]
     check(f"файлов не хватает: {len(missing)}", not missing)
-    sizes = [os.path.getsize(os.path.join(art_dir, f)) for f in need[:200]]
-    avg = sum(sizes) / len(sizes) / 1024
-    check(f"средний размер {avg:.1f} КБ", avg < 40,
-          "великоват — трансформация Cloudinary не применилась" if avg >= 40 else "")
+    present = [f for f in need[:200] if f not in missing]
+    if present:
+        avg = sum(os.path.getsize(os.path.join(art_dir, f)) for f in present) / len(present) / 1024
+        check(f"средний размер {avg:.1f} КБ", avg < 40,
+              "великоват — трансформация Cloudinary не применилась" if avg >= 40 else "")
 
     db.close()
 

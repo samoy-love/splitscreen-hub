@@ -14,8 +14,8 @@ class GameActivity : public brls::Activity
   public:
     /// Карточка с уже дочитанными деталями: экран рисуется сразу целиком.
     ///
-    /// Открывает её GameActivity::open() — она читает базу в рабочем потоке и
-    /// только потом создаёт активность. Собирать экран после открытия нельзя:
+    /// Открывает её GameActivity::open() — она читает детали из каталога в
+    /// рабочем потоке и только потом создаёт активность. Собирать экран после открытия нельзя:
     /// вместо появления карточки зритель видел, как она складывается из кусков.
     GameActivity(Game full, std::vector<std::string> genreList,
                  std::vector<std::string> shots, std::vector<std::string> videos);
@@ -49,7 +49,6 @@ class GameActivity : public brls::Activity
     void fillHeader();
     /// Читает и разбирает обложку в рабочем потоке.
     void loadCoverAsync(const std::string& file);
-    std::string loadedArt;  ///< какую обложку уже загрузили
     void fillStats();
     void fillTags();
     void fillGenres(const std::vector<std::string>& list);
@@ -72,7 +71,6 @@ class GameActivity : public brls::Activity
     BRLS_BIND(brls::Label, folders, "game/folders");
     BRLS_BIND(brls::Label, genres, "game/genres");
     BRLS_BIND(brls::Box, shotsBox, "game/shots");
-    BRLS_BIND(brls::ScrollingFrame, scroller, "game/scroll");
     BRLS_BIND(brls::Label, shotsHint, "game/shots_hint");
     /// Кнопка трейлера создаётся кодом и встаёт первой в полосе медиа рядом со
     /// скриншотами, поэтому её нет в разметке.

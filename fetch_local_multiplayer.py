@@ -28,6 +28,8 @@ import time
 import urllib.error
 import urllib.request
 
+# Публичная search-only пара из фронтенда nintendo.com: ею пользуется сам
+# сайт, эндпоинт browse для неё закрыт.
 ALGOLIA_APP = "U3B6GR4UA3"
 ALGOLIA_KEY = "a29c6927638bfd8cee23993e51e721c9"
 GRAPH_URL = "https://graph.nintendo.com/"

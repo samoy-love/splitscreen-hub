@@ -8,6 +8,8 @@
 #include <sys/stat.h>
 
 #include <algorithm>
+#include <atomic>
+#include <cstdint>
 #include <cstdio>
 #include <fstream>
 
@@ -31,6 +33,16 @@ void ensureParentDir(const std::string& path)
     }
 }
 
+/// tasks::io — пул из нескольких потоков, и два быстрых изменения подряд
+/// отправляют туда две записи, которые иначе писали бы один и тот же .tmp и
+/// переименовывали его друг у друга из-под рук. Мьютекс их сериализует, а
+/// номер снимка не даёт более раннему снимку лечь поверх позднего, если пул
+/// выполнит задачи не в порядке постановки. Других мьютексов writeFile не
+/// берёт, поэтому взаимной блокировки с Library::mutex быть не может.
+std::mutex writeMutex;
+std::atomic<uint64_t> snapshotCounter{0};
+uint64_t lastWritten = 0;  // под writeMutex
+
 }  // namespace
 
 bool Library::load(const std::string& path)
@@ -41,7 +53,7 @@ bool Library::load(const std::string& path)
     if (!in.good())
     {
         // основного файла нет — возможно, консоль выключили ровно между
-        // переименованиями в save(); тогда целая копия лежит рядом
+        // переименованиями в writeFile(); тогда целая копия лежит рядом
         const std::string backup = file + ".bak";
         std::ifstream fallback(backup);
         if (fallback.good())
@@ -108,11 +120,17 @@ void Library::saveLater() const
         path    = file;
     }
 
-    tasks::io([path, payload]() { writeFile(path, payload); });
+    const uint64_t snapshot = ++snapshotCounter;
+    tasks::io([path, payload, snapshot]() { writeFile(path, payload, snapshot); });
 }
 
-void Library::writeFile(const std::string& path, const std::string& json)
+void Library::writeFile(const std::string& path, const std::string& json, uint64_t snapshot)
 {
+    std::lock_guard<std::mutex> lock(writeMutex);
+    if (snapshot < lastWritten)
+        return;
+    lastWritten = snapshot;
+
     ensureParentDir(path);
 
     // пишем во временный файл и заменяем им основной: обрыв питания посреди

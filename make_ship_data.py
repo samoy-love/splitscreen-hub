@@ -1,16 +1,11 @@
 # -*- coding: utf-8 -*-
-"""Собирает данные каталога в два двоичных файла вместо базы SQLite.
+"""Упаковывает catalog.db в два двоичных файла, которые читает приложение.
 
-Зачем не база. Сетке нужно 268 КБ на все 3489 игр, а любой запрос к SQLite
-поднимал с romfs десятки мегабайт: описания лежат в тех же строках таблицы, и
-«взять семь коротких полей» физически читает страницы целиком. Отсюда время,
-которое почти не зависело от числа найденных игр, — 754 мс на 37 игр против
-965 мс на 3015. При 3489 записях база решает задачу, которой нет: отбор и
-сортировка перебором в памяти занимают единицы миллисекунд.
-
-Вместе с базой уходят амальгама SQLite, самодельная VFS для путей romfs и обход
-блокировок fcntl — то есть самая хрупкая часть проекта, дававшая цепочку
-загрузочных падений.
+Почему не SQLite на консоли: сетке нужно ~270 КБ на весь каталог, а любой
+запрос к базе поднимал с romfs десятки мегабайт — описания лежат в тех же
+строках, и «взять семь коротких полей» читает страницы целиком. При трёх с
+половиной тысячах записей отбор и сортировка перебором в памяти занимают
+единицы миллисекунд.
 
 На выходе два файла:
 
@@ -46,6 +41,15 @@ DICT_SAMPLES = 300
 
 # Отметка nsuid внутри хвоста адреса — так же, как в базе.
 NSUID_MARK = "\x01"
+
+# Порядок колонок, в котором распаковываются строки games ниже.
+GAME_COLUMNS = (
+    "nsuid", "title", "sort_title", "title_id", "same_screen_min",
+    "same_screen_max", "players_note", "box_art_file", "background_color",
+    "headline", "description", "publisher", "release_year", "languages",
+    "rom_size_bytes", "has_online", "no_tabletop", "has_demo", "has_russian",
+    "mentions", "score", "is_retro",
+)
 
 
 def u8(v):
@@ -110,8 +114,7 @@ def detail_record(row, tr, genres, shots, videos):
     (
         _nsuid, _title, _sort, _title_id, _min, _max, players_note, _art,
         background, headline, description, publisher, _year, languages,
-        _size, has_online, no_tabletop, has_demo, _has_ru, _mentions, _best, _score,
-        _retro,
+        _size, has_online, no_tabletop, has_demo, _has_ru, _mentions, _score, _retro,
     ) = row
 
     headline_ru, players_note_ru, description_ru = tr
@@ -147,7 +150,8 @@ def main():
         )
     }
 
-    rows = db.execute("SELECT * FROM games ORDER BY nsuid").fetchall()
+    rows = db.execute("SELECT " + ", ".join(GAME_COLUMNS)
+                      + " FROM games ORDER BY nsuid").fetchall()
 
     # --- записи карточек и словарь ------------------------------------------
     bodies = []
@@ -201,7 +205,7 @@ def main():
     for row, (offset, size, raw) in zip(rows, offsets):
         (nsuid, title, sort_title, title_id, min_p, max_p, _note, art,
          _bg, _hl, _desc, _pub, year, _langs, rom_size, _online, _tab, _demo,
-         has_russian, mentions, _best_pos, score, is_retro) = row
+         has_russian, mentions, score, is_retro) = row
 
         catalog.write(s16(nsuid))
         catalog.write(s16(title))
@@ -211,9 +215,7 @@ def main():
         catalog.write(u16(min_p or 0))
         catalog.write(u16(max_p or 0))
         catalog.write(u16(mentions or 0))
-        # Счёт согласия ×10. Раньше здесь лежало лучшее место в подборке —
-        # оно было вторым ключом сортировки, а теперь весь порядок задаёт счёт.
-        catalog.write(u16(min(score or 0, 65535)))
+        catalog.write(u16(min(score or 0, 65535)))  # счёт согласия ×10
         catalog.write(u16(year or 0))
         # -1 — размер неизвестен: при сортировке такие уходят в конец, а ноль
         # встал бы в начало
@@ -235,16 +237,10 @@ def main():
 
     raw_total = sum(len(b) for b in bodies)
     packed_total = sum(len(b) for b in packed)
-    old = os.path.join(OUT_DIR, "catalog.db")
-    old_size = os.path.getsize(old) / 1048576 if os.path.exists(old) else 0
-
     print(f"игр: {len(rows)}, жанров: {len(genre_names)}")
     print(f"catalog.bin: {os.path.getsize(CATALOG) / 1048576:.2f} МБ")
     print(f"details.bin: {os.path.getsize(DETAILS) / 1048576:.2f} МБ "
           f"(из {raw_total / 1048576:.2f} МБ, сжатие {raw_total / packed_total:.2f}x)")
-    if old_size:
-        total = (os.path.getsize(CATALOG) + os.path.getsize(DETAILS)) / 1048576
-        print(f"было catalog.db: {old_size:.2f} МБ, стало {total:.2f} МБ")
 
 
 if __name__ == "__main__":

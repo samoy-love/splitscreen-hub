@@ -1,30 +1,16 @@
 """
-Сводит подборки «лучшие couch co-op игры для Switch» из разных изданий в один
-рейтинг и пишет его в toplists.db.
+Редакционные подборки «лучшие couch co-op игры для Switch» и сопоставление
+их названий с каталогом.
 
-Идея простая: чем в большем числе независимых подборок игра названа, тем больше
-согласия вокруг неё. Это заметно устойчивее одной редакционной оценки и не
-требует ничьего API.
-
-Позиция внутри списка учитывается только как разрешение ничьих: списки разной
-длины и разной степени упорядоченности (часть изданий нумерует, часть — нет),
-поэтому строить на позиции основной вес было бы нечестно.
-
-Reddit и YouTube в подборку не вошли: reddit.com целиком закрыт для загрузки
-(и JSON, и поиск), а страницы YouTube не отдают описания и тайм-коды — в обоих
-случаях брать было нечего.
+Сами списки — только перечни названий (факты), без текста статей. Как из них
+и из тредов получается рейтинг — в rank_toplists.py.
 """
 
-import json
-import os
-import sys
 import re
 import sqlite3
 
 CATALOG = "catalog.db"
-OUT = "toplists.db"
 
-# Заголовки взяты как факты — перечень названий, без текста статей.
 SOURCES = [
     {
         "name": "Nintendo Life",
@@ -338,14 +324,6 @@ SOURCES = [
     },
 ]
 
-SCHEMA = """
-CREATE TABLE IF NOT EXISTS toplists (
-  nsuid    TEXT PRIMARY KEY,
-  mentions INTEGER NOT NULL,   -- в скольких подборках названа
-  best_pos INTEGER,            -- лучшая позиция среди подборок
-  sources  TEXT NOT NULL       -- издания через запятую
-);
-"""
 
 ARTICLES = re.compile(r"^(the|a|an)\s+", re.I)
 
@@ -358,6 +336,8 @@ def norm(title):
 
 
 def load_catalog():
+    """Два индекса по каталогу: точное нормализованное название и его первые
+    14 знаков — «Overcooked! 2» в подборке против «Overcooked 2: ...» в eShop."""
     db = sqlite3.connect(CATALOG)
     rows = db.execute("SELECT nsuid, title FROM games").fetchall()
     db.close()
@@ -366,62 +346,5 @@ def load_catalog():
     for nsuid, title in rows:
         n = norm(title)
         exact.setdefault(n, (nsuid, title))
-        # «Overcooked! 2» в каталоге может называться «Overcooked 2: ...» —
-        # запасной ключ по началу названия
         prefix.setdefault(n[:14], (nsuid, title))
     return exact, prefix
-
-
-def main():
-    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-    exact, prefix = load_catalog()
-
-    found, missing = {}, []
-    for source in SOURCES:
-        for position, title in enumerate(source["games"], 1):
-            n = norm(title)
-            hit = exact.get(n) or (prefix.get(n[:14]) if len(n) >= 14 else None)
-            if not hit:
-                missing.append((source["name"], title))
-                continue
-            nsuid, catalog_title = hit
-            entry = found.setdefault(
-                nsuid, {"title": catalog_title, "sources": [], "positions": []})
-            if source["name"] not in entry["sources"]:
-                entry["sources"].append(source["name"])
-                entry["positions"].append(position)
-
-    if os.path.exists(OUT):
-        os.remove(OUT)
-    db = sqlite3.connect(OUT)
-    db.executescript(SCHEMA)
-    for nsuid, e in found.items():
-        db.execute("INSERT INTO toplists VALUES (?,?,?,?)",
-                   (nsuid, len(e["sources"]), min(e["positions"]),
-                    ", ".join(e["sources"])))
-    db.commit()
-
-    total = sum(len(s["games"]) for s in SOURCES)
-    print(f"подборок: {len(SOURCES)}, упоминаний всего: {total}")
-    print(f"сопоставлено с каталогом: {len(found)} игр")
-    print(f"не нашлось в каталоге: {len(missing)}")
-    print()
-
-    ranked = sorted(found.items(), key=lambda kv: (-kv[1]["mentions"] if "mentions" in kv[1]
-                                                   else -len(kv[1]["sources"]),
-                                                   min(kv[1]["positions"])))
-    print("Топ по числу подборок:")
-    for nsuid, e in ranked[:25]:
-        print(f"  {len(e["sources"])}x  {e['title'][:44]}")
-
-    if missing:
-        print("\nНе нашлось в каталоге (не на Switch, другое название или")
-        print("нет мультиплеера на одном экране):")
-        for src, title in missing[:40]:
-            print(f"  {title[:44]:44} — {src}")
-
-    db.close()
-
-
-if __name__ == "__main__":
-    main()

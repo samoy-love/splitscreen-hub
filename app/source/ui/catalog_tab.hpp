@@ -15,8 +15,9 @@ class CatalogTab : public brls::Box
     CatalogTab();
     static brls::View* create();
 
-    /// Перечитывает выборку из базы и обновляет сетку. Сам запрос уходит в
-    /// рабочий поток, результат возвращается в UI через applyRows().
+    /// Заново отбирает игры из каталога по фильтру и обновляет сетку. Сама
+    /// выборка уходит в рабочий поток, результат возвращается в UI через
+    /// applyRows().
     /// keepScroll — не сбрасывать позицию прокрутки. Нужен, когда список
     /// перечитывается не по воле пользователя: спрятанная игра исчезает, а
     /// остальные должны остаться там же, где были.
@@ -59,15 +60,12 @@ class CatalogTab : public brls::Box
     /// Отслеживаем ширину сами и пересчитываем, когда она изменилась.
     int gridWidth = 0;
 
-
     std::shared_ptr<GridModel> model;
 
     void buildPlayerFilter();
     void buildToggles();
     void promptSearch();
     void chooseGenre();
-    void openGenreDropdown();
-    /// Жанры не меняются за время работы — читаем их один раз.
     void chooseSort();
     void toggleHidden();
     /// Обновляет отметки одной игры без перезапроса каталога.
@@ -79,7 +77,7 @@ class CatalogTab : public brls::Box
     brls::Button* installedButton = nullptr;
 
     /// Кнопки порогов «от N». Держим списком, чтобы подсвечивать выбранный, не
-    /// полагаясь на порядок детей контейнера — рядом с ними теперь и остальные
+    /// полагаясь на порядок детей контейнера — рядом с ними стоят и остальные
     /// чипы фильтра.
     std::vector<brls::Button*> thresholdButtons;
     brls::Button* retroButton = nullptr;

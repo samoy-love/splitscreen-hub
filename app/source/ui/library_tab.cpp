@@ -159,8 +159,8 @@ void LibraryTab::rebuildSidebar()
         //
         // Убираем только заливку. Рамка подсветки — её borealis рисует
         // отдельным проходом поверх всего — остаётся, и по ней видно, где
-        // фокус; а по акценту под ней — какой раздел открыт. Раньше эти два
-        // состояния спорили за один и тот же цвет.
+        // фокус; а по акценту под ней — какой раздел открыт. Так эти два
+        // состояния не спорят за один и тот же цвет.
         row->setHideHighlightBackground(true);
 
         auto* title = new brls::Label();
@@ -184,11 +184,11 @@ void LibraryTab::rebuildSidebar()
 
         row->registerClickAction([this, name](brls::View*) {
             selected = name;
-            // Только подсветка. Пересоздание списка уничтожало строку, на
-            // которой в этот момент стоит фокус, — borealis оставался с
-            // указателем на освобождённую память и падал вместе с Atmosphere.
-            // Отложить это на следующий кадр было недостаточно: к тому времени
-            // фокус никуда не девается, он всё на той же строке.
+            // Только подсветка. Пересоздание списка уничтожило бы строку, на
+            // которой в этот момент стоит фокус, — borealis остаётся с
+            // указателем на освобождённую память и падает вместе с Atmosphere.
+            // Отложить на следующий кадр недостаточно: к тому времени фокус
+            // никуда не девается, он всё на той же строке.
             refreshSidebar();
             showSelection();
             return true;
@@ -260,9 +260,8 @@ void LibraryTab::showSelection()
 
     focusedNsuid.clear();
 
-    // По запросу к базе на каждую игру, и все — в UI-потоке: на сотне
-    // избранного это сотня полных строк с описаниями в одном кадре. Читаем в
-    // рабочем потоке, как каталог и карточка.
+    // Читаем в рабочем потоке, как каталог и карточка: на сотне избранного
+    // это сотня поисков в каталоге, и делать их в кадре отрисовки незачем.
     auto flag  = alive;
     auto* self = this;
 
@@ -275,7 +274,7 @@ void LibraryTab::showSelection()
         {
             Game g = state.catalog.byNsuid(nsuid);
             if (g.nsuid.empty())
-                continue;  // игра выпала из каталога при обновлении базы
+                continue;  // игра выпала из каталога при его обновлении
             state.decorate(g);
             games.push_back(std::move(g));
         }
@@ -302,7 +301,6 @@ void LibraryTab::applyGames(std::vector<Game> games)
                            : "hub/library/empty_folder"_i18n);
     emptyLabel->setVisibility(empty ? brls::Visibility::VISIBLE : brls::Visibility::GONE);
     grid->setVisibility(empty ? brls::Visibility::GONE : brls::Visibility::VISIBLE);
-
 }
 
 void LibraryTab::removeFocused()
@@ -361,11 +359,10 @@ void LibraryTab::onFolderRenamed(const std::string& name)
 {
     if (name.empty() || selected.empty())
         return;
-    // Имя могло быть занято — тогда на экране менять нечего. Раньше selected
-    // всё равно переключался на несуществующую папку: показывался пустой
-    // раздел, а rebuildSidebar() не находил его среди строк и не возвращал
-    // фокус — тот оставался на строке, которую в конце кадра сносил
-    // deletionPool borealis.
+    // Имя могло быть занято — тогда на экране менять нечего. Переключить
+    // selected на несуществующую папку нельзя: показался бы пустой раздел, а
+    // rebuildSidebar() не нашёл бы его среди строк и не вернул фокус — тот
+    // остался бы на строке, которую в конце кадра сносит deletionPool borealis.
     if (!AppState::get().library.renameFolder(selected, name))
     {
         brls::Application::notify("hub/folders/name_taken"_i18n);

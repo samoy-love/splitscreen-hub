@@ -1,7 +1,5 @@
 #include "ui/cache_tab.hpp"
 
-#include <cstdio>
-
 #include "app_state.hpp"
 #include "net.hpp"
 #include "ui/fonts.hpp"
@@ -70,13 +68,11 @@ void CacheTab::buildLanguage()
             AppState::get().library.setLanguage(code);
             brls::Application::notify("hub/settings/restart"_i18n);
 
-            // Только подсветка, без пересоздания кнопок.
-            //
-            // Прошлая попытка откладывала buildLanguage() на следующий кадр —
-            // этого мало. Кнопка, по которой нажали, держит фокус, и уничтожить
-            // её нельзя ни сейчас, ни кадром позже: borealis остаётся с
-            // указателем на освобождённую память и роняет вместе с собой
-            // Atmosphere. Менять же здесь нужно ровно две заливки.
+            // Только подсветка, без пересоздания кнопок. Кнопка, по которой
+            // нажали, держит фокус, и уничтожить её нельзя ни сейчас, ни
+            // кадром позже: borealis остаётся с указателем на освобождённую
+            // память и роняет вместе с собой Atmosphere. Менять же здесь нужно
+            // ровно две заливки.
             highlightLanguage();
             return true;
         });

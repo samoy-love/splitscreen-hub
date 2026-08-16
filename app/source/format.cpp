@@ -116,9 +116,8 @@ double contrastRatio(double luminanceA, double luminanceB)
 
 bool readableOn(unsigned char& r, unsigned char& g, unsigned char& b)
 {
-    // Не чистые чёрный и белый: текст в интерфейсе нигде не берёт крайние
-    // значения, иначе он режет глаз на цветной заливке. Те же, что у меток на
-    // кнопках.
+    // Светлый текст — белый, тёмный — не чистый чёрный, а тот же графит, что у
+    // меток на кнопках: чёрный на цветной заливке режет глаз.
     const double lightText = relativeLuminance(0xFF, 0xFF, 0xFF);
     const double darkText  = relativeLuminance(0x16, 0x18, 0x1C);
 

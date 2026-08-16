@@ -2,14 +2,12 @@
 
 #include "http_stream.hpp"
 #include "net.hpp"
-#include "tasks.hpp"
 
 #include <borealis.hpp>
 
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
-#include <cstring>
 #include <chrono>
 #include <thread>
 #include <fstream>
@@ -83,7 +81,8 @@ void VideoDecoder::stop()
 float VideoDecoder::bufferedFraction() const
 {
     // Ролик из кэша читается с диска целиком — буферизовать нечего.
-    HttpStream* stream = activeStream.load();
+    std::lock_guard<std::mutex> lock(streamMutex);
+    HttpStream* stream = activeStream;
     if (!stream)
         return 1.0f;
 
@@ -109,8 +108,9 @@ void VideoDecoder::togglePause()
 
     // на паузе читатель перестаёт забирать данные, и сетевой поток должен
     // знать об этом, иначе примет затор за обрыв связи
-    if (HttpStream* stream = activeStream.load())
-        stream->setReaderPaused(paused.load());
+    std::lock_guard<std::mutex> lock(streamMutex);
+    if (activeStream)
+        activeStream->setReaderPaused(paused.load());
 }
 
 void VideoDecoder::seekBy(double seconds)
@@ -145,13 +145,19 @@ void VideoDecoder::decodeLoop(std::string url, std::string cachePath,
     std::unique_ptr<HttpStream> stream;
 
     // Обнуляет указатель на любом пути выхода, включая ранние возвраты по
-    // ошибке. Объявлен после stream, поэтому разрушается раньше него —
-    // togglePause() из UI-потока не застанет висячий указатель.
+    // ошибке. Объявлен после stream, поэтому разрушается раньше него, и делает
+    // это под streamMutex — UI-поток либо успевает закончить вызов до
+    // разрушения, либо уже видит nullptr.
     struct StreamGuard
     {
-        std::atomic<HttpStream*>* slot;
-        ~StreamGuard() { *slot = nullptr; }
-    } guard { &activeStream };
+        std::mutex* mutex;
+        HttpStream** slot;
+        ~StreamGuard()
+        {
+            std::lock_guard<std::mutex> lock(*mutex);
+            *slot = nullptr;
+        }
+    } guard { &streamMutex, &activeStream };
 
     AVFormatContext* fmt = nullptr;
 
@@ -175,9 +181,12 @@ void VideoDecoder::decodeLoop(std::string url, std::string cachePath,
     {
         brls::Logger::info("плеер: потоковое воспроизведение {}", url);
         stream = std::make_unique<HttpStream>(url, cachePath, alive);
+        {
+            std::lock_guard<std::mutex> lock(streamMutex);
+            activeStream = stream.get();
+        }
         // замерший кадр надо объяснить: без этого обрыв неотличим от
         // зависшего приложения
-        activeStream        = stream.get();
         stream->onReconnect = [this](bool active, int attempt) {
             reconnecting = active;
             reconnectTry = attempt;
@@ -370,6 +379,14 @@ void VideoDecoder::decodeLoop(std::string url, std::string cachePath,
         int readResult = av_read_frame(fmt, packet);
         if (readResult < 0)
         {
+            if (stream && stream->failed())
+            {
+                // сеть сдалась — перематывать в начало бессмысленно, там снова
+                // обрыв; останавливаемся с ошибкой, и плеер это покажет
+                brls::Logger::error("плеер: поток оборвался окончательно");
+                error = true;
+                break;
+            }
             // ролик закончился — начинаем сначала, это трейлер в цикле
             av_seek_frame(fmt, videoIdx, 0, AVSEEK_FLAG_BACKWARD);
             flushAfterJump(0.0);
@@ -528,8 +545,8 @@ void VideoSurface::draw(NVGcontext* vg, float x, float y, float width, float hei
         bool recon   = decoder && decoder->isReconnecting();
         int attempt  = decoder ? decoder->reconnectAttempt() : 0;
 
-        // Только на изменение. Раньше колбэк дёргался каждый кадр, а он зовёт
-        // Label::setText, и тот помечает узел раскладки грязным — пересчёт
+        // Только на изменение: колбэк зовёт Label::setText, а тот помечает
+        // узел раскладки грязным — дёргать его каждый кадр значит пересчёт
         // шестьдесят раз в секунду всё время буферизации и паузы.
         if (loading != lastLoading || failed != lastFailed || paused != lastPaused
             || recon != lastReconnecting || attempt != lastAttempt)
@@ -557,9 +574,9 @@ void VideoSurface::draw(NVGcontext* vg, float x, float y, float width, float hei
     if (nvgImage < 0)
         return;  // ещё ничего не декодировано — статус-лейбл показывает индикатор поверх
 
-    // Вписываем кадр целиком, сохраняя пропорции: раньше картинка растягивалась
-    // на всю выделенную область, и при несовпадении сторон ролик выглядел
-    // сплющенным. Поля по краям остаются чёрными — как в обычном плеере.
+    // Вписываем кадр целиком, сохраняя пропорции: растянутая на всю область
+    // картинка при несовпадении сторон выглядит сплющенной. Поля по краям
+    // остаются чёрными — как в обычном плеере.
     const float scale = std::min(width / (float)imageW, height / (float)imageH);
     const float fitW  = imageW * scale;
     const float fitH  = imageH * scale;
@@ -619,14 +636,14 @@ void VideoPlayerActivity::onContentAvailable()
         return true;
     });
 
-    beginDownload();
+    startPlayback();
 }
 
 namespace
 {
 
 /// «3:07» — привычный вид для роликов длиной в минуты.
-std::string clock(double seconds)
+std::string formatClock(double seconds)
 {
     if (seconds < 0)
         seconds = 0;
@@ -663,7 +680,7 @@ void VideoPlayerActivity::updateProgress(double position, double duration, float
         bar->setWidthPercentage(percent);
     };
 
-    setLabel(elapsedLabel, shownElapsed, clock(position));
+    setLabel(elapsedLabel, shownElapsed, formatClock(position));
 
     if (duration <= 0.0)
     {
@@ -674,18 +691,18 @@ void VideoPlayerActivity::updateProgress(double position, double duration, float
     }
     else
     {
-        setLabel(leftLabel, shownLeft, "−" + clock(duration - position));
+        setLabel(leftLabel, shownLeft, "−" + formatClock(duration - position));
         setBar(playedBar, shownPlayed, 100.0f * static_cast<float>(position / duration));
     }
 
     setBar(loadedBar, shownLoaded, 100.0f * buffered);
 }
 
-void VideoPlayerActivity::beginDownload()
+void VideoPlayerActivity::startPlayback()
 {
-    // Ждать полной закачки больше не нужно: декодер сам решает, читать ли
-    // готовый файл из кэша или тянуть поток из сети. Показ начинается, как
-    // только разобран заголовок, а кэш наполняется попутно.
+    // Полной закачки не ждём: декодер сам решает, читать ли готовый файл из
+    // кэша или тянуть поток из сети. Показ начинается, как только разобран
+    // заголовок, а кэш наполняется попутно.
     decoder = std::make_unique<VideoDecoder>();
     decoder->start(url, net::cachePath(url, ".mp4"), alive.get());
 
@@ -735,8 +752,8 @@ void VideoPlayerActivity::beginDownload()
     videoBox->addView(surface);
 
     // Явно, а не полагаясь на getDefaultFocus при открытии: поверхность
-    // добавляется в конце onContentAvailable, и раньше курсор мог остаться на
-    // кнопке трейлера на предыдущем экране.
+    // добавляется в конце onContentAvailable, и без этого курсор может остаться
+    // на кнопке трейлера на предыдущем экране.
     brls::Application::giveFocus(surface);
 }
 

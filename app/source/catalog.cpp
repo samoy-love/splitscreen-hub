@@ -145,9 +145,9 @@ std::vector<unsigned char> readWhole(const std::string& path)
 // служебное
 // --------------------------------------------------------------------------
 
-// «Популярные», а не «по обзорам»: внешние источники знают 188 игр из 3491, то
-// есть осмысленно упорядочена лишь верхушка, а остальные идут по алфавиту.
-// Прежнее название обещало сортировку всего каталога по качеству.
+// «Популярные», а не «по обзорам»: внешние источники знают лишь малую часть
+// каталога, то есть осмысленно упорядочена лишь верхушка, а остальные идут по
+// алфавиту.
 std::vector<std::string> Catalog::sortNames()
 {
     return {
@@ -155,7 +155,6 @@ std::vector<std::string> Catalog::sortNames()
         "hub/sort/alphabet"_i18n,
         "hub/sort/players"_i18n,
         "hub/sort/newest"_i18n,
-        "hub/sort/compact"_i18n,
         "hub/sort/installed"_i18n,
     };
 }
@@ -190,8 +189,6 @@ std::string Catalog::genreLabel(const std::string& value)
     auto it = keys.find(value);
     return it == keys.end() ? value : brls::getStr(it->second);
 }
-
-Catalog::~Catalog() = default;
 
 // --------------------------------------------------------------------------
 // загрузка
@@ -366,8 +363,8 @@ std::vector<Game> Catalog::queryBrief(const Filter& f) const
         out.push_back(std::move(g));
     }
 
-    perf::count(perf::Counter::DbQueries);
-    perf::count(perf::Counter::DbMs, (long long)timer.elapsedMs());
+    perf::count(perf::Counter::CatalogQueries);
+    perf::count(perf::Counter::CatalogMs, (long long)timer.elapsedMs());
     return out;
 }
 
@@ -540,8 +537,8 @@ Game Catalog::byNsuid(const std::string& nsuid) const
         g.hasDemo         = d.hasDemo;
     }
 
-    perf::count(perf::Counter::DbQueries);
-    perf::count(perf::Counter::DbMs, (long long)timer.elapsedMs());
+    perf::count(perf::Counter::CatalogQueries);
+    perf::count(perf::Counter::CatalogMs, (long long)timer.elapsedMs());
     return g;
 }
 

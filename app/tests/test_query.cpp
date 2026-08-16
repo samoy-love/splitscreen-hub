@@ -189,10 +189,6 @@ void testSorting()
            { "Mango", "Zebra", "Apple" });
 
     f.sort = 4;
-    expect("по размеру, неизвестный в конец", titles(catalogq::select(games, f, -1)),
-           { "Mango", "Zebra", "Apple" });
-
-    f.sort = 5;
     expect("«сначала установленные» упорядочивается по алфавиту, остальное делает вкладка",
            titles(catalogq::select(games, f, -1)), { "Apple", "Mango", "Zebra" });
 }
@@ -215,7 +211,7 @@ void testSortStability()
     }
 
     Filter f;
-    for (int sort : { 0, 2, 3, 4 })
+    for (int sort : { 0, 2, 3 })
     {
         f.sort = sort;
         expect("сортировка " + std::to_string(sort) + ": при равных ключах — по названию",
@@ -264,9 +260,8 @@ int main()
     testArticleStripping();
     testEmpty();
 
-    std::printf("\n%s\n", failures == 0 ? "все проверки прошли"
-                                        : "провалов: " + std::to_string(failures) == ""
-                                              ? ""
-                                              : ("провалов: " + std::to_string(failures)).c_str());
+    const std::string verdict =
+        failures == 0 ? "все проверки прошли" : "провалов: " + std::to_string(failures);
+    std::printf("\n%s\n", verdict.c_str());
     return failures == 0 ? 0 : 1;
 }

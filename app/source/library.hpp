@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdint>
 #include <map>
 #include <mutex>
 #include <string>
@@ -56,13 +57,13 @@ class Library
 
   private:
     /// Библиотеку читают рабочие потоки (decorate() на каждой игре выдачи), а
-    /// меняет UI-поток. Раньше это были голые векторы: std::find по favs шёл
-    /// одновременно с push_back в него же.
+    /// меняет UI-поток. Без мьютекса std::find по favs шёл бы одновременно с
+    /// push_back в него же.
     mutable std::mutex mutex;
 
     /// Пишет файл на карту. Зовётся из рабочего потока, копию данных получает
     /// готовой — под мьютексом её собирает saveLater().
-    static void writeFile(const std::string& path, const std::string& json);
+    static void writeFile(const std::string& path, const std::string& json, uint64_t snapshot);
     /// Собирает JSON под мьютексом и отправляет запись в рабочий поток.
     void saveLater() const;
 
@@ -74,7 +75,7 @@ class Library
     /// только если консоль русская, иначе английский. Как только человек
     /// выбрал язык руками, здесь появляется код и система больше не спрашивается.
     std::string lang;
-    /// mutable: save() помечена const, а она — единственная точка, через
+    /// mutable: saveLater() помечена const, а она — единственная точка, через
     /// которую проходят все изменения.
     mutable unsigned rev = 0;
 

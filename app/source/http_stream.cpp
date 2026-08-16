@@ -286,9 +286,8 @@ void HttpStream::feedFromCache(int64_t from)
     if (!file)
     {
         // Файл мог исчезнуть между проверкой и открытием — например, его убрала
-        // чистка кэша. Раньше здесь стояло finished = true: читатель получал
-        // EOF, и плеер показывал ошибку вместо ролика, хотя комментарий рядом
-        // обещал перекачать. Теперь действительно перекачиваем.
+        // чистка кэша. Перекачиваем из сети, а не выставляем finished: иначе
+        // читатель получил бы EOF, и плеер показал бы ошибку вместо ролика.
         brls::Logger::warning("поток: кэш пропал, возвращаемся к сети");
         cacheComplete = false;
         cacheAllowed  = (from == 0);
@@ -336,14 +335,17 @@ int HttpStream::performRange(int64_t from)
     curl_easy_setopt(curl, CURLOPT_LOW_SPEED_LIMIT, 512L);
     curl_easy_setopt(curl, CURLOPT_LOW_SPEED_TIME, 20L);
     curl_easy_setopt(curl, CURLOPT_USERAGENT, "splitscreen-hub/1.0");
+    // Проверка сертификата отключена намеренно: в libnx нет системного
+    // хранилища корневых сертификатов, а вшитый бандл со временем протухает и
+    // молча ломает загрузку.
     curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
     curl_easy_setopt(curl, CURLOPT_MAXREDIRS, 5L);
     curl_easy_setopt(curl, CURLOPT_REDIR_PROTOCOLS, CURLPROTO_HTTP | CURLPROTO_HTTPS);
 
-    // Отмена без ожидания. Раньше закрытие плеера ждало, пока curl сам заметит
-    // обрыв: на зависшем Wi-Fi это до двадцати секунд по LOW_SPEED_TIME, и всё
-    // это время интерфейс не рисовал кадров. Возврат ненуля обрывает передачу
-    // немедленно.
+    // Отмена без ожидания: возврат ненуля обрывает передачу немедленно. Без
+    // этого закрытие плеера ждало бы, пока curl сам заметит обрыв, — на
+    // зависшем Wi-Fi это до двадцати секунд по LOW_SPEED_TIME, и всё это время
+    // интерфейс не рисовал бы кадров.
     curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 0L);
     curl_easy_setopt(curl, CURLOPT_XFERINFODATA, this);
     curl_easy_setopt(curl, CURLOPT_XFERINFOFUNCTION,
@@ -351,10 +353,12 @@ int HttpStream::performRange(int64_t from)
                          return static_cast<HttpStream*>(userdata)->cancelled() ? 1 : 0;
                      });
 
-    // Диапазон запрашиваем всегда, даже с нуля: только в ответе 206 есть
-    // Content-Range с полным размером файла. Без него на первом проходе
-    // размер оставался неизвестным, и обрыв на середине было не отличить
-    // от конца файла — ролик молча обрезался и таким попадал в кэш.
+    // Откуда берётся полный размер файла: при from > 0 curl шлёт Range, сервер
+    // отвечает 206, и размер приходит в Content-Range (см. onHeaderPublic);
+    // при from == 0 заголовка Range нет, ответ 200, и размер берём ниже из
+    // CURLINFO_CONTENT_LENGTH_DOWNLOAD_T. Без известного размера обрыв на
+    // середине не отличить от конца файла — ролик молча обрезался бы и таким
+    // попадал в кэш.
     curl_easy_setopt(curl, CURLOPT_RESUME_FROM_LARGE, static_cast<curl_off_t>(from));
 
     const CURLcode result = curl_easy_perform(curl);
@@ -398,7 +402,7 @@ int HttpStream::readPacket(void* opaque, uint8_t* buf, int size)
     const int64_t offset    = self->position - self->base;
     const int64_t available = static_cast<int64_t>(self->buffer.size()) - offset;
     if (available <= 0)
-        return AVERROR_EOF;
+        return self->connectionFailed.load() ? AVERROR(EIO) : AVERROR_EOF;
 
     const int take = static_cast<int>(std::min<int64_t>(size, available));
     std::memcpy(buf, self->buffer.data() + offset, static_cast<size_t>(take));

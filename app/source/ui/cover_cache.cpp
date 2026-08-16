@@ -32,12 +32,6 @@ std::unordered_set<std::string> queued;
 /// подлежат.
 std::unordered_map<std::string, int> pinned;
 
-#ifdef __SWITCH__
-const char* ART_DIR = "romfs:/art/";
-#else
-const char* ART_DIR = "resources/art/";
-#endif
-
 }  // namespace
 
 namespace covers
@@ -124,9 +118,9 @@ void warm(const std::string& file)
     const std::string path = std::string(ART_DIR) + file;
 
     tasks::io([file, path]() {
-        // Отметку о заказе снимаем при любом исходе. Раньше ранние выходы —
-        // файл не открылся, JPEG не разобрался — оставляли её навсегда, и
-        // предзагрузка этой обложки за весь сеанс больше не повторялась.
+        // Отметку о заказе снимаем при любом исходе, включая ранние выходы —
+        // файл не открылся, JPEG не разобрался. Иначе она останется навсегда,
+        // и предзагрузка этой обложки за весь сеанс больше не повторится.
         auto release = [file]() { brls::sync([file]() { queued.erase(file); }); };
 
         std::ifstream in(path, std::ios::binary);

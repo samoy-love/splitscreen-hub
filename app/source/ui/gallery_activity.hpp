@@ -5,6 +5,8 @@
 #include <string>
 #include <vector>
 
+class RemoteImage;
+
 /// Полноэкранный просмотр скриншотов с перелистыванием.
 ///
 /// В карточке снимки показываются полосой по 228 точек — разглядеть на них
@@ -29,7 +31,7 @@ class GalleryActivity : public brls::Activity
 
     /// Картинку пересоздаём на каждый снимок: RemoteImage сам следит за своим
     /// временем жизни, и так проще, чем гасить прошлую загрузку.
-    class RemoteImage* image = nullptr;
+    RemoteImage* image = nullptr;
 
     BRLS_BIND(brls::Box, holder, "gallery/holder");
     BRLS_BIND(brls::Label, status, "gallery/status");

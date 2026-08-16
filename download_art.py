@@ -1,12 +1,9 @@
 """
-Качает обложки игр в app/romfs/art/<nsuid>.jpg размером 240px.
+Качает обложки игр в app/resources/art/<nsuid>.jpg шириной 240 точек.
 
-Ячейка сетки в доке 1080p ~280px, в портативе ~230px, поэтому 128px заметно мылит,
-а 320px раздувает релиз без видимой пользы.
-
-240 точек — ровно столько, сколько плитка занимает на экране в доке: окно
-1920×1080 при базе 1280 даёт масштаб 1.5, и 160 логических точек плитки
-превращаются в 240 физических. Всё, что шире, отбрасывается при выводе.
+240 — ровно столько, сколько плитка занимает на экране в доке: окно 1920×1080
+при базе 1280 даёт масштаб 1.5, и 160 логических точек плитки превращаются в
+240 физических. Всё, что шире, отбрасывается при выводе.
 
 Cloudinary отдаёт нужный размер трансформацией в URL, но URL бывают двух видов —
 /image/upload/... и /image/fetch/... — и подстановка должна учитывать оба. Иначе
@@ -109,7 +106,20 @@ def main():
     with concurrent.futures.ThreadPoolExecutor(WORKERS) as pool:
         list(pool.map(fetch, todo))
 
-    report(targets)
+    return report(targets)
+
+
+def missing_titles(targets):
+    """nsuid и название тех игр, для которых файла обложки так и нет."""
+    gone = [n for n in targets if not os.path.exists(os.path.join(OUT_DIR, f"{n}.jpg"))]
+    if not gone:
+        return []
+    db = sqlite3.connect(DB)
+    names = dict(db.execute(
+        "SELECT nsuid, title FROM games WHERE nsuid IN (%s)"
+        % ",".join("?" * len(gone)), gone))
+    db.close()
+    return [(n, names.get(n, "?")) for n in gone]
 
 
 def report(targets):
@@ -122,6 +132,16 @@ def report(targets):
         print("ВНИМАНИЕ: средний файл великоват — похоже, трансформация Cloudinary "
               "не применилась и скачаны полноразмерные обложки", file=sys.stderr)
 
+    # Недостача — это список названий и ненулевой код возврата, а не цифра в
+    # выводе: иначе игры уезжают в релиз с пустыми плитками незамеченными.
+    gone = missing_titles(targets)
+    if gone:
+        print(f"\nБЕЗ ОБЛОЖКИ: {len(gone)}", file=sys.stderr)
+        for nsuid, title in gone:
+            print(f"  {nsuid}  {title}", file=sys.stderr)
+        print("Повторный запуск скачает только их.", file=sys.stderr)
+    return len(gone)
+
 
 if __name__ == "__main__":
-    main()
+    sys.exit(1 if main() else 0)

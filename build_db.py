@@ -1,9 +1,14 @@
 """
-Собирает catalog.db для приложения из local_multiplayer.json + overrides.json.
+Собирает catalog.db — рабочую базу пайплайна — из local_multiplayer.json и
+overrides.json. Приложение эту базу не читает: make_ship_data.py упаковывает её
+в catalog.bin и details.bin.
 
 В базу попадают только вышедшие игры Nintendo Switch с известным точным числом
 игроков на одном экране. Не попадают: бандлы-сборники (nsuid 7007*), будущие
 релизы и всё, для чего число игроков осталось неизвестным.
+
+Если рядом лежат translations.db (русские тексты) и toplists.db (рейтинг
+подборок из rank_toplists.py), их содержимое подмешивается.
 """
 
 import json
@@ -37,18 +42,10 @@ CREATE TABLE games (
   no_tabletop      INTEGER NOT NULL DEFAULT 0,
   has_demo         INTEGER NOT NULL DEFAULT 0,
   has_russian      INTEGER NOT NULL DEFAULT 0,
-  -- Копия из toplists. Сортировка по умолчанию идёт именно по ней, и через
-  -- LEFT JOIN она обходилась в секунду на консоли: соединение не давало
-  -- воспользоваться индексом, и 3489 строк каждый раз уходили во временное
-  -- B-дерево. Своя колонка в games делает порядок индексируемым.
-  -- Теперь это число независимых источников, назвавших игру, а не число
-  -- подборок: к редакционным спискам добавились треды, и считать их одной
-  -- шкалой с сайтами было бы нечестно — см. rank_toplists.py.
+  -- Число независимых источников (подборок и тредов), назвавших игру,
+  -- и счёт согласия между ними ×10 (0..1000) — см. rank_toplists.py.
+  -- Счёт целый, потому что в catalog.bin уезжает как u16.
   mentions         INTEGER NOT NULL DEFAULT 0,
-  best_pos         INTEGER NOT NULL DEFAULT 0,
-  -- Счёт согласия источников, умноженный на 10 (0..1000). По нему идёт
-  -- сортировка «популярные». Целое, а не дробь: значение уезжает в catalog.bin
-  -- как u16, и на консоли сравнивать целые дешевле.
   score            INTEGER NOT NULL DEFAULT 0,
   -- Переиздание аркадного автомата или консоли прошлого века. Таких в каталоге
   -- 474 штуки — 13%, и почти все от одного издателя. Формально они подходят под
@@ -80,40 +77,23 @@ CREATE TABLE media (
   ord       INTEGER NOT NULL
 );
 
--- главный запрос приложения: WHERE same_screen_max >= ?
 CREATE INDEX idx_players ON games(same_screen_max);
 CREATE INDEX idx_title_id ON games(title_id);
-CREATE INDEX idx_sort ON games(sort_title);
 CREATE INDEX idx_genre ON genres(genre);
 CREATE INDEX idx_media ON media(nsuid);
--- Под остальные сортировки из ORDER_BY[] в app/source/catalog.cpp. Без них
--- «сначала новые» и «по размеру» строили временное B-дерево на 3489 строк при
--- каждом движении фильтра. Вторым ключом всюду sort_title — он же идёт вторым
--- в самих запросах, поэтому индекс покрывает порядок целиком.
-CREATE INDEX idx_year ON games(release_year DESC, sort_title);
--- Индекс по выражению, а не по колонке: ведущий член сортировки —
--- `rom_size_bytes IS NULL` (игры с неизвестным размером уходят в конец), и по
--- обычному индексу такой порядок не берётся.
-CREATE INDEX idx_size ON games(rom_size_bytes IS NULL, rom_size_bytes, sort_title);
 
+-- Только для проверок verify_db.py: приложение ищет по названию само.
 CREATE VIRTUAL TABLE games_fts USING fts5(
   title, nsuid UNINDEXED, tokenize='unicode61'
 );
 
--- Наработки, которые собираются отдельно и переживают пересборку каталога:
--- перевод и рейтинги лежат в своих файлах, сюда только подмешиваются.
+-- Собираются отдельно и переживают пересборку каталога: лежат в своих файлах,
+-- сюда только подмешиваются.
 CREATE TABLE translations (
   nsuid           TEXT PRIMARY KEY,
   headline_ru     TEXT,
   players_note_ru TEXT,
   description_ru  TEXT
-);
-
-CREATE TABLE toplists (
-  nsuid    TEXT PRIMARY KEY,
-  mentions INTEGER NOT NULL,  -- в скольких подборках названа
-  best_pos INTEGER,
-  sources  TEXT NOT NULL
 );
 
 CREATE TABLE ranking (
@@ -123,33 +103,19 @@ CREATE TABLE ranking (
   community REAL NOT NULL,
   families  INTEGER NOT NULL -- независимых источников
 );
-
-CREATE TABLE ratings (
-  nsuid  TEXT PRIMARY KEY,
-  rating INTEGER,   -- 0-100
-  votes  INTEGER,   -- на скольких отзывах основана оценка
-  source TEXT       -- откуда взята: показывается в карточке
-);
 """
 
-# Файл -> (таблица, колонки). Пересборка каталога не должна уничтожать работу
-# параллельных сессий, поэтому они пишут в свои базы, а не в catalog.db.
+# Файл -> (таблица, колонки). Каждый этап пишет в свою базу, а не в catalog.db,
+# чтобы пересборка каталога не уничтожала его результат.
 SIDECARS = {
     "translations.db": ("translations",
                         "nsuid, headline_ru, players_note_ru, description_ru"),
-    "ratings.db": ("ratings", "nsuid, rating, votes, source"),
-    "toplists.db": ("toplists", "nsuid, mentions, best_pos, sources"),
-    # Тот же файл, вторая таблица: рейтинг считается отдельным проходом
-    # (rank_toplists.py) уже поверх собранных подборок и тредов.
-    "toplists.db:ranking": ("ranking",
-                            "nsuid, score, editorial, community, families"),
+    "toplists.db": ("ranking", "nsuid, score, editorial, community, families"),
 }
 
 
 def merge_sidecars(db):
-    for key, (table, columns) in SIDECARS.items():
-        # «файл:таблица» — когда из одного файла берём не одну таблицу
-        path = key.split(":")[0]
+    for path, (table, columns) in SIDECARS.items():
         if not os.path.exists(path):
             continue
         db.execute("ATTACH DATABASE ? AS side", (path,))
@@ -224,12 +190,12 @@ def load_games():
         overrides = json.load(f)
 
     today = date.today().isoformat()
-    rows, skipped = [], {"бандл": 0, "нет числа игроков": 0, "не вышла": 0}
+    rows, skipped = [], {"нет nsuid": 0, "бандл": 0, "нет числа игроков": 0, "не вышла": 0}
 
     for g in games:
         nsuid = g.get("nsuid")
         if not nsuid:
-            skipped["нет числа игроков"] += 1
+            skipped["нет nsuid"] += 1
             continue
         if nsuid.startswith("7007"):
             skipped["бандл"] += 1
@@ -284,8 +250,7 @@ def main():
         modes = g.get("play_modes") or ""
         langs = g.get("languages") or ""
 
-        # Колонки перечислены поимённо: позиционный список из двадцати с лишним
-        # «?» уже однажды разъехался со схемой при добавлении колонки.
+        # Колонки перечислены поимённо, чтобы не разъехаться со схемой.
         db.execute(
             "INSERT INTO games (nsuid, title, sort_title, title_id,"
             " same_screen_min, same_screen_max, players_note, box_art_file,"
@@ -331,21 +296,15 @@ def main():
 
     merge_sidecars(db)
 
-    # Переносим рейтинг в games — см. комментарий у колонок.
-    #
-    # mentions берётся из ranking.families, а не из toplists.mentions: игру
-    # могли не назвать ни в одной редакционной подборке, но обсуждать в пяти
-    # тредах, и для фильтра «советуют» это ровно такой же довод.
+    # mentions — число независимых источников, а не только редакционных
+    # подборок: игру могли обсуждать в пяти тредах и не назвать ни в одном
+    # списке, и для фильтра «советуют» это такой же довод.
     db.execute("""
         UPDATE games SET
           mentions = coalesce((SELECT r.families FROM ranking r WHERE r.nsuid = games.nsuid), 0),
-          best_pos = coalesce((SELECT t.best_pos FROM toplists t WHERE t.nsuid = games.nsuid), 0),
           score    = coalesce((SELECT cast(round(r.score * 10) AS INTEGER) FROM ranking r
                                WHERE r.nsuid = games.nsuid), 0)
     """)
-    db.execute("CREATE INDEX IF NOT EXISTS idx_top ON games("
-               "mentions = 0, score DESC, sort_title)")
-    db.commit()
     db.commit()
 
     print(f"игр в базе: {len(rows)}")

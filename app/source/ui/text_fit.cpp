@@ -17,10 +17,9 @@ float measure(const std::string& text, float fontSize)
     return nvgTextBounds(vg, 0, 0, text.c_str(), nullptr, nullptr);
 }
 
-/// Высота текста, разложенного по строкам в заданную ширину, и высота одной
-/// строки — теми же настройками, какими его нарисует Label.
-void measureBox(const std::string& text, float maxWidth, float fontSize, float lineHeight,
-                float& height, float& single)
+/// Высота текста, разложенного по строкам в заданную ширину, — теми же
+/// настройками, какими его нарисует Label.
+float measureBox(const std::string& text, float maxWidth, float fontSize, float lineHeight)
 {
     NVGcontext* vg = brls::Application::getNVGContext();
     nvgFontFaceId(vg, brls::Application::getDefaultFont());
@@ -28,11 +27,9 @@ void measureBox(const std::string& text, float maxWidth, float fontSize, float l
     nvgTextAlign(vg, NVG_ALIGN_LEFT | NVG_ALIGN_TOP);
     nvgTextLineHeight(vg, lineHeight);
 
-    nvgTextMetrics(vg, nullptr, nullptr, &single);
-
     float bounds[4] = {};
     nvgTextBoxBounds(vg, 0, 0, maxWidth, text.c_str(), nullptr, bounds);
-    height = bounds[3] - bounds[1];
+    return bounds[3] - bounds[1];
 }
 
 /// Начало символа UTF-8: у продолжающих байтов старшие биты 10xxxxxx, и резать
@@ -70,10 +67,9 @@ std::string ellipsize(const std::string& text, float maxWidth, float fontSize)
     // нельзя.
     const std::vector<size_t> starts = charStarts(text);
 
-    // Двоичный поиск по длине вместо отрезания по одному символу. Прежний
-    // вариант звал nvgTextBounds по три-четыре десятка раз на длинное название,
-    // и так на каждую из семи плиток в строке при каждой прокрутке; здесь
-    // вызовов шесть-семь.
+    // Двоичный поиск по длине вместо отрезания по одному символу: измерение
+    // идёт на каждую из семи плиток в строке при каждой прокрутке, и вызовов
+    // nvgTextBounds здесь шесть-семь вместо трёх-четырёх десятков.
     size_t low = 0, high = starts.size() - 1;
     while (low < high)
     {
@@ -93,8 +89,7 @@ std::string ellipsizeHeight(const std::string& text, float maxWidth, float fontS
     if (text.empty() || maxHeight <= 0)
         return text;
 
-    float height = 0, single = 0;
-    measureBox(text, maxWidth, fontSize, lineHeight, height, single);
+    float height = measureBox(text, maxWidth, fontSize, lineHeight);
 
     const float limit = maxHeight;
     if (height <= limit)
@@ -109,8 +104,7 @@ std::string ellipsizeHeight(const std::string& text, float maxWidth, float fontS
     while (low < high)
     {
         const size_t mid = (low + high + 1) / 2;
-        measureBox(text.substr(0, starts[mid]) + dots, maxWidth, fontSize, lineHeight, height,
-                   single);
+        height = measureBox(text.substr(0, starts[mid]) + dots, maxWidth, fontSize, lineHeight);
         if (height <= limit)
             low = mid;
         else

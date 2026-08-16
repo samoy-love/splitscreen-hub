@@ -10,7 +10,8 @@ Switch — 2), а Voice of Cards показывает 4 у полностью о
 
 Игры, по которым надёжного ответа нет, сюда не попадают и в каталог не идут.
 
-Генерирует overrides.json: nsuid -> {players, note, source}.
+Генерирует overrides.json:
+nsuid -> {title, same_screen_min, same_screen_max, players_note, source}.
 """
 
 import json
@@ -106,6 +107,11 @@ VERIFIED = {
     "The Viking's Games: Madness Fight": (2, None, "Nintendo EU (2-2) + playerCount 2+"),
 }
 
+# Игры без одиночного режима: минимум игроков — двое. У всех остальных из
+# VERIFIED минимум 1 — в них можно играть и одному.
+TWO_PLAYERS_ONLY = {"ibb & obb", "It Takes Two", "LEGO Voyagers", "Ketsu Battler",
+                    "Pair Horror"}
+
 # Все выпуски Jackbox Party Pack — телефоны вместо геймпадов
 JACKBOX_NOTE = "Игроки подключаются телефонами, дополнительные геймпады не нужны."
 JACKBOX_SOURCE = "jackboxgames.com / Nintendo World Report"
@@ -143,14 +149,14 @@ def main():
             missing.append(title)
             continue
         overrides[g["nsuid"]] = {
-            "title": title, "same_screen_min": 2 if players == 2 else 1,
+            "title": title, "same_screen_min": 2 if title in TWO_PLAYERS_ONLY else 1,
             "same_screen_max": players, "players_note": note, "source": source,
         }
 
     with open("overrides.json", "w", encoding="utf-8") as f:
         json.dump(overrides, f, ensure_ascii=False, indent=1)
 
-    unresolved = len(by_title) - len(overrides) - len(WRONGLY_TAGGED)
+    unresolved = len(by_title) - len(overrides) - len(set(WRONGLY_TAGGED) & set(by_title))
     print(f"переопределений: {len(overrides)} из {len(by_title)} игр без счётчика")
     print(f"метка eShop неверна, исключены: {len(WRONGLY_TAGGED)}")
     for title, reason in WRONGLY_TAGGED.items():

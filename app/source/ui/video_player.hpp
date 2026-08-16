@@ -14,12 +14,11 @@
 
 /// Декодер видео, работающий в фоновом потоке.
 ///
-/// libmpv для devkitPro не собрана (см. README, раздел «Видео-трейлеры»):
-/// в pacman готового пакета нет, а сборка mpv + патченный FFmpeg с нуля под
-/// aarch64-none-elf по рецептам nxmp/SwitchWave требует часы кросс-компиляции
-/// и офлайн-патчи, которые нельзя было ни получить, ни проверить в этой
-/// среде за разумное время. switch-ffmpeg — готовый пакет из pacman, поэтому
-/// плеер написан поверх него напрямую (avformat/avcodec/swscale/swresample).
+/// libmpv для devkitPro в pacman нет (только сборка из исходников по рецептам
+/// nxmp/SwitchWave), поэтому плеер написан напрямую поверх FFmpeg
+/// (avformat/avcodec/swscale/swresample). FFmpeg при этом свой, урезанный до
+/// h264 + aac (lib/ffmpeg-slim, собирается build_ffmpeg_slim.sh): пакетный
+/// switch-ffmpeg тянет в бинарник все декодеры — см. CMakeLists.txt.
 ///
 /// Ролик воспроизводится потоком: показ начинается, как только разобран
 /// заголовок, а байты попутно оседают в файловом кэше на SD (тот же кэш, что у
@@ -65,7 +64,6 @@ class VideoDecoder
     bool isReconnecting() const { return reconnecting; }
     int reconnectAttempt() const { return reconnectTry; }
 
-
   private:
     void decodeLoop(std::string url, std::string cachePath, std::atomic_bool* alive);
 
@@ -83,7 +81,11 @@ class VideoDecoder
     /// Активный сетевой поток, если ролик не из кэша. Нужен, чтобы
     /// сообщить ему о паузе: иначе соединение умирает по таймауту, пока
     /// зритель стоит на паузе.
-    std::atomic<class HttpStream*> activeStream { nullptr };
+    /// Сетевой поток текущего ролика, пока он есть. Под мьютексом, а не
+    /// атомарный: UI-поток разыменовывает указатель, а поток декодера в это же
+    /// время может разрушать объект — атомарность указателя от этого не спасает.
+    mutable std::mutex streamMutex;
+    class HttpStream* activeStream = nullptr;
     std::atomic_bool reconnecting { false };
     std::atomic_int reconnectTry { 0 };
 
@@ -187,6 +189,8 @@ class VideoPlayerActivity : public brls::Activity
     float shownPlayed = -1.0f;
     float shownLoaded = -1.0f;
 
-    void beginDownload();
+    /// Создаёт декодер и поверхность; показ начинается, как только разобран
+    /// заголовок, кэш на SD наполняется попутно.
+    void startPlayback();
     void closeSelf();
 };
