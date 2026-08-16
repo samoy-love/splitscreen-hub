@@ -1,5 +1,7 @@
 # Проверки, которым не нужны ни консоль, ни тулчейн devkitPro: разметка против
-# атрибутов, которые понимает borealis, и тесты чистых функций.
+# атрибутов, которые понимает borealis, тесты чистых функций и сообщения
+# коммитов без упоминаний ИИ (правило из CLAUDE.md; локально его ловит хук
+# .githooks/commit-msg, но хук не переносится клоном — здесь страховка).
 name: checks
 
 on:
@@ -26,3 +28,27 @@ jobs:
       - name: Тесты чистых функций
         working-directory: app
         run: bash tools/run_tests.sh
+
+  commits:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Сообщения коммитов без упоминаний ИИ
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            RANGE="origin/${{ github.base_ref }}..HEAD"
+          else
+            RANGE="HEAD"
+          fi
+          BAD=$(git log "$RANGE" --format='%H %B' \
+            | grep -iE '^Co-[Aa]uthored-[Bb]y:.*(claude|anthropic|copilot|gpt)|(generated|created|written) with .*(claude|copilot|chatgpt)|🤖' \
+            || true)
+          if [ -n "$BAD" ]; then
+            echo "::error::в сообщениях коммитов есть упоминания ИИ — см. CLAUDE.md"
+            echo "$BAD"
+            exit 1
+          fi
+          echo "чисто"

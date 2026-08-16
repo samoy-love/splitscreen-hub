@@ -1,264 +1,272 @@
 # SplitScreen Hub
 
-Homebrew-каталог игр Nintendo Switch с мультиплеером **на одном экране**.
-Отвечает на вопрос «нас четверо, во что поиграть»: фильтр «от N игроков»,
-отметка того, что уже установлено на консоли, избранное и свои папки, трейлеры
-и скриншоты прямо в карточке.
+English · [Русский](README.ru.md)
 
-Приложение — C++17 поверх [borealis](https://github.com/xfangfang/borealis)
-(devkitPro). Данные собираются набором Python-скриптов из публичных API
-nintendo.com и живут в двух двоичных файлах в romfs — на консоли нет ни базы,
-ни сети для работы каталога. Лицензия MIT.
+[![checks](https://github.com/tr0llex/splitscreen-hub/actions/workflows/checks.yml/badge.svg)](https://github.com/tr0llex/splitscreen-hub/actions/workflows/checks.yml)
+[![release](https://img.shields.io/github/v/release/tr0llex/splitscreen-hub)](https://github.com/tr0llex/splitscreen-hub/releases/latest)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-В каталоге около 3500 игр; у каждой известно точное число игроков на одной
-консоли — не «мультиплеер есть», а «1–4». Переиздания аркадных автоматов
-(ACA NEOGEO, Arcade Archives, SEGA AGES — примерно 470 штук) скрыты по
-умолчанию и включаются отдельным фильтром.
+A Nintendo Switch homebrew catalog of games with **same-screen multiplayer**.
+It answers "there are four of us — what do we play?": a "from N players"
+filter, a mark on what is already installed on the console, favorites and
+custom folders, trailers and screenshots right in the game card.
 
----
+The app is C++17 on top of [borealis](https://github.com/xfangfang/borealis)
+(devkitPro). The data is collected by a set of Python scripts from the public
+nintendo.com APIs and lives in two binary files in romfs — the console needs
+neither a database nor a network connection to browse the catalog. MIT licensed.
 
-- [Возможности](#возможности)
-- [Установка](#установка)
-- [Структура репозитория](#структура-репозитория)
-- [Как устроено приложение](#как-устроено-приложение)
-- [Откуда данные](#откуда-данные)
-- [Сборка](#сборка)
-- [Проверки](#проверки)
-- [Управление](#управление)
-- [Известные пробелы](#известные-пробелы)
-- [Лицензия](#лицензия)
+About 3,500 games; for every one the exact number of players on a single
+console is known — not "has multiplayer" but "1–4". Arcade re-releases
+(ACA NEOGEO, Arcade Archives, SEGA AGES — roughly 470 titles) are hidden by
+default and enabled with a separate filter.
 
 ---
 
-## Возможности
+- [Features](#features)
+- [Install](#install)
+- [Repository layout](#repository-layout)
+- [How the app works](#how-the-app-works)
+- [Where the data comes from](#where-the-data-comes-from)
+- [Building](#building)
+- [Checks](#checks)
+- [Controls](#controls)
+- [Known gaps](#known-gaps)
+- [License](#license)
 
-- **Фильтры**: «от N игроков», жанр, только установленные, есть русский язык,
-  поиск по названию, переиздания аркад, скрытые.
-- **Сортировки**: из подборок · по алфавиту · больше игроков · сначала новые ·
-  компактные · сначала установленные.
-- **Рейтинг «из подборок»** — согласие 19 редакционных списков «лучшие couch
-  co-op на Switch» и 18 тредов Reddit/Famiboards, а не число упоминаний
-  (см. [ниже](#рейтинг-из-подборок)).
-- **Карточка игры**: число игроков и пояснение к нему (сплитскрин, hotseat,
-  телефоны вместо геймпадов), описание, скриншоты, трейлеры, размер, языки,
-  издатель, год.
-- **Библиотека**: избранное и свои папки, скрытие ненужного. Хранится в
-  `sdmc:/switch/splitscreen-hub/library.json`, пишется атомарно.
-- **Установленное**: сопоставление с играми на консоли через
-  `nsListApplicationRecord` — «из подходящего у вас уже стоит 12».
-- **Два языка** интерфейса и текстов об играх: английский и русский.
-- **Офлайн**: каталог, обложки и вся навигация работают без сети; сеть нужна
-  только скриншотам и трейлерам, они кэшируются на SD.
+---
 
-## Установка
+## Features
 
-Скачайте `SplitScreenHub.nro` из релизов и положите в `/switch/` на SD-карте.
-Приложение запускается через Homebrew Menu; в applet-режиме (поверх игры)
-памяти меньше, но каталог работает.
+- **Filters**: from N players, genre, installed only, has Russian, title
+  search, arcade re-releases, hidden games.
+- **Sorting**: by curated lists · alphabetical · more players · newest first ·
+  smallest first · installed first.
+- **"From curated lists" ranking** — agreement between 19 editorial "best couch
+  co-op on Switch" lists and 18 Reddit/Famiboards threads, not a mention counter
+  (see [below](#curated-list-ranking)).
+- **Game card**: player count with an explanation (split-screen, hotseat, phones
+  instead of gamepads), description, screenshots, trailers, size, languages,
+  publisher, year.
+- **Library**: favorites and your own folders, hiding what you don't need. Stored
+  in `sdmc:/switch/splitscreen-hub/library.json`, written atomically.
+- **Installed**: matched against the console via `nsListApplicationRecord` —
+  "12 of the matching games are already installed".
+- **Two languages** for the UI and the game texts: English and Russian.
+- **Offline**: the catalog, covers and navigation work without a network;
+  only screenshots and trailers need it, and they are cached on the SD card.
 
-## Структура репозитория
+## Install
+
+Download `SplitScreenHub.nro` from the
+[releases](https://github.com/tr0llex/splitscreen-hub/releases/latest) and put
+it into `/switch/` on the SD card. Launch it from the Homebrew Menu; in applet
+mode (over a running game) there is less memory, but the catalog works.
+
+## Repository layout
 
 ```
-app/                      приложение для Switch
-  source/                 C++: каталог, библиотека, сеть, плеер
-    ui/                   экраны и виджеты borealis
-  resources/              romfs: xml-разметка, i18n, шрифт, иконка;
-                          сюда же пайплайн кладёт catalog.bin, details.bin, art/
-  tests/                  тесты чистых функций (без borealis и консоли)
+app/                      the Switch application
+  source/                 C++: catalog, library, network, player
+    ui/                   borealis screens and widgets
+  resources/              romfs: xml layouts, i18n, font, icon;
+                          the pipeline also drops catalog.bin, details.bin, art/ here
+  tests/                  tests of pure functions (no borealis, no console)
   tools/                  check_xml.py, run_tests.sh, build_ffmpeg_slim.sh, make_icon.py
-  lib/borealis            сабмодуль UI-библиотеки
-  lib/ffmpeg-slim/        урезанный FFmpeg, собирается локально (в .gitignore)
-pipeline/                 сбор данных: eShop → catalog.db → catalog.bin
-  paths.py                общие пути; скрипты запускаются из любой папки
-  overrides.json          ручные поправки числа игроков (коммитится)
-  translations.db         русские тексты об играх (коммитится)
-.github/workflows/        разметка и тесты на каждый push
+  lib/borealis            UI library submodule
+  lib/ffmpeg-slim/        trimmed FFmpeg, built locally (gitignored)
+pipeline/                 data collection: eShop → catalog.db → catalog.bin
+  paths.py                shared paths; scripts run from any directory
+  overrides.json          manual player-count corrections (committed)
+  translations.db         Russian game texts (committed)
+.github/workflows/        layout check and tests on every push
 ```
 
-## Как устроено приложение
+## How the app works
 
 ```
 romfs:/catalog.bin ──► Catalog ──► CatalogQuery(Filter) ──► GridModel ──► GameGrid
 romfs:/details.bin ──►   │  byNsuid()                                     │ GameTile
                          │                                                 ▼
-sdmc:/…/library.json ──► Library (избранное, папки, скрытое, язык)     GameActivity
+sdmc:/…/library.json ──► Library (favorites, folders, hidden, language)  GameActivity
 ns:am ─────────────────► installed::titleIds()                          │
-                                                                        ├─ RemoteImage ◄─ net (curl, кэш на SD)
+                                                                        ├─ RemoteImage ◄─ net (curl, SD cache)
                                                                         └─ VideoDecoder ◄─ HttpStream (curl → AVIO)
 ```
 
-**Данные.** [`Catalog`](app/source/catalog.hpp) читает `catalog.bin` целиком
-при старте (всё, что нужно сетке — около 0.5 МБ) и держит в памяти; карточка
-достаёт свою запись из `details.bin` по смещению. Отбор и порядок —
-[`catalog_query.cpp`](app/source/catalog_query.cpp): чистые функции над
-вектором, без borealis и файлов, поэтому они покрыты тестами.
-[`AppState`](app/source/app_state.hpp) — единственный владелец каталога,
-библиотеки и списка установленных.
+**Data.** [`Catalog`](app/source/catalog.hpp) reads `catalog.bin` in full at
+startup (everything the grid needs — about 0.5 MB) and keeps it in memory; the
+game card fetches its record from `details.bin` by offset. Selection and
+ordering live in [`catalog_query.cpp`](app/source/catalog_query.cpp): pure
+functions over a vector, without borealis or files, so they are covered by tests.
+[`AppState`](app/source/app_state.hpp) is the single owner of the catalog, the
+library and the installed set.
 
-**Потоки.** borealis не потокобезопасен, вся отрисовка — в UI-потоке.
-[`tasks`](app/source/tasks.hpp) даёт два канала: небольшой пул `io()` под
-короткие задачи (разбор JPEG обложек, скриншоты) и `heavy()` под долгие
-(инициализация сети). Возврат в UI — через `brls::sync`. Плитки сетки
-переиспользуются, поэтому обложки живут в [`covers`](app/source/ui/cover_cache.hpp)
-— кэше готовых текстур с вытеснением; плитка сравнивает поколение запроса и не
-ставит себе чужую картинку.
+**Threads.** borealis is not thread-safe; all drawing happens on the UI thread.
+[`tasks`](app/source/tasks.hpp) provides two channels: a small `io()` pool for
+short jobs (JPEG decoding of covers, screenshots) and `heavy()` for long ones
+(network init). Results come back through `brls::sync`. Grid tiles are recycled,
+so covers live in [`covers`](app/source/ui/cover_cache.hpp) — a cache of ready
+textures with eviction; a tile compares the request generation and never shows
+someone else's picture.
 
-**Сеть.** [`net`](app/source/net.hpp) — curl с кэшем на SD для скриншотов.
-[`HttpStream`](app/source/http_stream.hpp) — потоковая закачка ролика в
-буфер AVIO с докачкой по Range после обрыва и попутной записью в кэш.
-[`VideoDecoder`](app/source/ui/video_player.hpp) — собственный плеер поверх
-FFmpeg: demux/decode в своём потоке, кадр через swscale в nanovg-текстуру, звук
-через swresample в SDL2. Проверка TLS-сертификатов отключена намеренно: в libnx
-нет системного хранилища корневых сертификатов, а вшитый бандл со временем
-протухает и молча ломает загрузку.
+**Network.** [`net`](app/source/net.hpp) — curl with an SD cache for
+screenshots. [`HttpStream`](app/source/http_stream.hpp) streams a trailer into
+an AVIO buffer, resumes with Range after a drop and writes the cache along the
+way. [`VideoDecoder`](app/source/ui/video_player.hpp) is a home-grown player on
+top of FFmpeg: demux/decode in its own thread, frames through swscale into an
+nanovg texture, audio through swresample into SDL2. TLS certificate verification
+is disabled on purpose: libnx has no system root store, and a bundled one
+expires over time and silently breaks downloads.
 
-**Экраны.** [`MainTabs`](app/source/ui/main_tabs.hpp) — Каталог, Библиотека,
-Настройки. [`GameActivity`](app/source/ui/game_activity.hpp) — карточка,
-[`GalleryActivity`](app/source/ui/gallery_activity.hpp) — скриншоты во весь
-экран, [`VideoPlayer`](app/source/ui/video_player.hpp) — трейлер. Разметка
-экранов — XML в `app/resources/xml/`; `check_xml.py` сверяет её с атрибутами,
-которые borealis действительно регистрирует, потому что неизвестный атрибут
-роняет приложение при открытии экрана.
+**Screens.** [`MainTabs`](app/source/ui/main_tabs.hpp) — Catalog, Library,
+Settings. [`GameActivity`](app/source/ui/game_activity.hpp) — the game card,
+[`GalleryActivity`](app/source/ui/gallery_activity.hpp) — full-screen
+screenshots, [`VideoPlayer`](app/source/ui/video_player.hpp) — the trailer.
+Screen layouts are XML in `app/resources/xml/`; `check_xml.py` checks them
+against the attributes borealis actually registers, because an unknown attribute
+crashes the app when the screen opens.
 
-## Откуда данные
+## Where the data comes from
 
-Два публичных API, которыми пользуется сам nintendo.com.
+Two public APIs used by nintendo.com itself.
 
-**Algolia** (`store_game_en_us`) — каталог eShop. Ключевой фасет
-`waysToPlayLabels: "Play together on one console"`. Ключ — публичный
-search-only ключ фронтенда сайта.
+**Algolia** (`store_game_en_us`) — the eShop catalog. The key facet is
+`waysToPlayLabels: "Play together on one console"`. The API key is the public
+search-only key of the site's front end.
 
-**graph.nintendo.com** — карточка товара. Обязателен заголовок
-`apollographql-client-name: ncom`, иначе сервер отвечает `Internal server error`.
-Аргумент — OneOf-тип `ProductInput`, ровно один ключ: `sku` | `nsuid` | `urlKey`
-(по `nsuid` доступно заметно больше товаров, чем по `sku`).
+**graph.nintendo.com** — the product card. The header
+`apollographql-client-name: ncom` is mandatory, otherwise the server answers
+`Internal server error`. The argument is a OneOf `ProductInput` with exactly one
+key: `sku` | `nsuid` | `urlKey` (noticeably more products are reachable by
+`nsuid` than by `sku`).
 
-Главное поле — `numberOfPlayers`, и в нём три разных счётчика:
+The key field is `numberOfPlayers`, and it holds three different counters:
 
-| Поле | Что значит |
+| Field | Meaning |
 |---|---|
-| `.system` | **игроков на одной консоли** — то, что нужно |
-| `.local` | локальный беспроводной на нескольких консолях |
-| `.online` | онлайн |
+| `.system` | **players on one console** — the one we need |
+| `.local` | local wireless across several consoles |
+| `.online` | online |
 
-У Mario Kart World это `system 1–4`, `local 2–8`, `online 2–24`. Европейский API
-(`searching.nintendo-europe.com`) для этой задачи не годится: там единственное
-поле `players_to` даёт суммарное число — у Fortnite 100, у Terraria 8 при
-сплитскрине на двоих.
+For Mario Kart World that is `system 1–4`, `local 2–8`, `online 2–24`. The
+European API (`searching.nintendo-europe.com`) is unusable here: its single
+`players_to` field is a total — Fortnite says 100, Terraria says 8 with
+two-player split-screen.
 
-Около половины каталога GraphQL анонимно не отдаёт (`UNAUTHORIZED`), причём это
-не связано ни с доступностью игры, ни с ценой. Такие карточки берутся со
-страницы товара: она открывается обычным GET с полными браузерными заголовками
-(без них 406), а в её `__NEXT_DATA__` лежит тот же объект `Product`.
+About half of the catalog is refused anonymously by GraphQL (`UNAUTHORIZED`),
+unrelated to availability or price. Those cards are taken from the product page:
+it opens with a plain GET and full browser headers (406 without them), and its
+`__NEXT_DATA__` holds the same `Product` object.
 
-### Что не попало в каталог
+### What is not in the catalog
 
-- **бандлы-сборники** (nsuid `7007*`) — у них нет ни числа игроков, ни
-  Title ID, ни размера;
-- **будущие релизы**;
-- **32 игры**, по которым не нашлось надёжного подтверждения мультиплеера;
-- **игры с неверной меткой eShop**: у HELLCARD кооператив только по сети,
-  Double Kick Heroes одиночная, LEGO Voyagers Friend's Pass — не игра, а
-  пропуск для приглашения по сети.
+- **bundles** (nsuid `7007*`) — no player count, no Title ID, no size;
+- **future releases**;
+- **32 games** with no reliable confirmation of multiplayer;
+- **games mislabeled by the eShop**: HELLCARD is co-op online only, Double Kick
+  Heroes is single-player, LEGO Voyagers Friend's Pass is not a game but an
+  online invite pass.
 
-Ещё около полусотни игр eShop пометил `Single player`, хотя мультиплеер у них
-есть — среди них все Jackbox Party Pack, Rocket League, Stardew Valley и
-Terraria. Их числа проверены вручную и лежат в
-[`pipeline/make_overrides.py`](pipeline/make_overrides.py) с источником по
-каждой. Там же видно, почему проверять надо именно версию для Switch: у Stardew
-Valley на оригинальном Switch сплитскрин на двоих, а четверо — только в издании
-для Switch 2.
+Another fifty or so are labeled `Single player` by the eShop despite having
+multiplayer — all Jackbox Party Packs, Rocket League, Stardew Valley and
+Terraria among them. Their numbers were verified by hand and live in
+[`pipeline/make_overrides.py`](pipeline/make_overrides.py) with a source for
+each. It also shows why the Switch version specifically must be checked: Stardew
+Valley on the original Switch is two-player split-screen; four players are only
+in the Switch 2 edition.
 
-Самый полезный источник оказался в самих данных: у многих игр число игроков прямо
-названо в описании от издателя («a 2-player cooperative puzzle platformer»,
-«up to 5 players per turns»). Это надёжнее любого агрегатора и не требует сети.
+The most useful source turned out to be the data itself: many publisher
+descriptions name the count outright ("a 2-player cooperative puzzle
+platformer", "up to 5 players per turns"). More reliable than any aggregator and
+needs no network.
 
-### Рейтинг «из подборок»
+### Curated-list ranking
 
-Сортировка по умолчанию и фильтр «советуют» строятся на **согласии
-источников**, а не на счётчике упоминаний: список из 75 игр называет всё
-подряд, пять статей одного сайта — одно мнение, а упоминание в треде на 900
-комментариев дешевле, чем в треде на 60.
+The default sort and the "recommended" filter are built on **agreement between
+sources**, not on a mention counter: a list of 75 names everything, five articles
+from one site are one opinion, and a mention in a 900-comment thread is cheaper
+than one in a 60-comment thread.
 
-Названия из редакционных статей лежат в
-[`pipeline/toplist_sources.py`](pipeline/toplist_sources.py), треды и формула — в
-[`pipeline/rank_toplists.py`](pipeline/rank_toplists.py). Коротко: вес
-источника — его избирательность `ln(P/n)`; несколько списков одного издания
-делят вес как одно мнение; позиция в списке — мягкий множитель и только там, где
-издание действительно нумерует; треды гасятся по размеру; редакции и обсуждения
-считаются раздельно и сводятся средним геометрическим; игры с одним источником
-уходят в хвост. Игры, которые в тредах прямо ругали, получают голос с обратным
-знаком. Подробное обоснование — в докстринге скрипта.
+Titles from editorial articles live in
+[`pipeline/toplist_sources.py`](pipeline/toplist_sources.py); threads and the
+formula are in [`pipeline/rank_toplists.py`](pipeline/rank_toplists.py). In
+short: a source's weight is its selectivity `ln(P/n)`; several lists from one
+outlet share weight as one opinion; list position is a soft multiplier and only
+where the outlet actually numbers; threads are damped by size; editorial and
+community channels are scored separately and combined by geometric mean; games
+with a single source go to the tail. Games explicitly disliked in threads get a
+negative vote. The full reasoning is in the script's docstring.
 
-### Формат данных
+### Data format
 
-В приложении нет SQLite: при трёх с половиной тысячах игр база решала задачу,
-которой не существует. Сетке нужно 268 КБ на весь каталог, а любой запрос
-поднимал с romfs десятки мегабайт, потому что описания лежат в тех же строках
-таблицы. Вместо этого [`make_ship_data.py`](pipeline/make_ship_data.py) пишет два
-файла:
+There is no SQLite in the app: with three and a half thousand games a database
+solved a problem that does not exist. The grid needs 268 KB for the whole
+catalog, while any query pulled tens of megabytes off romfs because
+descriptions sit in the same rows. Instead
+[`make_ship_data.py`](pipeline/make_ship_data.py) writes two files:
 
-- `catalog.bin` (~0.5 МБ) — всё, что показывает сетка. Читается целиком при
-  запуске, дальше фильтр и сортировка считаются перебором в памяти за единицы
-  миллисекунд;
-- `details.bin` (~5 МБ) — тексты и ссылки карточки, по записи на игру, читаются
-  по смещению. Записи сжаты zlib с общим словарём в 64 КБ: поодиночке они
-  жмутся вдвое, со словарём — почти втрое, и каждая разворачивается отдельно.
+- `catalog.bin` (~0.5 MB) — everything the grid shows. Read in full at startup;
+  filtering and sorting are then an in-memory scan taking milliseconds;
+- `details.bin` (~5 MB) — card texts and links, one record per game, read by
+  offset. Records are zlib-compressed with a shared 64 KB dictionary: alone they
+  halve, with the dictionary they shrink almost threefold, and each still
+  inflates independently.
 
-`catalog.db` — рабочая база пайплайна, приложение её не видит.
+`catalog.db` is the pipeline's working database; the app never sees it.
 
-## Сборка
+## Building
 
-### Данные
+### Data
 
 ```bash
-python pipeline/fetch_local_multiplayer.py   # eShop -> local_multiplayer.json (кэш карточек в products_cache.json)
-python pipeline/repair_catalog.py            # необязательно: добирает игры, которые перечисление Algolia пропускает
-python pipeline/make_overrides.py            # ручные поправки -> overrides.json
-python pipeline/build_db.py                  # рабочая база catalog.db
-python pipeline/rank_toplists.py             # рейтинг подборок -> toplists.db
-python pipeline/build_db.py                  # повторно: подмешивает рейтинг и переводы
-python pipeline/download_art.py              # обложки 240x240 -> app/resources/art/
-python pipeline/verify_db.py                 # инварианты данных
-python pipeline/make_ship_data.py            # catalog.bin и details.bin -> app/resources/
+python pipeline/fetch_local_multiplayer.py   # eShop -> local_multiplayer.json (card cache in products_cache.json)
+python pipeline/repair_catalog.py            # optional: picks up games Algolia enumeration misses
+python pipeline/make_overrides.py            # manual corrections -> overrides.json
+python pipeline/build_db.py                  # working database catalog.db
+python pipeline/rank_toplists.py             # curated-list ranking -> toplists.db
+python pipeline/build_db.py                  # again: merges ranking and translations
+python pipeline/download_art.py              # 240x240 covers -> app/resources/art/
+python pipeline/verify_db.py                 # data invariants
+python pipeline/make_ship_data.py            # catalog.bin and details.bin -> app/resources/
 ```
 
-`build_db.py` запускается дважды: `rank_toplists.py` сопоставляет названия из
-подборок с каталогом, а значит, каталог уже должен существовать. Скрипты можно
-запускать из любой папки — пути считаются от `pipeline/paths.py`.
+`build_db.py` runs twice: `rank_toplists.py` matches list titles against the
+catalog, so the catalog must already exist. Scripts run from any directory —
+paths are resolved via `pipeline/paths.py`.
 
-Обложки скачиваются в 240 точек — ровно столько, сколько плитка занимает на
-экране в доке (окно 1920×1080 при базе 1280 даёт масштаб 1.5, и 160 логических
-точек плитки превращаются в 240 физических).
+Covers are fetched at 240 px — exactly what a tile occupies on screen when
+docked (a 1920×1080 window at base 1280 gives scale 1.5, and 160 logical tile
+points become 240 physical ones).
 
-Русские тексты об играх лежат в `pipeline/translations.db` (таблица
-`translations`: `nsuid, headline_ru, players_note_ru, description_ru`). Файл
-сделан машинным переводом один раз и закоммичен как есть — скрипта-производителя
-нет; без него каталог соберётся с английскими текстами.
+Russian game texts live in `pipeline/translations.db` (table `translations`:
+`nsuid, headline_ru, players_note_ru, description_ru`). The file was machine
+translated once and is committed as is — there is no producing script; without
+it the catalog builds with English texts.
 
-### Приложение
+### Application
 
-Нужен devkitPro с `switch-curl`, `switch-mbedtls`, SDL2 и Ninja:
+You need devkitPro with `switch-curl`, `switch-mbedtls`, SDL2 and Ninja:
 
 ```bash
 pacman -S switch-curl switch-mbedtls switch-sdl2 ninja
 ```
 
-FFmpeg из pacman **не подходит**: сборка ждёт урезанный локальный
-`app/lib/ffmpeg-slim` (только h264 + aac, версия 7.1 — единственная, для
-которой есть патч devkitPro с `--enable-nvtegra`). Пакет `switch-ffmpeg` тянет
-полный набор кодеков и прибавляет к `.nro` больше десяти мегабайт.
+FFmpeg from pacman **does not fit**: the build expects a trimmed local
+`app/lib/ffmpeg-slim` (h264 + aac only, version 7.1 — the only one with a
+devkitPro patch that has `--enable-nvtegra`). The `switch-ffmpeg` package pulls
+the full codec set and adds over ten megabytes to the `.nro`.
 
 ```bash
 bash app/tools/build_ffmpeg_slim.sh
 ```
 
-Две особенности сборки, на которые легко потратить вечер:
+Two build quirks that can easily eat an evening:
 
-- **Только Ninja.** Генератор Unix Makefiles ломается на пробеле в пути к
-  проекту (`multiple target patterns` в файлах зависимостей).
-- **`DEVKITPRO` задаётся в POSIX-виде** (`/opt/devkitpro`, не `C:/devkitPro`) и
-  из PowerShell — переменные окружения из git-bash до msys2-cmake не доходят.
+- **Ninja only.** The Unix Makefiles generator breaks on a space in the project
+  path (`multiple target patterns` in dependency files).
+- **`DEVKITPRO` in POSIX form** (`/opt/devkitpro`, not `C:/devkitPro`) and from
+  PowerShell — git-bash environment variables do not reach msys2 cmake.
 
 ```powershell
 cd app
@@ -267,108 +275,109 @@ cmake -B build -G Ninja -DPLATFORM_SWITCH=ON -DUSE_SDL2=ON -DCMAKE_BUILD_TYPE=Re
 cmake --build build --target SplitScreenHub.nro
 ```
 
-На выходе `app/build/SplitScreenHub.nro` (~58 МБ, в основном обложки в romfs).
+The output is `app/build/SplitScreenHub.nro` (~58 MB, mostly covers in romfs).
 
-Почему свой плеер, а не `libmpv`, как в NXMP и SwitchWave: готового пакета
-`switch-mpv` в pacman нет, а сборка mpv вместе с патченным FFmpeg под
-`aarch64-none-elf` требует отдельного meson-тулчейна и набора патчей.
-Программного декодера для 30–60-секундных трейлеров достаточно.
+Why a home-grown player rather than `libmpv` as in NXMP and SwitchWave: there is
+no `switch-mpv` package in pacman, and building mpv with the patched FFmpeg for
+`aarch64-none-elf` needs a separate meson toolchain and a set of patches. A
+software decoder is enough for 30–60-second trailers.
 
-## Проверки
+## Checks
 
 ```bash
-python app/tools/check_xml.py    # разметка против атрибутов, которые понимает borealis
-bash   app/tools/run_tests.sh    # тесты чистых функций, обычный g++
-python pipeline/verify_db.py     # инварианты catalog.db перед упаковкой
+python app/tools/check_xml.py    # layouts against attributes borealis understands
+bash   app/tools/run_tests.sh    # pure-function tests, plain g++
+python pipeline/verify_db.py     # catalog.db invariants before packing
 ```
 
-CI гоняет первые две на каждый push. На Windows тесты надо запускать из msys2,
-который идёт с devkitPro, — из Git Bash компилятор не находит свои заголовки
-C++, потому что там `/usr` указывает на каталог самого Git:
+CI runs the first two on every push. On Windows run the tests from the msys2
+that ships with devkitPro — from Git Bash the compiler cannot find its C++
+headers because `/usr` there points at Git's own directory:
 
 ```bash
 /c/devkitPro/msys2/usr/bin/bash -lc "cd /c/…/app && bash tools/run_tests.sh"
 ```
 
-Что проверяется только на консоли и вручную: расход памяти в applet-режиме,
-поведение при потере фокуса и возврате из сна, сопоставление с установленными
-играми, докачка трейлеров при плохой сети.
+Only checked on the console, by hand: memory in applet mode, focus loss and
+resume from sleep, matching against installed games, trailer resume on a bad
+connection.
 
-## Языки
+## Languages
 
-Интерфейс и тексты об играх переключаются между английским и русским на вкладке
-«Настройки». По умолчанию английский: перевода нет у части игр, и оригинал —
-единственное, что можно показать наверняка. В русском режиме игры без перевода
-показывают английский.
+The UI and the game texts switch between English and Russian on the Settings
+tab. English is the default: some games have no translation, and the original
+is the only thing that can be shown for sure. In Russian mode untranslated
+games show English.
 
-Пока язык не выбран руками, приложение смотрит на язык консоли и включает
-русский только если консоль русская. Всё остальное — от французской до
-японской — получает английский: русский перевод неполон, и подставлять его
-вместо оригинала там, где он всё равно чужой, хуже, чем не подставлять.
+Until a language is chosen by hand, the app looks at the console language and
+enables Russian only on a Russian console. Everything else — from French to
+Japanese — gets English: the Russian translation is incomplete, and
+substituting it for the original where it is foreign anyway is worse than not
+substituting.
 
-Выбор хранится в `library.json` и применяется при запуске: локаль borealis
-задаётся до создания окна и на ходу не меняется, поэтому переключатель просит
-перезапустить приложение. Строки интерфейса — в
-`app/resources/i18n/<локаль>/hub.json`.
+The choice is stored in `library.json` and applied at startup: the borealis
+locale is set before the window is created and cannot change on the fly, so
+the switch asks for a restart. UI strings live in
+`app/resources/i18n/<locale>/hub.json`.
 
-## Управление
+## Controls
 
-| Кнопка | Действие |
+| Button | Action |
 |---|---|
-| A | выбрать · открыть игру |
-| B | назад |
-| L / R | предыдущая · следующая вкладка |
-| **+** | **выход из приложения, с любого экрана** |
+| A | select · open game |
+| B | back |
+| L / R | previous · next tab |
+| **+** | **quit the app, from any screen** |
 
-Каталог:
+Catalog:
 
-| Кнопка | Действие |
+| Button | Action |
 |---|---|
-| − | поиск по названию |
-| ZL / ZR | листать сетку страницами |
+| − | search by title |
+| ZL / ZR | page through the grid |
 
-Библиотека:
+Library:
 
-| Кнопка | Действие |
+| Button | Action |
 |---|---|
-| X | на игре — убрать из списка; на папке — удалить папку |
-| Y | переименовать папку |
-| ZR | новая папка |
+| X | on a game — remove from list; on a folder — delete folder |
+| Y | rename folder |
+| ZR | new folder |
 
-Каталог и карточка игры — кнопки одинаковые:
+Catalog and game card — same buttons:
 
-| Кнопка | Действие |
+| Button | Action |
 |---|---|
-| X | положить в избранное или папку |
-| Y | скрыть игру · вернуть её |
+| X | add to favorites or a folder |
+| Y | hide game · unhide |
 
-Плеер трейлера (нижней полосы подсказок там нет):
+Trailer player (no bottom hint bar there):
 
-| Кнопка | Действие |
+| Button | Action |
 |---|---|
-| A | пауза |
-| Влево / Вправо | перемотка на 10 секунд |
-| B | закрыть |
+| A | pause |
+| Left / Right | seek 10 seconds |
+| B | close |
 
-Настройки: X пересчитывает размер кэша.
+Settings: X recalculates the cache size.
 
-## Известные пробелы
+## Known gaps
 
-- **32 игры без числа игроков** — метка eShop «на одном экране» есть, числа
-  нет, поэтому в каталог они не попадают. Дописываются вручную в
-  `pipeline/make_overrides.py` с источником по каждой; версию для Switch надо
-  проверять отдельно от других платформ.
-- **Оценок игр нет.** Идея — процент положительных отзывов Steam (у трети
-  каталога там 50+ отзывов, ключей не нужно) с оговоркой, что это приём
-  PC-версии. В интерфейс не выведено.
-- **Игры, потерянные из-за меток eShop.** Часть известных couch co-op игр
-  (PHOGS!, Untitled Goose Game, Unspottable) не несёт метку «на одном экране»
-  при живом локальном коопе; часть не сходится по написанию названия. Каждый
-  способ их вернуть меняет правила отбора, поэтому оставлено как есть.
-- **Другие регионы.** Пайплайн параметризуется одной строкой: у Algolia есть
-  индексы `en_ca`, `es_mx`, `fr_ca`, `pt_br`.
+- **32 games without a player count** — the eShop "one console" label is
+  there but no number, so they are not in the catalog. Added by hand in
+  `pipeline/make_overrides.py` with a source each; the Switch version must be
+  checked separately from other platforms.
+- **No game ratings.** The idea is the Steam positive-review percentage (a
+  third of the catalog has 50+ reviews there, no keys needed) with the caveat
+  that it is the PC version's reception. Not in the UI.
+- **Games lost to eShop labels.** Some well-known couch co-op games (PHOGS!,
+  Untitled Goose Game, Unspottable) lack the "one console" label despite real
+  local co-op; some do not match by title spelling. Every way to bring them back
+  changes the selection rules, so it is left as is.
+- **Other regions.** The pipeline is parameterized by one string: Algolia has
+  `en_ca`, `es_mx`, `fr_ca`, `pt_br` indices.
 
-## Лицензия
+## License
 
-MIT. Данные каталога — публичная информация из eShop; обложки и скриншоты
-принадлежат издателям и в репозиторий не входят.
+MIT. Catalog data is public eShop information; covers and screenshots belong to
+their publishers and are not in the repository.
