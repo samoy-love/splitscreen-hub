@@ -65,10 +65,26 @@ build_native() {
     ls -l build/SplitScreenHub.nro
 }
 
-# Данные скачиваются здесь, до выбора окружения: с хоста, а не из контейнера
-# (у контейнера на раннере сеть до samoy.love оказалась ненадёжной — curl
-# отваливался по таймауту), и в тот же каталог, который сохраняет кеш.
+# Исходники FFmpeg и патчи devkitPro — тоже с хоста, если урезанной сборки
+# ещё нет: build_ffmpeg_slim.sh качает их сам, но не из контейнера на
+# раннере (см. ниже). Адреса и версия — из самого build_ffmpeg_slim.sh.
+prefetch_ffmpeg() {
+    [ -f "$APP/lib/ffmpeg-slim/lib/libavcodec.a" ] && return 0
+    local ver base work
+    ver="$(grep -m1 '^VER=' "$APP/tools/build_ffmpeg_slim.sh" | cut -d= -f2-)"
+    base="$(grep -m1 '^BASE=' "$APP/tools/build_ffmpeg_slim.sh" | cut -d= -f2- | tr -d '"')"
+    work="$APP/build-ffmpeg"; mkdir -p "$work"
+    [ -f "$work/ffmpeg-$ver.tar.xz" ] || curl -fsSL --retry 3 --connect-timeout 20 -o "$work/ffmpeg-$ver.tar.xz" "https://ffmpeg.org/releases/ffmpeg-$ver.tar.xz"
+    [ -f "$work/ffmpeg-$ver.patch" ]  || curl -fsSL --retry 3 --connect-timeout 20 -o "$work/ffmpeg-$ver.patch" "$base/ffmpeg-$ver.patch"
+    [ -f "$work/tls.patch" ]          || curl -fsSL --retry 3 --connect-timeout 20 -o "$work/tls.patch" "$base/tls.patch"
+}
+
+# Всё, что тянется из сети, скачивается здесь, до выбора окружения, — с
+# хоста, а не из контейнера: на раннере curl внутри контейнера devkitPro до
+# внешних https-адресов не достукивался (таймаут, «failed to connect»), хотя
+# git и apt там работают. Каталоги те же, что сохраняет кеш пайплайна.
 fetch_data
+prefetch_ffmpeg
 
 if [ -d "${DEVKITPRO:-/opt/devkitpro}/devkitA64" ] && command -v cmake >/dev/null 2>&1; then
     build_native

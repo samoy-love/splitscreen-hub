@@ -28,9 +28,12 @@ BASE="https://raw.githubusercontent.com/devkitPro/pacman-packages/master/switch/
 mkdir -p "$WORK"
 cd "$WORK"
 
-[ -f "ffmpeg-$VER.tar.xz" ] || curl -sL -o "ffmpeg-$VER.tar.xz" "https://ffmpeg.org/releases/ffmpeg-$VER.tar.xz"
-[ -f "ffmpeg-$VER.patch" ] || curl -sL -o "ffmpeg-$VER.patch" "$BASE/ffmpeg-$VER.patch"
-[ -f "tls.patch" ] || curl -sL -o "tls.patch" "$BASE/tls.patch"
+# -f обязателен: без него 404 молча ложится в файл как HTML, и падает уже
+# tar/patch непонятной ошибкой. На раннере эти три файла кладёт заранее
+# build_release.sh (с хоста, вне контейнера) — тогда сюда качать нечего.
+[ -f "ffmpeg-$VER.tar.xz" ] || curl -fsSL --retry 3 -o "ffmpeg-$VER.tar.xz" "https://ffmpeg.org/releases/ffmpeg-$VER.tar.xz"
+[ -f "ffmpeg-$VER.patch" ] || curl -fsSL --retry 3 -o "ffmpeg-$VER.patch" "$BASE/ffmpeg-$VER.patch"
+[ -f "tls.patch" ] || curl -fsSL --retry 3 -o "tls.patch" "$BASE/tls.patch"
 
 if [ ! -d "ffmpeg-$VER" ]; then
   tar xf "ffmpeg-$VER.tar.xz"
