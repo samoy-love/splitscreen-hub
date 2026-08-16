@@ -1,5 +1,6 @@
 #pragma once
 
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -48,5 +49,15 @@ int clearCache();
 
 /// Синхронно: сначала кэш, потом сеть. Вызывать только из фонового потока.
 std::vector<unsigned char> fetch(const std::string& url);
+
+/// То же, но всегда из сети и без записи в кэш — для манифеста обновления,
+/// у которого устаревший ответ хуже, чем никакого. Пусто при любой ошибке.
+std::vector<unsigned char> fetchFresh(const std::string& url);
+
+/// Скачивает файл потоком на диск, минуя память: .nro не поместился бы в
+/// предел fetch(). progress зовётся из этого же потока и может вернуть false,
+/// чтобы прервать закачку. false — файла на месте нет (недокачанный удалён).
+bool downloadToFile(const std::string& url, const std::string& path,
+                    const std::function<bool(long long received, long long total)>& progress);
 
 }  // namespace net

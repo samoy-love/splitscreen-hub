@@ -7,10 +7,9 @@ app/build-ffmpeg/
 # урезанный FFmpeg: собирается build_ffmpeg_slim.sh
 app/lib/ffmpeg-slim/
 
-# данные для romfs: делаются из pipeline/catalog.db через pipeline/make_ship_data.py
-app/resources/catalog.bin
-app/resources/details.bin
-app/resources/art/
+# app/resources/{catalog.bin,details.bin,art/} — вход сборки .nro, поэтому
+# коммитятся: пайплайн (pipeline/make_ship_data.py, download_art.py) их
+# обновляет, а CI собирает из того, что лежит в репозитории.
 
 # кэш карточек eShop и сгенерированные базы: пересобираются скриптами пайплайна
 # (translations.db и overrides.json — ручная работа, коммитятся)

@@ -5,6 +5,8 @@
 
 #include <borealis.hpp>
 
+#include "updater.hpp"
+
 /// Вкладка «Настройки»: выбор языка и кэш на SD-карте — сколько занято и чем,
 /// с возможностью почистить.
 ///
@@ -41,11 +43,19 @@ class SettingsTab : public brls::Box
     static std::string effectiveLanguage();
 
     void refresh();
+    /// Спрашивает сервер выкатки и показывает кнопку, если есть что ставить.
+    void checkUpdate();
+    void installUpdate();
+    updater::Info pending;
+
     /// Кнопки выбора языка. Смена требует перезапуска, о чём и говорим.
     void buildLanguage();
     void confirmClear();
 
     BRLS_BIND(brls::Box, languageBox, "settings/language");
+    BRLS_BIND(brls::Label, updateVersion, "update/version");
+    BRLS_BIND(brls::Label, updateStatus, "update/status");
+    BRLS_BIND(brls::Button, updateButton, "update/install");
     BRLS_BIND(brls::Label, summary, "cache/summary");
     BRLS_BIND(brls::Label, breakdown, "cache/breakdown");
     BRLS_BIND(brls::Label, hint, "cache/hint");

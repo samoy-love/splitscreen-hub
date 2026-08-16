@@ -2,7 +2,21 @@
   "settings": {
     "language": "Language",
     "cache": "Download cache",
-    "restart": "Language will change after restart"
+    "restart": "Language will change after restart",
+    "update": "Updates"
+  },
+  "update": {
+    "version": "Version {}",
+    "checking": "Checking for updates…",
+    "latest": "You have the latest version",
+    "available": "Version {} is available",
+    "offline": "Could not reach the update server",
+    "toast": "Update {} is available — see Settings",
+    "install": "Install",
+    "downloading": "Downloading… {}%",
+    "installed": "Updated to {}. Restart the app to use it.",
+    "failed": "Update failed: {}",
+    "restart_hint": "The new version starts after you relaunch the app"
   },
   "tab": {
     "catalog": "Catalogue",
@@ -30,6 +44,7 @@
     "rename_folder": "Folder name",
     "remove": "Remove",
     "cancel": "Cancel",
+    "ok": "OK",
     "delete": "Delete"
   },
   "genre": {

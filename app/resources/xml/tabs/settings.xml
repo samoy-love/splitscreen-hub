@@ -45,6 +45,45 @@
 
     </brls:Box>
 
+    <!-- Обновление: приложение само сравнивает свою версию с манифестом на
+         сервере выкатки и подменяет собственный .nro. Статус — текстом, а
+         не только уведомлением: пользователь может прийти сюда позже. -->
+    <brls:Box
+        axis="row"
+        alignItems="center"
+        paddingTop="@style/hub/space/m"
+        paddingBottom="@style/hub/space/m"
+        lineBottom="1px"
+        lineColor="@theme/brls/applet_frame/separator">
+
+        <brls:Box axis="column" grow="1.0" marginRight="@style/hub/space/l">
+            <brls:Label
+                text="@i18n/hub/settings/update"
+                fontSize="@style/hub/font/accent" />
+            <brls:Label
+                id="update/version"
+                text=""
+                fontSize="@style/hub/font/caption"
+                marginTop="@style/hub/space/xs"
+                textColor="@theme/brls/text_disabled" />
+            <brls:Label
+                id="update/status"
+                text="@i18n/hub/update/checking"
+                fontSize="@style/hub/font/caption"
+                marginTop="@style/hub/space/xs"
+                textColor="@theme/brls/text_disabled" />
+        </brls:Box>
+
+        <brls:Button
+            id="update/install"
+            width="auto"
+            height="auto"
+            style="highlight"
+            visibility="gone"
+            text="@i18n/hub/update/install" />
+
+    </brls:Box>
+
     <brls:Box
         axis="column"
         paddingTop="@style/hub/space/m"

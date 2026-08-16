@@ -1,7 +1,9 @@
 #include "format.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <vector>
 
 namespace fmtx
 {
@@ -141,6 +143,47 @@ bool readableOn(unsigned char& r, unsigned char& g, unsigned char& b)
     }
 
     return preferDark;
+}
+
+int compareVersions(const std::string& a, const std::string& b)
+{
+    auto parse = [](const std::string& v) {
+        std::vector<int> out;
+        std::size_t i = 0;
+        if (i < v.size() && (v[i] == 'v' || v[i] == 'V'))
+            ++i;
+        int cur = 0;
+        bool digit = false;
+        for (; i <= v.size(); ++i)
+        {
+            const char c = i < v.size() ? v[i] : '.';
+            if (c >= '0' && c <= '9')
+            {
+                cur   = cur * 10 + (c - '0');
+                digit = true;
+            }
+            else if (c == '.')
+            {
+                out.push_back(digit ? cur : 0);
+                cur   = 0;
+                digit = false;
+            }
+            else
+                break;  // хвост вроде «-beta» не участвует
+        }
+        if (digit)
+            out.push_back(cur);
+        return out;
+    };
+    const std::vector<int> x = parse(a), y = parse(b);
+    for (std::size_t i = 0; i < std::max(x.size(), y.size()); ++i)
+    {
+        const int l = i < x.size() ? x[i] : 0;
+        const int r = i < y.size() ? y[i] : 0;
+        if (l != r)
+            return l < r ? -1 : 1;
+    }
+    return 0;
 }
 
 }  // namespace fmtx

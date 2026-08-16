@@ -19,6 +19,7 @@
 #include "net.hpp"
 #include "perf.hpp"
 #include "tasks.hpp"
+#include "updater.hpp"
 #include "ui/settings_tab.hpp"
 #include "ui/catalog_tab.hpp"
 #include "ui/cover_cache.hpp"
@@ -358,6 +359,14 @@ int main(int argc, char* argv[])
 
         step("main activity");
         brls::Application::pushActivity(new MainActivity());
+
+        // Тихая проверка обновления: если на сервере выкатки версия новее,
+        // говорим об этом одной строкой и отправляем в «Настройки». Сеть к
+        // этому моменту ещё поднимается — check() её дождётся сам.
+        updater::check([](bool available, const updater::Info& info, const std::string&) {
+            if (available)
+                brls::Application::notify(brls::getStr("hub/update/toast", info.version));
+        });
 
         logMemory("перед главным циклом");
 

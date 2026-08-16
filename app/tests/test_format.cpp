@@ -152,6 +152,15 @@ int main()
     expectKept("000000");
     expectKept("f7e7c3");
 
+    std::printf("\ncompareVersions:\n");
+    check("1.0.0 = 1.0", fmtx::compareVersions("1.0.0", "1.0") == 0);
+    check("v1.0.0 = 1.0.0", fmtx::compareVersions("v1.0.0", "1.0.0") == 0);
+    check("1.0.1 > 1.0.0", fmtx::compareVersions("1.0.1", "1.0.0") > 0);
+    check("1.10.0 > 1.9.9", fmtx::compareVersions("1.10.0", "1.9.9") > 0);
+    check("2.0 > 1.99.99", fmtx::compareVersions("2.0", "1.99.99") > 0);
+    check("1.0.0-beta = 1.0.0", fmtx::compareVersions("1.0.0-beta", "1.0.0") == 0);
+    check("пусто < 0.0.1", fmtx::compareVersions("", "0.0.1") < 0);
+
     std::printf("\n%s\n", failures ? "ЕСТЬ ПРОВАЛЫ" : "все проверки прошли");
     return failures ? 1 : 0;
 }

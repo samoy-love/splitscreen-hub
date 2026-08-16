@@ -375,7 +375,7 @@ static std::vector<unsigned char> fetchOnce(const std::string& url, long& status
     curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
     curl_easy_setopt(curl, CURLOPT_TIMEOUT, 20L);
     curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 10L);
-    curl_easy_setopt(curl, CURLOPT_USERAGENT, "splitscreen-hub/1.0");
+    curl_easy_setopt(curl, CURLOPT_USERAGENT, "splitscreen-hub/" APP_VERSION);
     // Проверка сертификата отключена намеренно: в libnx нет системного
     // хранилища корневых сертификатов, а вшитый бандл со временем протухает и
     // молча ломает загрузку.
@@ -474,6 +474,104 @@ std::vector<unsigned char> fetch(const std::string& url)
     brls::Logger::error("Не скачалось (curl {} «{}», http {}): {}", static_cast<int>(result),
                         curl_easy_strerror(result), status, url);
     return {};
+}
+
+std::vector<unsigned char> fetchFresh(const std::string& url)
+{
+    if (!ready && !waitReady(5000))
+        return {};
+    long status     = 0;
+    CURLcode result = CURLE_OK;
+    return fetchOnce(url, status, result);
+}
+
+namespace
+{
+
+struct FileSink
+{
+    FILE* file = nullptr;
+    long long received = 0;
+    const std::function<bool(long long, long long)>* progress = nullptr;
+    bool failed = false;
+};
+
+size_t onFileData(void* chunk, size_t size, size_t count, void* userdata)
+{
+    auto* sink = static_cast<FileSink*>(userdata);
+    const size_t n = size * count;
+    if (std::fwrite(chunk, 1, n, sink->file) != n)
+    {
+        sink->failed = true;
+        return 0;  // curl прервёт закачку с CURLE_WRITE_ERROR
+    }
+    sink->received += static_cast<long long>(n);
+    return n;
+}
+
+}  // namespace
+
+bool downloadToFile(const std::string& url, const std::string& path,
+                    const std::function<bool(long long, long long)>& progress)
+{
+    if (!ready && !waitReady(5000))
+        return false;
+
+    FileSink sink;
+    sink.progress = &progress;
+    sink.file     = std::fopen(path.c_str(), "wb");
+    if (!sink.file)
+    {
+        brls::Logger::error("net: не открыть {} на запись", path);
+        return false;
+    }
+
+    CURL* curl = curl_easy_init();
+    if (!curl)
+    {
+        std::fclose(sink.file);
+        std::remove(path.c_str());
+        return false;
+    }
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, onFileData);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &sink);
+    curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
+    curl_easy_setopt(curl, CURLOPT_MAXREDIRS, 5L);
+    curl_easy_setopt(curl, CURLOPT_REDIR_PROTOCOLS, CURLPROTO_HTTP | CURLPROTO_HTTPS);
+    curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 15L);
+    // Не общий таймаут, а порог скорости: 60 МБ по медленному Wi-Fi идут
+    // минутами, и обрывать их по часам нельзя, а вот замершее соединение — надо.
+    curl_easy_setopt(curl, CURLOPT_LOW_SPEED_LIMIT, 1024L);
+    curl_easy_setopt(curl, CURLOPT_LOW_SPEED_TIME, 30L);
+    curl_easy_setopt(curl, CURLOPT_USERAGENT, "splitscreen-hub/" APP_VERSION);
+    // См. fetchOnce: в libnx нет хранилища корневых сертификатов.
+    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
+    curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 0L);
+    curl_easy_setopt(curl, CURLOPT_XFERINFODATA, &sink);
+    curl_easy_setopt(
+        curl, CURLOPT_XFERINFOFUNCTION,
+        +[](void* userdata, curl_off_t total, curl_off_t now, curl_off_t, curl_off_t) -> int {
+            if (tasks::shuttingDown())
+                return 1;
+            auto* s = static_cast<FileSink*>(userdata);
+            return (*s->progress)(static_cast<long long>(now), static_cast<long long>(total)) ? 0 : 1;
+        });
+
+    const CURLcode result = curl_easy_perform(curl);
+    long status           = 0;
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &status);
+    curl_easy_cleanup(curl);
+    std::fclose(sink.file);
+
+    if (result != CURLE_OK || status != 200 || sink.failed)
+    {
+        brls::Logger::error("net: закачка {} не удалась: curl {}, http {}", url,
+                            static_cast<int>(result), status);
+        std::remove(path.c_str());
+        return false;
+    }
+    return true;
 }
 
 }  // namespace net

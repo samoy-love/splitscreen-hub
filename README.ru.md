@@ -3,7 +3,9 @@
 [English](README.md) · Русский
 
 [![checks](https://github.com/tr0llex/splitscreen-hub/actions/workflows/checks.yml/badge.svg)](https://github.com/tr0llex/splitscreen-hub/actions/workflows/checks.yml)
+[![deploy](https://github.com/tr0llex/splitscreen-hub/actions/workflows/deploy.yml/badge.svg)](https://github.com/tr0llex/splitscreen-hub/actions/workflows/deploy.yml)
 [![release](https://img.shields.io/github/v/release/tr0llex/splitscreen-hub)](https://github.com/tr0llex/splitscreen-hub/releases/latest)
+[![prod](https://img.shields.io/website?url=https%3A%2F%2Fsamoy.love%2Fsplitscreen-hub%2FSplitScreenHub.nro.json&up_message=online&up_color=2ea043&down_message=offline&label=samoy.love%2Fsplitscreen-hub)](https://samoy.love/splitscreen-hub/SplitScreenHub.nro.json)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 Homebrew-каталог игр Nintendo Switch с мультиплеером **на одном экране**.
@@ -25,6 +27,7 @@ nintendo.com и живут в двух двоичных файлах в romfs �
 
 - [Возможности](#возможности)
 - [Установка](#установка)
+- [Обновления и выкатка](#обновления-и-выкатка)
 - [Структура репозитория](#структура-репозитория)
 - [Как устроено приложение](#как-устроено-приложение)
 - [Откуда данные](#откуда-данные)
@@ -62,6 +65,29 @@ nintendo.com и живут в двух двоичных файлах в romfs �
 Приложение запускается через Homebrew Menu; в applet-режиме (поверх игры)
 памяти меньше, но каталог работает.
 
+## Обновления и выкатка
+
+Приложение обновляется само. При запуске оно читает
+[`samoy.love/splitscreen-hub/SplitScreenHub.nro.json`](https://samoy.love/splitscreen-hub/SplitScreenHub.nro.json)
+— версию, размер и sha256 текущей сборки — и, если она новее вшитой в `.nro`,
+показывает уведомление и кнопку **Установить** на вкладке «Настройки». Новый
+`.nro` качается потоком рядом с работающим, сверяется по sha256 (TLS на консоли
+не проверяется — см. ниже) и подменяет старый; запускается при следующем
+старте. Код — [`updater.cpp`](app/source/updater.cpp).
+
+Манифест пишет релизный пайплайн. Каждый push в `master`, задевший `app/**`,
+запускает [`deploy.yml`](.github/workflows/deploy.yml), который зовёт общий
+workflow артефакта из [deploy-kit](https://github.com/tr0llex/deploy-kit):
+`.nro` собирается в контейнере `devkitpro/devkita64` скриптом
+[`build_release.sh`](app/tools/build_release.sh), версия берётся из
+`CMakeLists.txt`, файл уезжает на сервер по SSH, а `publish-file.sh` подменяет
+его атомарно (прежняя сборка остаётся `.prev` для мгновенного отката),
+публикует `.sha256` и манифест и сверяет, что сервер раздаёт ровно ту сумму,
+которую посчитал раннер. Цель описана один раз в
+[`.deploy-kit/nro.env`](.deploy-kit/nro.env) и одинаково читается CI и
+локальным `dk deploy`. GitHub Releases делаются руками под вехи; приложение
+доверяет серверу.
+
 ## Структура репозитория
 
 ```
@@ -69,16 +95,18 @@ app/                      приложение для Switch
   source/                 C++: каталог, библиотека, сеть, плеер
     ui/                   экраны и виджеты borealis
   resources/              romfs: xml-разметка, i18n, шрифт, иконка;
-                          сюда же пайплайн кладёт catalog.bin, details.bin, art/
+                          и catalog.bin, details.bin, art/ из пайплайна (коммитятся)
   tests/                  тесты чистых функций (без borealis и консоли)
-  tools/                  check_xml.py, run_tests.sh, build_ffmpeg_slim.sh, make_icon.py
+  tools/                  check_xml.py, run_tests.sh, build_ffmpeg_slim.sh,
+                          build_release.sh, make_icon.py
   lib/borealis            сабмодуль UI-библиотеки
   lib/ffmpeg-slim/        урезанный FFmpeg, собирается локально (в .gitignore)
 pipeline/                 сбор данных: eShop → catalog.db → catalog.bin
   paths.py                общие пути; скрипты запускаются из любой папки
   overrides.json          ручные поправки числа игроков (коммитится)
   translations.db         русские тексты об играх (коммитится)
-.github/workflows/        разметка и тесты на каждый push
+.deploy-kit/nro.env       цель выкатки: как собрать и куда публиковать
+.github/workflows/        проверки на каждый push, выкатка при push в master
 ```
 
 ## Как устроено приложение

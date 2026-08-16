@@ -3,7 +3,9 @@
 English · [Русский](README.ru.md)
 
 [![checks](https://github.com/tr0llex/splitscreen-hub/actions/workflows/checks.yml/badge.svg)](https://github.com/tr0llex/splitscreen-hub/actions/workflows/checks.yml)
+[![deploy](https://github.com/tr0llex/splitscreen-hub/actions/workflows/deploy.yml/badge.svg)](https://github.com/tr0llex/splitscreen-hub/actions/workflows/deploy.yml)
 [![release](https://img.shields.io/github/v/release/tr0llex/splitscreen-hub)](https://github.com/tr0llex/splitscreen-hub/releases/latest)
+[![prod](https://img.shields.io/website?url=https%3A%2F%2Fsamoy.love%2Fsplitscreen-hub%2FSplitScreenHub.nro.json&up_message=online&up_color=2ea043&down_message=offline&label=samoy.love%2Fsplitscreen-hub)](https://samoy.love/splitscreen-hub/SplitScreenHub.nro.json)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 A Nintendo Switch homebrew catalog of games with **same-screen multiplayer**.
@@ -25,6 +27,7 @@ default and enabled with a separate filter.
 
 - [Features](#features)
 - [Install](#install)
+- [Updates and deployment](#updates-and-deployment)
 - [Repository layout](#repository-layout)
 - [How the app works](#how-the-app-works)
 - [Where the data comes from](#where-the-data-comes-from)
@@ -63,6 +66,29 @@ Download `SplitScreenHub.nro` from the
 it into `/switch/` on the SD card. Launch it from the Homebrew Menu; in applet
 mode (over a running game) there is less memory, but the catalog works.
 
+## Updates and deployment
+
+The app updates itself. On startup it reads
+[`samoy.love/splitscreen-hub/SplitScreenHub.nro.json`](https://samoy.love/splitscreen-hub/SplitScreenHub.nro.json)
+— version, size and sha256 of the current build — and, if it is newer than the
+one baked into the `.nro`, shows a toast and an **Install** button on the
+Settings tab. The new `.nro` is streamed next to the running one, checked
+against the sha256 (TLS is not verified on the console — see below), and
+swapped in; it starts on the next launch. Code: [`updater.cpp`](app/source/updater.cpp).
+
+The manifest is written by the release pipeline. Every push to `master` that
+touches `app/**` runs [`deploy.yml`](.github/workflows/deploy.yml), which calls
+the shared [deploy-kit](https://github.com/tr0llex/deploy-kit) artifact
+workflow: the `.nro` is built in the `devkitpro/devkita64` container by
+[`build_release.sh`](app/tools/build_release.sh), the version is taken from
+`CMakeLists.txt`, the file goes to the server over SSH, and `publish-file.sh`
+swaps it atomically (the previous build stays as `.prev` for instant rollback),
+publishes `.sha256` and the manifest, and verifies that the server serves
+exactly the checksum the runner computed. The target is described once in
+[`.deploy-kit/nro.env`](.deploy-kit/nro.env) and is used both by CI and by a
+local `dk deploy`. GitHub Releases are cut by hand for milestones; the server is
+what the app trusts.
+
 ## Repository layout
 
 ```
@@ -70,16 +96,18 @@ app/                      the Switch application
   source/                 C++: catalog, library, network, player
     ui/                   borealis screens and widgets
   resources/              romfs: xml layouts, i18n, font, icon;
-                          the pipeline also drops catalog.bin, details.bin, art/ here
+                          plus catalog.bin, details.bin, art/ produced by the pipeline (committed)
   tests/                  tests of pure functions (no borealis, no console)
-  tools/                  check_xml.py, run_tests.sh, build_ffmpeg_slim.sh, make_icon.py
+  tools/                  check_xml.py, run_tests.sh, build_ffmpeg_slim.sh,
+                          build_release.sh, make_icon.py
   lib/borealis            UI library submodule
   lib/ffmpeg-slim/        trimmed FFmpeg, built locally (gitignored)
 pipeline/                 data collection: eShop → catalog.db → catalog.bin
   paths.py                shared paths; scripts run from any directory
   overrides.json          manual player-count corrections (committed)
   translations.db         Russian game texts (committed)
-.github/workflows/        layout check and tests on every push
+.deploy-kit/nro.env       the deploy target: how to build, where to publish
+.github/workflows/        checks on every push, deploy on push to master
 ```
 
 ## How the app works

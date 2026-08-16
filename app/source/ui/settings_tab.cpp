@@ -38,8 +38,68 @@ SettingsTab::SettingsTab()
         return true;
     });
 
+    updateButton->registerClickAction([this](brls::View*) {
+        installUpdate();
+        return true;
+    });
+
     buildLanguage();
     refresh();
+    checkUpdate();
+}
+
+void SettingsTab::checkUpdate()
+{
+    updateVersion->setText(brls::getStr("hub/update/version", updater::currentVersion()));
+    updateStatus->setText("hub/update/checking"_i18n);
+    updateButton->setVisibility(brls::Visibility::GONE);
+
+    auto flag = alive;
+    updater::check([this, flag](bool available, const updater::Info& info, const std::string& message) {
+        if (!*flag)
+            return;
+        if (available)
+        {
+            pending = info;
+            updateStatus->setText(brls::getStr("hub/update/available", info.version));
+            updateButton->setVisibility(brls::Visibility::VISIBLE);
+        }
+        else
+            updateStatus->setText(message.empty() ? "hub/update/latest"_i18n
+                                                  : "hub/update/offline"_i18n);
+    });
+}
+
+void SettingsTab::installUpdate()
+{
+    if (pending.version.empty())
+        return;
+    updateButton->setVisibility(brls::Visibility::GONE);
+    updateStatus->setText(brls::getStr("hub/update/downloading", 0));
+
+    auto flag = alive;
+    updater::install(
+        pending,
+        [this, flag](float part) {
+            if (*flag)
+                updateStatus->setText(brls::getStr("hub/update/downloading", static_cast<int>(part * 100)));
+        },
+        [this, flag](bool ok, const std::string& message) {
+            if (!*flag)
+                return;
+            if (ok)
+            {
+                updateStatus->setText(brls::getStr("hub/update/installed", message));
+                auto* dialog = new brls::Dialog(brls::getStr("hub/update/installed", message));
+                dialog->addButton("hub/action/ok"_i18n, []() {});
+                dialog->open();
+            }
+            else
+            {
+                updateStatus->setText(brls::getStr("hub/update/failed", message));
+                updateButton->setVisibility(brls::Visibility::VISIBLE);
+            }
+        });
 }
 
 void SettingsTab::buildLanguage()

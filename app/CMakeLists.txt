@@ -7,7 +7,7 @@ include(${BOREALIS_LIBRARY}/cmake/toolchain.cmake)
 
 project(SplitScreenHub)
 set(VERSION_MAJOR "1")
-set(VERSION_MINOR "0")
+set(VERSION_MINOR "1")
 set(VERSION_ALTER "0")
 set(PROJECT_AUTHOR "splitscreen-hub")
 set(PROJECT_TITLEID "0x010FF000CC000000")
@@ -32,6 +32,9 @@ endif ()
 
 program_target(${PROJECT_NAME} "${MAIN_SRC}")
 set_target_properties(${PROJECT_NAME} PROPERTIES CXX_STANDARD 17)
+# Та же версия, что уезжает в nacp: по ней приложение решает, обновляться ли.
+target_compile_definitions(${PROJECT_NAME} PRIVATE
+    APP_VERSION="${VERSION_MAJOR}.${VERSION_MINOR}.${VERSION_ALTER}")
 
 target_include_directories(${PROJECT_NAME} PRIVATE ${APP_PLATFORM_INCLUDE})
 # zlib: записи карточек в details.bin сжаты сырым deflate с общим словарём.
