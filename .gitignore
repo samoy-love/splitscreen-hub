@@ -1,25 +1,27 @@
 # сборка приложения и тесты
 app/build/
 app/build-tests/
-build-ffmpeg/
+app/build-ffmpeg/
 *.log
 
 # урезанный FFmpeg: собирается build_ffmpeg_slim.sh
 app/lib/ffmpeg-slim/
 
-# данные для romfs: делаются из catalog.db через make_ship_data.py
+# данные для romfs: делаются из pipeline/catalog.db через pipeline/make_ship_data.py
 app/resources/catalog.bin
 app/resources/details.bin
 app/resources/art/
 
-# кэш карточек eShop и сгенерированные базы: пересобираются скриптами
-products_cache.json
-catalog.db
-toplists.db
-local_multiplayer.csv
-local_multiplayer.json
-extra_titles.txt
-.translate_tmp/
+# кэш карточек eShop и сгенерированные базы: пересобираются скриптами пайплайна
+# (translations.db и overrides.json — ручная работа, коммитятся)
+pipeline/products_cache.json
+pipeline/catalog.db
+pipeline/toplists.db
+pipeline/local_multiplayer.csv
+pipeline/local_multiplayer.json
+pipeline/extra_titles.txt
+pipeline/.translate_tmp/
+pipeline/__pycache__/
 
 __pycache__/
 .claude/

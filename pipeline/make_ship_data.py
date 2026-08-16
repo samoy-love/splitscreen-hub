@@ -25,10 +25,11 @@ import sqlite3
 import struct
 import zlib
 
-SOURCE = "catalog.db"
-OUT_DIR = os.path.join("app", "resources")
-CATALOG = os.path.join(OUT_DIR, "catalog.bin")
-DETAILS = os.path.join(OUT_DIR, "details.bin")
+from paths import CATALOG_BIN, CATALOG_DB, DETAILS_BIN
+
+SOURCE = CATALOG_DB
+CATALOG = CATALOG_BIN
+DETAILS = DETAILS_BIN
 
 CATALOG_MAGIC = b"SSHC"
 DETAILS_MAGIC = b"SSHD"

@@ -68,7 +68,7 @@ OURS = {
     "WrapBox": "Box",
     "CatalogTab": "Box",
     "LibraryTab": "Box",
-    "CacheTab": "Box",
+    "SettingsTab": "Box",
     "HubScreen": "Box",
     "MainTabs": "Box",
     # Наследует Label, а не Box: атрибуты text и fontSize приходят от него.

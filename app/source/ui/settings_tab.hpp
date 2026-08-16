@@ -19,11 +19,11 @@
 ///
 /// Обход каталога идёт в фоновом потоке: при тысячах файлов это заметное
 /// время, а интерфейс замирать не должен.
-class CacheTab : public brls::Box
+class SettingsTab : public brls::Box
 {
   public:
-    CacheTab();
-    ~CacheTab() override;
+    SettingsTab();
+    ~SettingsTab() override;
 
     static brls::View* create();
 

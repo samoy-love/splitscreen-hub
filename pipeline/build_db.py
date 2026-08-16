@@ -7,7 +7,7 @@ overrides.json. Приложение эту базу не читает: make_shi
 игроков на одном экране. Не попадают: бандлы-сборники (nsuid 7007*), будущие
 релизы и всё, для чего число игроков осталось неизвестным.
 
-Если рядом лежат translations.db (русские тексты) и toplists.db (рейтинг
+Все файлы лежат в pipeline/ рядом со скриптом. Если там есть translations.db (русские тексты) и toplists.db (рейтинг
 подборок из rank_toplists.py), их содержимое подмешивается.
 """
 
@@ -17,9 +17,10 @@ import re
 import sqlite3
 from datetime import date
 
-SOURCE = "local_multiplayer.json"
-OVERRIDES = "overrides.json"
-DB = "catalog.db"
+from paths import CATALOG_DB, LOCAL_MULTIPLAYER, OVERRIDES, TOPLISTS_DB, TRANSLATIONS_DB
+
+SOURCE = LOCAL_MULTIPLAYER
+DB = CATALOG_DB
 
 SCHEMA = """
 CREATE TABLE games (
@@ -108,9 +109,9 @@ CREATE TABLE ranking (
 # Файл -> (таблица, колонки). Каждый этап пишет в свою базу, а не в catalog.db,
 # чтобы пересборка каталога не уничтожала его результат.
 SIDECARS = {
-    "translations.db": ("translations",
-                        "nsuid, headline_ru, players_note_ru, description_ru"),
-    "toplists.db": ("ranking", "nsuid, score, editorial, community, families"),
+    TRANSLATIONS_DB: ("translations",
+                      "nsuid, headline_ru, players_note_ru, description_ru"),
+    TOPLISTS_DB: ("ranking", "nsuid, score, editorial, community, families"),
 }
 
 
@@ -124,10 +125,10 @@ def merge_sidecars(db):
                 f"INSERT OR REPLACE INTO {table} ({columns})"
                 f" SELECT {columns} FROM side.{table}"
                 f" WHERE nsuid IN (SELECT nsuid FROM games)")
-            print(f"  подмешано из {path}: {cur.rowcount}")
+            print(f"  подмешано из {os.path.basename(path)}: {cur.rowcount}")
             cur.close()
         except sqlite3.Error as e:
-            print(f"  {path}: пропущен, {e}")
+            print(f"  {os.path.basename(path)}: пропущен, {e}")
         # без коммита открытая транзакция держит присоединённый файл и
         # DETACH падает с «database side is locked»
         db.commit()
@@ -329,7 +330,7 @@ def main():
 
     db.execute("VACUUM")
     db.close()
-    print(f"\n{DB}: {os.path.getsize(DB) / 1024 / 1024:.1f} МБ")
+    print(f"\n{os.path.basename(DB)}: {os.path.getsize(DB) / 1024 / 1024:.1f} МБ")
 
 
 if __name__ == "__main__":

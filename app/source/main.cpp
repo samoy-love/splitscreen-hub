@@ -19,7 +19,7 @@
 #include "net.hpp"
 #include "perf.hpp"
 #include "tasks.hpp"
-#include "ui/cache_tab.hpp"
+#include "ui/settings_tab.hpp"
 #include "ui/catalog_tab.hpp"
 #include "ui/cover_cache.hpp"
 #include "ui/fonts.hpp"
@@ -354,7 +354,7 @@ int main(int argc, char* argv[])
         brls::Application::registerXMLView("MainTabs", MainTabs::create);
         brls::Application::registerXMLView("CatalogTab", CatalogTab::create);
         brls::Application::registerXMLView("LibraryTab", LibraryTab::create);
-        brls::Application::registerXMLView("CacheTab", CacheTab::create);
+        brls::Application::registerXMLView("SettingsTab", SettingsTab::create);
 
         step("main activity");
         brls::Application::pushActivity(new MainActivity());

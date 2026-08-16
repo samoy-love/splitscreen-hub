@@ -17,7 +17,7 @@
 /// libmpv для devkitPro в pacman нет (только сборка из исходников по рецептам
 /// nxmp/SwitchWave), поэтому плеер написан напрямую поверх FFmpeg
 /// (avformat/avcodec/swscale/swresample). FFmpeg при этом свой, урезанный до
-/// h264 + aac (lib/ffmpeg-slim, собирается build_ffmpeg_slim.sh): пакетный
+/// h264 + aac (lib/ffmpeg-slim, собирается tools/build_ffmpeg_slim.sh): пакетный
 /// switch-ffmpeg тянет в бинарник все декодеры — см. CMakeLists.txt.
 ///
 /// Ролик воспроизводится потоком: показ начинается, как только разобран

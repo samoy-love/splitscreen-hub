@@ -1,6 +1,6 @@
 #include "ui/main_tabs.hpp"
 
-#include "ui/cache_tab.hpp"
+#include "ui/settings_tab.hpp"
 #include "ui/fonts.hpp"
 #include "ui/catalog_tab.hpp"
 #include "ui/library_tab.hpp"
@@ -13,7 +13,7 @@ MainTabs::MainTabs()
 
     addTab("hub/tab/catalog"_i18n, new CatalogTab());
     addTab("hub/tab/library"_i18n, new LibraryTab());
-    addTab("hub/tab/settings"_i18n, new CacheTab());
+    addTab("hub/tab/settings"_i18n, new SettingsTab());
 
     select(0);
     built = true;

@@ -37,7 +37,7 @@
 
         <!-- Язык применяется при запуске: локаль borealis задаётся до
              создания окна и на ходу не меняется. Кнопки заполняет
-             cache_tab.cpp. -->
+             settings_tab.cpp. -->
         <brls:Box
             id="settings/language"
             axis="row"

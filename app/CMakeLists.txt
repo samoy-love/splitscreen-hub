@@ -48,7 +48,7 @@ if (PLATFORM_SWITCH)
     # по рецептам nxmp/SwitchWave), поэтому демукс/декод собственный поверх
     # FFmpeg.
     #
-    # FFmpeg берём свой, урезанный (build_ffmpeg_slim.sh), а не пакетный:
+    # FFmpeg берём свой, урезанный (tools/build_ffmpeg_slim.sh), а не пакетный:
     # switch-ffmpeg собран «на всё», его реестр кодеков ссылается на каждый
     # декодер, и линкер тянет их целиком. Трейлеры Cloudinary — это ровно
     # h264 + aac в mp4, поэтому своя сборка ужимает libavcodec с 17.1 до
@@ -60,7 +60,7 @@ if (PLATFORM_SWITCH)
     # avformat/avcodec, а не перед, иначе символы не резолвятся.
     set(FFMPEG_SLIM ${CMAKE_CURRENT_SOURCE_DIR}/lib/ffmpeg-slim)
     if (NOT EXISTS ${FFMPEG_SLIM}/lib/libavcodec.a)
-        message(FATAL_ERROR "нет ${FFMPEG_SLIM} — запустите build_ffmpeg_slim.sh")
+        message(FATAL_ERROR "нет ${FFMPEG_SLIM} — запустите tools/build_ffmpeg_slim.sh")
     endif ()
 
     target_include_directories(${PROJECT_NAME} PRIVATE ${FFMPEG_SLIM}/include)

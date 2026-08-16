@@ -39,12 +39,14 @@
 """
 
 import math
+import os
 import sqlite3
 import sys
 
+from paths import TOPLISTS_DB
 from toplist_sources import SOURCES, load_catalog, norm
 
-OUT = "toplists.db"
+OUT = TOPLISTS_DB
 
 # --- метаданные источников -----------------------------------------------
 #
@@ -425,7 +427,7 @@ def main():
                    (nsuid, score, e, c, fam))
     db.commit()
     db.close()
-    print(f"\nзаписано в {OUT}: таблица ranking, {len(rows)} строк")
+    print(f"\nзаписано в {os.path.basename(OUT)}: таблица ranking, {len(rows)} строк")
 
 
 if __name__ == "__main__":

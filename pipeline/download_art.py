@@ -20,9 +20,11 @@ import sys
 import threading
 import urllib.request
 
-DB = "catalog.db"
-SOURCE = "local_multiplayer.json"
-OUT_DIR = os.path.join("app", "resources", "art")
+from paths import ART_DIR, CATALOG_DB, LOCAL_MULTIPLAYER
+
+DB = CATALOG_DB
+SOURCE = LOCAL_MULTIPLAYER
+OUT_DIR = ART_DIR
 TRANSFORM = "w_240,q_70,f_jpg"
 WORKERS = 8
 MIN_BYTES = 500  # меньше — почти наверняка заглушка, а не обложка

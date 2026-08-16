@@ -10,11 +10,13 @@ Switch — 2), а Voice of Cards показывает 4 у полностью о
 
 Игры, по которым надёжного ответа нет, сюда не попадают и в каталог не идут.
 
-Генерирует overrides.json:
+Генерирует overrides.json рядом со скриптом (pipeline/):
 nsuid -> {title, same_screen_min, same_screen_max, players_note, source}.
 """
 
 import json
+
+from paths import LOCAL_MULTIPLAYER, OVERRIDES
 
 # Заголовок -> (игроков на одном экране, пояснение, источник)
 VERIFIED = {
@@ -133,7 +135,7 @@ WRONGLY_TAGGED = {
 
 
 def main():
-    with open("local_multiplayer.json", encoding="utf-8") as f:
+    with open(LOCAL_MULTIPLAYER, encoding="utf-8") as f:
         games = json.load(f)
 
     by_title = {}
@@ -153,7 +155,7 @@ def main():
             "same_screen_max": players, "players_note": note, "source": source,
         }
 
-    with open("overrides.json", "w", encoding="utf-8") as f:
+    with open(OVERRIDES, "w", encoding="utf-8") as f:
         json.dump(overrides, f, ensure_ascii=False, indent=1)
 
     unresolved = len(by_title) - len(overrides) - len(set(WRONGLY_TAGGED) & set(by_title))

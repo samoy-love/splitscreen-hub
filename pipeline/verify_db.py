@@ -11,7 +11,9 @@ import os
 import sqlite3
 import sys
 
-DB = "catalog.db"
+from paths import ART_DIR, CATALOG_DB
+
+DB = CATALOG_DB
 
 FROM_JOIN = " FROM games g"
 
@@ -127,7 +129,7 @@ def main():
         check(f"«{term}»: {c}", (c > 0) == expect)
 
     print("\nОбложки на диске совпадают с базой:")
-    art_dir = os.path.join("app", "resources", "art")
+    art_dir = ART_DIR
     need = [r[0] for r in db.execute("SELECT box_art_file FROM games WHERE box_art_file IS NOT NULL")]
     missing = [f for f in need if not os.path.exists(os.path.join(art_dir, f))]
     check(f"файлов не хватает: {len(missing)}", not missing)

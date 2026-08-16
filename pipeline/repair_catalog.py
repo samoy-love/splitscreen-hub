@@ -11,18 +11,20 @@
 и не сопоставилась с каталогом. Поэтому здесь — добор по списку названий:
 что не находится перечислением, ищется поиском поштучно.
 
-Названия берутся из подборок (toplist_sources.py) и из файла extra_titles.txt,
-если он есть — по строке на название.
+Названия берутся из подборок (toplist_sources.py) и из файла extra_titles.txt
+рядом со скриптом, если он есть — по строке на название.
 """
 
 import json
+import os
 import sys
 
 import fetch_local_multiplayer as F
+from paths import EXTRA_TITLES, LOCAL_MULTIPLAYER
 from toplist_sources import SOURCES, norm
 
-EXTRA_FILE = "extra_titles.txt"
-SOURCE = "local_multiplayer.json"
+EXTRA_FILE = EXTRA_TITLES
+SOURCE = LOCAL_MULTIPLAYER
 
 
 def wanted_titles():
@@ -86,7 +88,7 @@ def main():
         json.dump(games, f, ensure_ascii=False, indent=1)
 
     known = [r for r in rows if r["same_screen_max"]]
-    print(f"\nдописано в {SOURCE}: {len(rows)}, из них с числом игроков {len(known)}")
+    print(f"\nдописано в {os.path.basename(SOURCE)}: {len(rows)}, из них с числом игроков {len(known)}")
     for r in known:
         print(f"  {r['same_screen_min']}-{r['same_screen_max']}  {r['title'][:46]}")
 

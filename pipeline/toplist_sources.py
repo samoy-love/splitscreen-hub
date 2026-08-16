@@ -9,7 +9,9 @@
 import re
 import sqlite3
 
-CATALOG = "catalog.db"
+from paths import CATALOG_DB
+
+CATALOG = CATALOG_DB
 
 SOURCES = [
     {

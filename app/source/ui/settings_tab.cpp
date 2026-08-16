@@ -1,4 +1,4 @@
-#include "ui/cache_tab.hpp"
+#include "ui/settings_tab.hpp"
 
 #include "app_state.hpp"
 #include "net.hpp"
@@ -19,10 +19,10 @@ std::string megabytes(long long bytes)
 
 }  // namespace
 
-CacheTab::CacheTab()
+SettingsTab::SettingsTab()
     : alive(std::make_shared<std::atomic_bool>(true))
 {
-    this->inflateFromXMLRes("xml/tabs/cache.xml");
+    this->inflateFromXMLRes("xml/tabs/settings.xml");
 
     summary->setText("hub/cache/counting"_i18n);
     breakdown->setText("");
@@ -42,7 +42,7 @@ CacheTab::CacheTab()
     refresh();
 }
 
-void CacheTab::buildLanguage()
+void SettingsTab::buildLanguage()
 {
     languageBox->clearViews();
 
@@ -85,7 +85,7 @@ void CacheTab::buildLanguage()
     add("ru", "Русский");  // название языка не переводится
 }
 
-std::string CacheTab::effectiveLanguage()
+std::string SettingsTab::effectiveLanguage()
 {
     const std::string chosen = AppState::get().library.language();
     if (!chosen.empty())
@@ -93,7 +93,7 @@ std::string CacheTab::effectiveLanguage()
     return brls::Application::getLocale() == brls::LOCALE_RU ? "ru" : "en";
 }
 
-void CacheTab::highlightLanguage()
+void SettingsTab::highlightLanguage()
 {
     const std::string current = effectiveLanguage();
     for (auto& [code, button] : languageButtons)
@@ -101,12 +101,12 @@ void CacheTab::highlightLanguage()
                                          : &brls::BUTTONSTYLE_BORDERLESS);
 }
 
-CacheTab::~CacheTab()
+SettingsTab::~SettingsTab()
 {
     *alive = false;
 }
 
-void CacheTab::refresh()
+void SettingsTab::refresh()
 {
     summary->setText("hub/cache/counting"_i18n);
 
@@ -139,7 +139,7 @@ void CacheTab::refresh()
     });
 }
 
-void CacheTab::confirmClear()
+void SettingsTab::confirmClear()
 {
     auto* dialog = new brls::Dialog("hub/cache/confirm_all"_i18n);
     dialog->addButton("hub/action/cancel"_i18n, []() {});
@@ -161,7 +161,7 @@ void CacheTab::confirmClear()
     dialog->open();
 }
 
-brls::View* CacheTab::create()
+brls::View* SettingsTab::create()
 {
-    return new CacheTab();
+    return new SettingsTab();
 }

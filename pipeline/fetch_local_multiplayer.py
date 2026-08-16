@@ -15,7 +15,8 @@
        .local  = локальный беспроводной на нескольких консолях
        .online = онлайн
 
-Результат: local_multiplayer.json + local_multiplayer.csv
+Результат: local_multiplayer.json + local_multiplayer.csv рядом со скриптом
+(pipeline/); карточки товаров кэшируются там же в products_cache.json.
 """
 
 import concurrent.futures
@@ -27,6 +28,8 @@ import threading
 import time
 import urllib.error
 import urllib.request
+
+from paths import LOCAL_MULTIPLAYER, LOCAL_MULTIPLAYER_CSV, PRODUCTS_CACHE
 
 # Публичная search-only пара из фронтенда nintendo.com: ею пользуется сам
 # сайт, эндпоинт browse для неё закрыт.
@@ -305,7 +308,7 @@ def fetch_from_page(url):
     return _normalize_page_product(p) if p else None
 
 
-CACHE_FILE = "products_cache.json"
+CACHE_FILE = PRODUCTS_CACHE
 
 
 def _load_cache():
@@ -460,7 +463,7 @@ def build_rows(games, products, failed):
 LIST_FIELDS = ("images", "videos")
 
 
-OUTPUTS = ("local_multiplayer.json", "local_multiplayer.csv")
+OUTPUTS = (LOCAL_MULTIPLAYER, LOCAL_MULTIPLAYER_CSV)
 
 
 def main():
@@ -478,9 +481,9 @@ def main():
     fetch_missing_from_pages(games, products, failed)
     rows = build_rows(games, products, failed)
 
-    with open("local_multiplayer.json", "w", encoding="utf-8") as f:
+    with open(LOCAL_MULTIPLAYER, "w", encoding="utf-8") as f:
         json.dump(rows, f, ensure_ascii=False, indent=1)
-    with open("local_multiplayer.csv", "w", encoding="utf-8-sig", newline="") as f:
+    with open(LOCAL_MULTIPLAYER_CSV, "w", encoding="utf-8-sig", newline="") as f:
         w = csv.DictWriter(f, fieldnames=list(rows[0]))
         w.writeheader()
         for r in rows:
