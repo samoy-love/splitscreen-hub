@@ -1,5 +1,7 @@
 #include "ui/settings_tab.hpp"
 
+#include <cstdio>
+
 #include "app_state.hpp"
 #include "net.hpp"
 #include "ui/fonts.hpp"
@@ -42,6 +44,12 @@ SettingsTab::SettingsTab()
         installUpdate();
         return true;
     });
+    // Выход — обычный, через тот же путь, что и «+»: подмену файла и
+    // перезапуск делает main() после остановки интерфейса.
+    restartButton->registerClickAction([](brls::View*) {
+        brls::Application::quit();
+        return true;
+    });
 
     buildLanguage();
     refresh();
@@ -51,9 +59,20 @@ SettingsTab::SettingsTab()
 void SettingsTab::checkUpdate()
 {
     updateVersion->setText(brls::getStr("hub/update/version", updater::currentVersion()));
-    updateStatus->setText("hub/update/checking"_i18n);
     updateButton->setVisibility(brls::Visibility::GONE);
+    restartButton->setVisibility(brls::Visibility::GONE);
+    progressBar->setVisibility(brls::Visibility::GONE);
 
+    // Скачано в прошлый раз, но приложение закрыли не кнопкой: подмена ждёт
+    // перезапуска. Спрашивать сервер незачем — предлагаем закончить начатое.
+    if (updater::hasPending())
+    {
+        updateStatus->setText(brls::getStr("hub/update/ready", ""));
+        restartButton->setVisibility(brls::Visibility::VISIBLE);
+        return;
+    }
+
+    updateStatus->setText("hub/update/checking"_i18n);
     auto flag = alive;
     updater::check([this, flag](bool available, const updater::Info& info, const std::string& message) {
         if (!*flag)
@@ -70,34 +89,77 @@ void SettingsTab::checkUpdate()
     });
 }
 
+void SettingsTab::showProgress(const updater::Progress& p)
+{
+    const double part = p.total > 0 ? static_cast<double>(p.received) / static_cast<double>(p.total) : 0.0;
+    progressFill->setWidthPercentage(static_cast<float>(part > 1.0 ? 100.0 : part * 100.0));
+
+    // Всё скачано — идёт сверка суммы, это ещё пара секунд на SD.
+    if (p.total > 0 && p.received >= p.total)
+    {
+        updateStatus->setText("hub/update/verifying"_i18n);
+        return;
+    }
+
+    std::string rate = "hub/update/rate_unknown"_i18n;
+    if (p.bytesPerSec > 0)
+    {
+        std::string left;
+        if (p.etaSeconds >= 0)
+        {
+            const int m = p.etaSeconds / 60, sec = p.etaSeconds % 60;
+            char buf[16];
+            std::snprintf(buf, sizeof buf, "%d:%02d", m, sec);
+            left = buf;
+        }
+        else
+            left = "—";
+        rate = brls::getStr("hub/update/rate", megabytes(static_cast<long long>(p.bytesPerSec)), left);
+    }
+    updateStatus->setText(brls::getStr("hub/update/downloading", pending.version,
+                                       static_cast<int>(part * 100), megabytes(p.received),
+                                       megabytes(p.total))
+                          + " · " + rate);
+}
+
 void SettingsTab::installUpdate()
 {
     if (pending.version.empty())
         return;
     updateButton->setVisibility(brls::Visibility::GONE);
-    updateStatus->setText(brls::getStr("hub/update/downloading", 0));
+    updateStatus->setText("hub/update/starting"_i18n);
+    progressFill->setWidthPercentage(0.f);
+    progressBar->setVisibility(brls::Visibility::VISIBLE);
 
     auto flag = alive;
     updater::install(
         pending,
-        [this, flag](float part) {
+        [this, flag](const updater::Progress& p) {
             if (*flag)
-                updateStatus->setText(brls::getStr("hub/update/downloading", static_cast<int>(part * 100)));
+                showProgress(p);
         },
         [this, flag](bool ok, const std::string& message) {
             if (!*flag)
                 return;
+            progressBar->setVisibility(brls::Visibility::GONE);
             if (ok)
             {
-                updateStatus->setText(brls::getStr("hub/update/installed", message));
-                auto* dialog = new brls::Dialog(brls::getStr("hub/update/installed", message));
-                dialog->addButton("hub/action/ok"_i18n, []() {});
-                dialog->open();
+                // Подменить себя на ходу нельзя (см. updater.hpp): кнопка
+                // закрывает приложение, подмена и перезапуск идут на выходе.
+                updateStatus->setText(brls::getStr("hub/update/ready", message));
+                restartButton->setVisibility(brls::Visibility::VISIBLE);
+                brls::Application::giveFocus(restartButton);
             }
             else
             {
-                updateStatus->setText(brls::getStr("hub/update/failed", message));
+                if (message == "download")
+                    updateStatus->setText("hub/update/failed_download"_i18n);
+                else if (message == "checksum")
+                    updateStatus->setText("hub/update/failed_checksum"_i18n);
+                else
+                    updateStatus->setText(brls::getStr("hub/update/failed_generic", message));
                 updateButton->setVisibility(brls::Visibility::VISIBLE);
+                brls::Application::giveFocus(updateButton);
             }
         });
 }

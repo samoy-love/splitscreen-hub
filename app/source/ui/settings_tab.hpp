@@ -43,9 +43,12 @@ class SettingsTab : public brls::Box
     static std::string effectiveLanguage();
 
     void refresh();
-    /// Спрашивает сервер выкатки и показывает кнопку, если есть что ставить.
+    /// Спрашивает сервер выкатки и показывает кнопку, если есть что ставить;
+    /// если скачанное уже ждёт перезапуска — сразу предлагает перезапустить.
     void checkUpdate();
     void installUpdate();
+    /// Строка статуса и полоса: проценты, объём, средняя скорость, остаток.
+    void showProgress(const updater::Progress& p);
     updater::Info pending;
 
     /// Кнопки выбора языка. Смена требует перезапуска, о чём и говорим.
@@ -56,6 +59,9 @@ class SettingsTab : public brls::Box
     BRLS_BIND(brls::Label, updateVersion, "update/version");
     BRLS_BIND(brls::Label, updateStatus, "update/status");
     BRLS_BIND(brls::Button, updateButton, "update/install");
+    BRLS_BIND(brls::Button, restartButton, "update/restart");
+    BRLS_BIND(brls::Box, progressBar, "update/bar");
+    BRLS_BIND(brls::Rectangle, progressFill, "update/bar_fill");
     BRLS_BIND(brls::Label, summary, "cache/summary");
     BRLS_BIND(brls::Label, breakdown, "cache/breakdown");
     BRLS_BIND(brls::Label, hint, "cache/hint");

@@ -4,9 +4,12 @@
 #include <borealis/extern/nlohmann/json.hpp>
 
 #include <atomic>
+#include <cerrno>
+#include <chrono>
 #include <cstdio>
 #include <cstring>
 #include <string>
+#include <sys/stat.h>
 
 #ifdef __SWITCH__
 #include <mbedtls/sha256.h>
@@ -28,6 +31,23 @@ const char* BASE_URL     = "https://samoy.love/splitscreen-hub/";
 const char* DEFAULT_SELF = "sdmc:/switch/SplitScreenHub.nro";
 
 std::atomic_bool installing { false };
+
+/// Скачанный .nro и его метка «сверено» рядом с приложением.
+std::string newPath(const std::string& self) { return self + ".new"; }
+std::string okPath(const std::string& self) { return self + ".new.ok"; }
+std::string oldPath(const std::string& self) { return self + ".old"; }
+
+bool exists(const std::string& path)
+{
+    struct stat st {};
+    return ::stat(path.c_str(), &st) == 0;
+}
+
+long long fileSize(const std::string& path)
+{
+    struct stat st {};
+    return ::stat(path.c_str(), &st) == 0 ? static_cast<long long>(st.st_size) : -1;
+}
 
 /// sha256 файла шестнадцатеричной строкой; пусто, если считать нечем.
 std::string fileSha256(const std::string& path)
@@ -125,7 +145,7 @@ void check(std::function<void(bool, const Info&, const std::string&)> onResult)
     });
 }
 
-void install(const Info& info, std::function<void(float)> onProgress,
+void install(const Info& info, std::function<void(const Progress&)> onProgress,
              std::function<void(bool, const std::string&)> onDone)
 {
     bool expected = false;
@@ -141,18 +161,37 @@ void install(const Info& info, std::function<void(float)> onProgress,
         const std::string self = selfPath();
         if (self.empty())
             return finish(false, "no self path");
-        const std::string tmp = self + ".new";
+        const std::string tmp = newPath(self);
+        std::remove(okPath(self).c_str());  // прежняя метка не должна пережить новую закачку
 
-        int lastPercent       = -1;
-        const bool downloaded = net::downloadToFile(info.url, tmp, [&](long long got, long long total) {
+        // Скорость — средняя с начала закачки, а не мгновенная: по Wi-Fi
+        // консоли поток рваный, и мгновенная цифра прыгала бы в разы каждую
+        // долю секунды, а ETA вместе с ней. Средняя даёт спокойные числа и
+        // честную оценку остатка. В UI — не чаще четырёх раз в секунду.
+        using clock                = std::chrono::steady_clock;
+        const auto started         = clock::now();
+        auto lastReport            = started;
+        const bool downloaded      = net::downloadToFile(info.url, tmp, [&](long long got, long long total) {
+            const auto now = clock::now();
             const long long denom = total > 0 ? total : info.size;
-            const float part      = denom > 0 ? static_cast<float>(got) / static_cast<float>(denom) : 0.f;
-            const int percent     = static_cast<int>(part * 100);
-            if (percent != lastPercent)  // не заваливать UI-поток на каждом чанке
+            const bool done = denom > 0 && got >= denom;
+            if (!done && std::chrono::duration_cast<std::chrono::milliseconds>(now - lastReport).count() < 250)
+                return true;
+            lastReport = now;
+
+            Progress p;
+            p.received = got;
+            p.total    = denom;
+            const double seconds = std::chrono::duration<double>(now - started).count();
+            if (seconds > 0.5 && got > 0)
             {
-                lastPercent = percent;
-                brls::sync([onProgress, part]() { onProgress(part > 1.f ? 1.f : part); });
+                p.bytesPerSec = static_cast<double>(got) / seconds;
+                if (denom > got)
+                    p.etaSeconds = static_cast<int>(static_cast<double>(denom - got) / p.bytesPerSec + 0.5);
+                else if (denom > 0)
+                    p.etaSeconds = 0;
             }
+            brls::sync([onProgress, p]() { onProgress(p); });
             return true;
         });
         if (!downloaded)
@@ -171,15 +210,101 @@ void install(const Info& info, std::function<void(float)> onProgress,
             }
         }
 
-        // FAT не умеет rename поверх существующего файла: сначала убрать
-        // старый. Окно между remove и rename есть, но .new уже целый и лежит
-        // рядом — в худшем случае его можно переименовать руками.
-        std::remove(self.c_str());
-        if (std::rename(tmp.c_str(), self.c_str()) != 0)
-            return finish(false, "rename");
+        // Метка «сверено»: без неё файл .new при старте считается обрывком и
+        // удаляется. Внутри — сумма и размер, размер сверяется ещё раз перед
+        // самой подменой.
+        if (FILE* ok = std::fopen(okPath(self).c_str(), "w"))
+        {
+            std::fprintf(ok, "%s %lld\n", info.sha256.c_str(), fileSize(tmp));
+            std::fclose(ok);
+        }
+        else
+        {
+            std::remove(tmp.c_str());
+            return finish(false, "mark");
+        }
 
         finish(true, info.version);
     });
+}
+
+bool hasPending()
+{
+    const std::string self = selfPath();
+    return !self.empty() && exists(newPath(self)) && exists(okPath(self));
+}
+
+bool applyPending(std::string& error)
+{
+    const std::string self = selfPath();
+    if (self.empty() || !hasPending())
+    {
+        error = "nothing";
+        return false;
+    }
+    const std::string tmp = newPath(self), ok = okPath(self), old = oldPath(self);
+
+    long long expected = -1;
+    if (FILE* f = std::fopen(ok.c_str(), "r"))
+    {
+        char sha[80] = {};
+        if (std::fscanf(f, "%79s %lld", sha, &expected) != 2)
+            expected = -1;
+        std::fclose(f);
+    }
+    if (expected <= 0 || fileSize(tmp) != expected)
+    {
+        // Метка есть, а файл не тот — недописан или подменён. Не рискуем.
+        std::remove(tmp.c_str());
+        std::remove(ok.c_str());
+        error = "size";
+        return false;
+    }
+
+#ifdef __SWITCH__
+    // Именно это держит наш .nro открытым. Второй romfsExit из userAppExit
+    // при выходе безвреден: размонтировать нечего, он просто вернёт ошибку.
+    romfsExit();
+#endif
+
+    // FAT не переименовывает поверх существующего: старую сборку сначала
+    // убираем с дороги под именем .old — она же и путь отката, если подмена
+    // сорвётся на полпути; при удачном старте новой версии её удалит
+    // cleanupLeftovers().
+    std::remove(old.c_str());
+    if (std::rename(self.c_str(), old.c_str()) != 0)
+    {
+        error = std::string("rename self: ") + std::strerror(errno);
+        return false;
+    }
+    if (std::rename(tmp.c_str(), self.c_str()) != 0)
+    {
+        error = std::string("rename new: ") + std::strerror(errno);
+        std::rename(old.c_str(), self.c_str());
+        return false;
+    }
+    std::remove(ok.c_str());
+
+#ifdef __SWITCH__
+    // Сразу запустить новую версию: hbloader после выхода загрузит указанный
+    // .nro. Без этого пользователю пришлось бы возвращаться в hbmenu.
+    if (envHasNextLoad())
+    {
+        const std::string argv = "\"" + self + "\"";
+        envSetNextLoad(self.c_str(), argv.c_str());
+    }
+#endif
+    return true;
+}
+
+void cleanupLeftovers()
+{
+    const std::string self = selfPath();
+    if (self.empty())
+        return;
+    std::remove(oldPath(self).c_str());
+    if (exists(newPath(self)) && !exists(okPath(self)))
+        std::remove(newPath(self).c_str());
 }
 
 }  // namespace updater

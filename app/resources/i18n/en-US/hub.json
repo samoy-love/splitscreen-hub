@@ -19,10 +19,17 @@
     "offline": "Could not reach the update server",
     "toast": "Update {} is available — see Settings",
     "install": "Install",
-    "downloading": "Downloading… {}%",
-    "installed": "Updated to {}. Restart the app to use it.",
-    "failed": "Update failed: {}",
-    "restart_hint": "The new version starts after you relaunch the app"
+    "starting": "Connecting…",
+    "downloading": "Downloading {}: {}% · {} of {}",
+    "rate": "{}/s · {} left",
+    "rate_unknown": "measuring speed…",
+    "verifying": "Checking the file…",
+    "ready": "Version {} downloaded. Restart to finish the update.",
+    "restart": "Restart now",
+    "failed_download": "Download failed — check the connection and try again",
+    "failed_checksum": "The downloaded file is damaged. Try again",
+    "failed_generic": "Update failed: {}",
+    "failed": "Update failed: {}"
   },
   "tab": {
     "catalog": "Catalogue",

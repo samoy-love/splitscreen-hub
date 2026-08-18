@@ -72,6 +72,28 @@
                 fontSize="@style/hub/font/caption"
                 marginTop="@style/hub/space/xs"
                 textColor="@theme/brls/text_disabled" />
+
+            <!-- Полоса закачки: 60 МБ по Wi-Fi консоли идут минутами, и одних
+                 процентов в строке мало — глазу нужна длина. Дорожка — Box с
+                 фоном, заливка — Rectangle, ширину которому в процентах
+                 выставляет settings_tab.cpp. Скорость и остаток — в строке
+                 статуса над ней. -->
+            <brls:Box
+                id="update/bar"
+                axis="row"
+                width="auto"
+                height="6"
+                marginTop="@style/hub/space/s"
+                cornerRadius="3"
+                backgroundColor="@theme/brls/slider/line_empty"
+                visibility="gone">
+                <brls:Rectangle
+                    id="update/bar_fill"
+                    width="0%"
+                    height="6"
+                    cornerRadius="3"
+                    color="@theme/brls/slider/line_filled" />
+            </brls:Box>
         </brls:Box>
 
         <brls:Button
@@ -81,6 +103,16 @@
             style="highlight"
             visibility="gone"
             text="@i18n/hub/update/install" />
+
+        <!-- Скачанное само себя не подменит (см. updater.hpp): кнопка
+             закрывает приложение, подмена и перезапуск идут на выходе. -->
+        <brls:Button
+            id="update/restart"
+            width="auto"
+            height="auto"
+            style="highlight"
+            visibility="gone"
+            text="@i18n/hub/update/restart" />
 
     </brls:Box>
 

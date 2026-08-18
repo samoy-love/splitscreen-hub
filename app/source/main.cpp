@@ -211,6 +211,23 @@ int main(int argc, char* argv[])
             if (std::strcmp(argv[i], "-d") == 0)
                 brls::Logger::setLogLevel(brls::LogLevel::LOG_DEBUG);
 
+        // Обновление, скачанное в прошлый раз, но не поставленное (вышли по
+        // HOME, не по кнопке): подменяем файл сейчас, пока romfs можно
+        // отпустить без потерь — интерфейса ещё нет, — и сразу перезапускаемся
+        // уже новой версией. Провал — не беда: работаем как есть, файл рядом.
+        if (updater::hasPending())
+        {
+            step("apply pending update");
+            std::string why;
+            if (updater::applyPending(why))
+            {
+                step("updated, restarting");
+                return EXIT_SUCCESS;
+            }
+            if (bootLog)
+                std::fprintf(bootLog, "pending update not applied: %s\n", why.c_str());
+        }
+
         // Язык берём из настроек пользователя, а не из локали консоли: тексты
         // об играх переведены не полностью, и выбор должен оставаться за
         // человеком.
@@ -388,6 +405,9 @@ int main(int argc, char* argv[])
             {
                 firstFrame = false;
                 step("первый кадр");
+                // Новая версия дожила до экрана — прежняя сборка .old и
+                // обрывки закачек больше не нужны.
+                updater::cleanupLeftovers();
                 previousFrame = lastComplaint = lastSummary = std::chrono::steady_clock::now();
                 continue;  // в первый кадр входит вся отрисовка стартового экрана
             }
@@ -441,6 +461,18 @@ int main(int argc, char* argv[])
         tasks::stop();
         net::shutdown();
         step("done");
+
+        // Кнопка «Перезапустить» в настройках просто закрывает приложение —
+        // подмена делается здесь, когда интерфейс уже погашен и romfs можно
+        // размонтировать. hbloader тут же запустит новый файл.
+        if (updater::hasPending())
+        {
+            std::string why;
+            if (updater::applyPending(why))
+                step("updated, restarting");
+            else if (bootLog)
+                std::fprintf(bootLog, "update not applied: %s\n", why.c_str());
+        }
     }
     catch (const std::exception& e)
     {
