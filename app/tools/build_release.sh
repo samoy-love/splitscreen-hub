@@ -101,6 +101,11 @@ elif command -v docker >/dev/null 2>&1; then
     docker run --rm -v "$ROOT:/work" -w /work "$IMAGE" bash -c '
         set -e
         git config --global --add safe.directory "*"
+        # Подмодули клонируются ИЗ КОНТЕЙНЕРА, и smart-протокол git по HTTP/2
+        # ломается за прокси: клон обрывается на "expected flush after ref
+        # listing", а git принимает это за отказ доступа и просит логин к
+        # публичному репозиторию. По HTTP/1.1 тот же клон проходит.
+        git config --global http.version HTTP/1.1
         apt-get update -qq && apt-get install -y -qq ninja-build make patch xz-utils curl >/dev/null
         bash app/tools/build_release.sh
     '
