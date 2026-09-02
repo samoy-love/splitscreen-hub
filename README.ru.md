@@ -2,8 +2,8 @@
 
 [English](README.md) · Русский
 
-[![checks](https://github.com/tr0llex/splitscreen-hub/actions/workflows/checks.yml/badge.svg)](https://github.com/tr0llex/splitscreen-hub/actions/workflows/checks.yml)
-[![deploy](https://github.com/tr0llex/splitscreen-hub/actions/workflows/deploy.yml/badge.svg)](https://github.com/tr0llex/splitscreen-hub/actions/workflows/deploy.yml)
+[![checks](https://github.com/samoy-love/splitscreen-hub/actions/workflows/checks.yml/badge.svg)](https://github.com/samoy-love/splitscreen-hub/actions/workflows/checks.yml)
+[![deploy](https://github.com/samoy-love/splitscreen-hub/actions/workflows/deploy.yml/badge.svg)](https://github.com/samoy-love/splitscreen-hub/actions/workflows/deploy.yml)
 [![prod](https://img.shields.io/website?url=https%3A%2F%2Fsamoy.love%2Fsplitscreen-hub%2FSplitScreenHub.nro.json&up_message=online&up_color=2ea043&down_message=offline&label=samoy.love%2Fsplitscreen-hub)](https://samoy.love/splitscreen-hub/SplitScreenHub.nro.json)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
@@ -80,7 +80,7 @@ nintendo.com и живут в двух двоичных файлах в romfs �
 
 Манифест пишет релизный пайплайн. Каждый push в `master`, задевший `app/**`,
 запускает [`deploy.yml`](.github/workflows/deploy.yml), который зовёт общий
-workflow артефакта из [deploy-kit](https://github.com/tr0llex/deploy-kit):
+workflow артефакта из [deploy-kit](https://github.com/samoy-love/deploy-kit):
 `.nro` собирается в контейнере `devkitpro/devkita64` скриптом
 [`build_release.sh`](app/tools/build_release.sh), версия берётся из
 `CMakeLists.txt`, файл уезжает на сервер по SSH, а `publish-file.sh` подменяет
