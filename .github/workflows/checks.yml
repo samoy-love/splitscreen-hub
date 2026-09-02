@@ -52,3 +52,10 @@ jobs:
             exit 1
           fi
           echo "чисто"
+
+  # Топология боевого контура публичному репозиторию не нужна: проверка
+  # ловит её в добавленных строках, в сообщениях коммитов и в описании PR.
+  # Шаблоны и разбор — в deploy-kit, ci/infra-hygiene.sh.
+  infra:
+    name: Гигиена инфраструктуры
+    uses: samoy-love/deploy-kit/.github/workflows/infra-hygiene.yml@main
