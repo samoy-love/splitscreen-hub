@@ -30,7 +30,11 @@ jobs:
     uses: samoy-love/deploy-kit/.github/workflows/desktop-artifact.yml@main
     with:
       config: .deploy-kit/nro.env
-      runner: ubuntu-latest
+      # Домашний раннер: доставка идёт по SSH на сервер за NAT, а туда
+      # GitHub-hosted не достучится — наружу проброшены только 80/443.
+      # Сборка от этого не страдает: она целиком внутри docker-образа
+      # devkitpro/devkita64, а docker на раннере есть.
+      runner: self-hosted
       # Гейт перед публикацией. Вход gates у desktop-artifact.yml
       # необязательный, и не заданный он означает буквально «публиковать, не
       # проверив ничего»: сборка .nro падает только на ошибках компиляции, а
