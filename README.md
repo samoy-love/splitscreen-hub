@@ -2,8 +2,8 @@
 
 English · [Русский](README.ru.md)
 
-[![checks](https://github.com/tr0llex/splitscreen-hub/actions/workflows/checks.yml/badge.svg)](https://github.com/tr0llex/splitscreen-hub/actions/workflows/checks.yml)
-[![deploy](https://github.com/tr0llex/splitscreen-hub/actions/workflows/deploy.yml/badge.svg)](https://github.com/tr0llex/splitscreen-hub/actions/workflows/deploy.yml)
+[![checks](https://github.com/samoy-love/splitscreen-hub/actions/workflows/checks.yml/badge.svg)](https://github.com/samoy-love/splitscreen-hub/actions/workflows/checks.yml)
+[![deploy](https://github.com/samoy-love/splitscreen-hub/actions/workflows/deploy.yml/badge.svg)](https://github.com/samoy-love/splitscreen-hub/actions/workflows/deploy.yml)
 [![prod](https://img.shields.io/website?url=https%3A%2F%2Fsamoy.love%2Fsplitscreen-hub%2FSplitScreenHub.nro.json&up_message=online&up_color=2ea043&down_message=offline&label=samoy.love%2Fsplitscreen-hub)](https://samoy.love/splitscreen-hub/SplitScreenHub.nro.json)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
@@ -81,7 +81,7 @@ swapped in; it starts on the next launch. Code: [`updater.cpp`](app/source/updat
 
 The manifest is written by the release pipeline. Every push to `master` that
 touches `app/**` runs [`deploy.yml`](.github/workflows/deploy.yml), which calls
-the shared [deploy-kit](https://github.com/tr0llex/deploy-kit) artifact
+the shared [deploy-kit](https://github.com/samoy-love/deploy-kit) artifact
 workflow: the `.nro` is built in the `devkitpro/devkita64` container by
 [`build_release.sh`](app/tools/build_release.sh), the version is taken from
 `CMakeLists.txt`, the file goes to the server over SSH, and `publish-file.sh`

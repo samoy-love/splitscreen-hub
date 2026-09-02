@@ -9,7 +9,7 @@
   "about": {
     "disclaimer": "SplitScreen Hub is an independent homebrew project. Not affiliated with, endorsed or sponsored by Nintendo. Nintendo Switch, Nintendo eShop and Joy-Con are trademarks of Nintendo.",
     "content": "Game titles, cover art, descriptions and media belong to their respective publishers and are shown for identification only. Data comes from the public nintendo.com catalog.",
-    "licenses": "Source code: MIT, github.com/tr0llex/splitscreen-hub. Built with borealis (Apache-2.0), FFmpeg (LGPL-2.1+), curl, mbedTLS, SDL2, libnx and other open-source libraries — see docs/third-party-licenses.md."
+    "licenses": "Source code: MIT, github.com/samoy-love/splitscreen-hub. Built with borealis (Apache-2.0), FFmpeg (LGPL-2.1+), curl, mbedTLS, SDL2, libnx and other open-source libraries — see docs/third-party-licenses.md."
   },
   "update": {
     "version": "Version {}",
