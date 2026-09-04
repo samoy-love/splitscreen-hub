@@ -11,7 +11,7 @@ on:
 
 jobs:
   checks:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, home]
     steps:
       - uses: actions/checkout@v7
         with:
@@ -30,7 +30,7 @@ jobs:
         run: bash tools/run_tests.sh
 
   commits:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, home]
     steps:
       - uses: actions/checkout@v7
         with:
