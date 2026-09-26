@@ -29,6 +29,7 @@ import threading
 import time
 import urllib.error
 import urllib.request
+import zlib
 
 from paths import LOCAL_MULTIPLAYER, LOCAL_MULTIPLAYER_CSV, PRODUCTS_CACHE
 
@@ -341,6 +342,16 @@ def fetch_from_page(url):
 
 CACHE_FILE = PRODUCTS_CACHE
 
+# Карточка в кэше стареет: издатель меняет описание, число игроков, добавляет
+# ролики, а кэш без срока отдавал бы первую версию вечно. Через CACHE_TTL
+# карточка запрашивается заново; не получилось — остаётся прежняя.
+CACHE_TTL = 30 * 24 * 3600
+
+# Когда карточка получена: nsuid -> unix-время. Лежит в кэше рядом с
+# products, а не внутри карточки — та должна оставаться ровно такой, какой её
+# отдал сервер.
+FETCHED_AT = {}
+
 
 def is_permanent_error(reason):
     """Ошибка по существу, а не сбой связи: повторять в следующий раз незачем.
@@ -351,13 +362,28 @@ def is_permanent_error(reason):
     return bool(head) and all(c in PERMANENT_ERRORS for c in head.split(","))
 
 
+def _stagger(nsuid, now):
+    """Время получения для карточки из кэша старого формата, где его нет.
+
+    Настоящий возраст таких карточек неизвестен. Считать их свежими — значит
+    отложить все обновления на полный срок, считать просроченными — значит
+    перезапросить три с половиной тысячи карточек одним прогоном. Раскладываем
+    их равномерно по окну CACHE_TTL (детерминированно, по nsuid): каждый
+    прогон обновляет свою долю, и через срок весь кэш обновлён."""
+    return now - zlib.crc32(nsuid.encode()) % CACHE_TTL
+
+
 def _load_cache():
     try:
         with open(CACHE_FILE, encoding="utf-8") as f:
             c = json.load(f)
     except (OSError, ValueError):
         return {}, {}
+    now = time.time()
     products = c.get("products", {})
+    stamps = c.get("fetched_at", {})
+    FETCHED_AT.clear()
+    FETCHED_AT.update({n: stamps.get(n) or _stagger(n, now) for n in products})
     # Временные сбои прошлых прогонов (5xx, таймауты) в кэше не храним: они
     # навсегда исключали бы игру из запросов. Старый кэш мог их накопить.
     failed = {n: r for n, r in c.get("failed", {}).items() if is_permanent_error(r)}
@@ -369,6 +395,7 @@ def _save_cache(out, failed):
     with open(tmp, "w", encoding="utf-8") as f:
         json.dump({
             "products": out,
+            "fetched_at": {n: FETCHED_AT[n] for n in out if n in FETCHED_AT},
             "failed": {n: r for n, r in failed.items() if is_permanent_error(r)},
         }, f, ensure_ascii=False)
     os.replace(tmp, CACHE_FILE)
@@ -377,9 +404,12 @@ def _save_cache(out, failed):
 def fetch_products(nsuids, batch=50, use_cache=True):
     """Кэширует карточки на диск, чтобы перезапуск продолжал с места остановки."""
     out, failed = _load_cache() if use_cache else ({}, {})
+    now = time.time()
+    stale = {n for n in nsuids if n in out and now - FETCHED_AT.get(n, 0) > CACHE_TTL}
     if out or failed:
-        print(f"  из кэша: {len(out)} карточек, {len(failed)} недоступных")
-    todo = [n for n in nsuids if n not in out and n not in failed]
+        print(f"  из кэша: {len(out)} карточек (устарело {len(stale)}),"
+              f" {len(failed)} недоступных")
+    todo = [n for n in nsuids if (n not in out or n in stale) and n not in failed]
     chunks = [todo[i : i + batch] for i in range(0, len(todo), batch)]
     lock = threading.Lock()
     done = 0
@@ -391,6 +421,8 @@ def fetch_products(nsuids, batch=50, use_cache=True):
         with lock:
             out.update(local)
             failed.update(local_failed)
+            stamp = time.time()
+            FETCHED_AT.update({n: stamp for n in local})
             done += len(chunk)
             print(f"  {done}/{len(todo)} -> {len(out)}")
             if use_cache:
@@ -398,6 +430,9 @@ def fetch_products(nsuids, batch=50, use_cache=True):
 
     with concurrent.futures.ThreadPoolExecutor(WORKERS) as pool:
         list(pool.map(worker, chunks))
+    if use_cache:
+        # и без запросов: так кэш старого формата получает fetched_at
+        _save_cache(out, failed)
     return out, failed
 
 
@@ -418,6 +453,7 @@ def fetch_missing_from_pages(games, out, failed, use_cache=True):
             if p:
                 p.setdefault("nsuid", nsuid)
                 out[nsuid] = p
+                FETCHED_AT[nsuid] = time.time()
                 failed.pop(nsuid, None)
             else:
                 head = failed[nsuid].split(";")[0]
