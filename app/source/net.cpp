@@ -168,9 +168,15 @@ void writeFile(const std::string& path, const std::vector<unsigned char>& data)
         }
         out.write(reinterpret_cast<const char*>(data.data()),
                   static_cast<std::streamsize>(data.size()));
-        if (!out.good())
+        // Закрываем явно и проверяем: хвост буфера уходит на карту только
+        // здесь, и на заполненной SD ошибка всплывает именно при закрытии.
+        // Деструктор её молча проглотил бы, и обрезанная картинка стала бы
+        // кэшем.
+        out.close();
+        if (out.fail())
         {
             brls::Logger::warning("net: обрыв записи {} Б в {}", data.size(), tmp);
+            std::remove(tmp.c_str());
             return;
         }
     }
@@ -474,6 +480,11 @@ std::vector<unsigned char> fetch(const std::string& url)
     brls::Logger::error("Не скачалось (curl {} «{}», http {}): {}", static_cast<int>(result),
                         curl_easy_strerror(result), status, url);
     return {};
+}
+
+void forgetCached(const std::string& url)
+{
+    std::remove(cachePath(url).c_str());
 }
 
 std::vector<unsigned char> fetchFresh(const std::string& url)

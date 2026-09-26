@@ -58,6 +58,10 @@ size_t curlWrite(void* chunk, size_t size, size_t count, void* userdata)
 // onData объявлен приватным, но нужен колбэку curl — пробрасываем.
 size_t HttpStream::onDataPublic(const uint8_t* data, size_t size)
 {
+    // Проверка здесь, а не в onData: onData кормит и чтение из кэша, где
+    // никакого ответа сервера нет.
+    if (!responseAccepted())
+        return 0;  // ноль обрывает передачу
     return onData(data, size);
 }
 
@@ -70,20 +74,33 @@ size_t HttpStream::onHeaderPublic(const char* line, size_t size)
 
     if (header.compare(0, 5, "http/") == 0)
     {
-        // На запрос диапазона обязан прийти 206. Если сервер прислал 200,
-        // он проигнорировал Range и отдаёт файл сначала — такие байты
-        // нельзя дописывать в конец буфера.
+        // При редиректах статусных строк несколько, и каждая начинает новый
+        // набор заголовков — в силе остаётся последняя.
         const size_t space = header.find(' ');
-        const int code = space == std::string::npos ? 0 : std::atoi(header.c_str() + space + 1);
-        if (expectPartial && code == 200)
-            rangeIgnored = true;
+        httpStatus = space == std::string::npos ? 0 : std::atoi(header.c_str() + space + 1);
+        textBody   = false;
+        return size;
     }
 
+    // Гостевая сеть отвечает на любой адрес своей страницей входа с кодом
+    // 200 — по коду её от ролика не отличить, а по типу содержимого можно.
+    if (header.compare(0, 13, "content-type:") == 0
+        && header.find("text/", 13) != std::string::npos)
+        textBody = true;
+
+    // Размер берём только из годного ответа: Content-Range у 416 или длина
+    // страницы ошибки дали бы ложный конец файла.
     const size_t slash = header.rfind('/');
-    if (header.compare(0, 14, "content-range:") == 0 && slash != std::string::npos)
+    if (header.compare(0, 14, "content-range:") == 0 && slash != std::string::npos
+        && httpStatus.load() == 206)
         contentLength = std::atoll(header.c_str() + slash + 1);
 
     return size;
+}
+
+bool HttpStream::responseAccepted() const
+{
+    return httpStatus.load() == (expectPartial ? 206 : 200) && !textBody.load();
 }
 
 void HttpStream::setReaderPaused(bool paused)
@@ -119,19 +136,31 @@ HttpStream::~HttpStream()
     }
 }
 
-void HttpStream::closeCache(bool keep)
+void HttpStream::closeCache(bool keep, long long expectedSize)
 {
+    bool intact = cacheFile != nullptr;
     if (cacheFile)
     {
-        std::fclose(cacheFile);
+        // fclose сбрасывает на карту хвост буфера stdio: его ошибка значит,
+        // что конец файла так и не записан
+        intact    = std::fclose(cacheFile) == 0;
         cacheFile = nullptr;
     }
 
-    if (keep)
+    // Сверяем с тем, что реально легло на карту, а не с принятым из сети:
+    // на полной SD-карте fwrite молча пишет меньше, и файл выходил короче
+    // ролика, но всё равно становился кэшем.
+    if (keep && intact && cacheWritten == expectedSize)
     {
         std::remove(cachePath.c_str());
         if (std::rename(cacheTmp.c_str(), cachePath.c_str()) == 0)
             cacheComplete = true;
+    }
+    else if (keep)
+    {
+        brls::Logger::warning("поток: в кэш записано {} Б из {}, файл не сохраняем",
+                              cacheWritten, expectedSize);
+        std::remove(cacheTmp.c_str());
     }
     else if (!cacheComplete.load())
     {
@@ -139,14 +168,22 @@ void HttpStream::closeCache(bool keep)
     }
 }
 
+void HttpStream::restartCache()
+{
+    // Всегда заново, даже если файл уже открыт. Новый проход с нуля — это,
+    // например, перемотка в начало до конца закачки: прежний файл держит
+    // недокачанное начало, и дописывание в него дало бы начало ролика, за
+    // которым снова весь ролик, — а такой файл потом ушёл бы в кэш.
+    if (cacheFile)
+        std::fclose(cacheFile);
+    cacheFile    = std::fopen(cacheTmp.c_str(), "wb");
+    cacheWritten = 0;
+}
+
 size_t HttpStream::onData(const uint8_t* data, size_t size)
 {
-    if (!alive->load() || rangeIgnored.load())
+    if (!alive->load())
         return 0;  // ноль обрывает передачу
-
-    // попутная запись в кэш, пока читаем подряд с начала файла
-    if (cacheAllowed && cacheFile)
-        std::fwrite(data, 1, size, cacheFile);
 
     std::unique_lock<std::mutex> lock(mutex);
 
@@ -163,6 +200,23 @@ size_t HttpStream::onData(const uint8_t* data, size_t size)
     received += static_cast<long long>(size);
     requestReceived += static_cast<long long>(size);
     cv.notify_all();
+    lock.unlock();
+
+    // Попутная запись в кэш, пока читаем подряд с начала файла. Только после
+    // того, как байты приняты в буфер: иначе при отказе выше они оказались бы
+    // в файле, но не в счёте принятого, и докачка записала бы их второй раз.
+    if (cacheAllowed && cacheFile)
+    {
+        const size_t written = std::fwrite(data, 1, size, cacheFile);
+        cacheWritten += static_cast<long long>(written);
+        if (written != size)
+        {
+            // место на карте кончилось — кэш бросаем, ролик досматриваем
+            brls::Logger::warning("поток: запись в кэш оборвалась на {} Б", cacheWritten);
+            closeCache(false);
+            cacheAllowed = false;
+        }
+    }
     return size;
 }
 
@@ -192,9 +246,9 @@ void HttpStream::startWorker(int64_t from)
 
     // кэшируем только полный проход с нуля
     cacheAllowed = (from == 0);
-    if (cacheAllowed && !cacheFile)
-        cacheFile = std::fopen(cacheTmp.c_str(), "wb");
-    if (!cacheAllowed)
+    if (cacheAllowed)
+        restartCache();
+    else
         closeCache(false);
 
     workerRunning = true;
@@ -212,29 +266,42 @@ void HttpStream::feedFromNetwork(int64_t from)
         const int result = performRange(offset);
         offset += requestReceived.load();
 
+        // Ответ пришёл, но не тот. Конец файла признаём только у годного
+        // ответа, иначе пустая страница ошибки сошла бы за дочитанный ролик и
+        // легла в кэш.
+        const int status    = httpStatus.load();
+        const bool rejected = status != 0 && !responseAccepted();
+
         const long long length = contentLength.load();
         const bool complete    = length > 0 && offset >= length;
 
         // Дочитали до конца — либо по известной длине, либо сервер сам
         // закрыл соединение без ошибки и длины мы не знаем.
-        if (complete || (result == 0 && length <= 0))
+        if (!rejected && (complete || (result == 0 && length <= 0)))
         {
             brls::Logger::info("поток: файл дочитан, {} Б, кеширование {}", offset,
                                cacheAllowed ? "включено" : "выключено");
             if (cacheAllowed)
-                closeCache(true);
+                closeCache(true, length > 0 ? length : offset);
             break;
         }
 
         if (!workerRunning.load() || !alive->load())
             break;
 
-        if (rangeIgnored.load())
+        if (rejected)
         {
-            // сервер не поддержал докачку — продолжать нечем
-            brls::Logger::error("поток: сервер ответил 200 вместо 206, докачка невозможна");
-            connectionFailed = true;
-            break;
+            // 408, 429 и 5xx — временные, их стоит переждать; остальное
+            // (404, 403, 200 вместо 206, страница гостевой сети) повтор не
+            // исправит
+            const bool transient = status == 408 || status == 429 || status >= 500;
+            brls::Logger::error("поток: негодный ответ сервера, http {}{}, с байта {}", status,
+                                textBody.load() ? ", текст вместо видео" : "", offset);
+            if (!transient || textBody.load())
+            {
+                connectionFailed = true;
+                break;
+            }
         }
 
         // Пауза показа — не обрыв связи: читатель просто перестал
@@ -249,12 +316,19 @@ void HttpStream::feedFromNetwork(int64_t from)
 
         // Обрыв посреди файла: продолжаем с того места, где остановились.
         // Кэш при этом не портится — байты по-прежнему идут подряд.
+        // Попытки считаем подряд идущими неудачами: если запрос успел что-то
+        // принести, связь была, и счёт начинается заново. Иначе пять
+        // коротких провалов Wi-Fi за весь ролик, каждый из которых лечился
+        // первой же попыткой, убивали показ.
+        if (requestReceived.load() > 0)
+            attempt = 0;
         if (++attempt > MAX_RECONNECTS)
         {
             brls::Logger::error("поток: исчерпаны {} попыток переподключения на байте {}",
                                 MAX_RECONNECTS, offset);
-            if (offset == from)
-                connectionFailed = true;
+            // Ошибка, даже если часть файла уже пришла: без флага читатель
+            // получил бы конец файла, и плеер принял бы обрыв за финал ролика.
+            connectionFailed = true;
             break;
         }
 
@@ -291,8 +365,8 @@ void HttpStream::feedFromCache(int64_t from)
         brls::Logger::warning("поток: кэш пропал, возвращаемся к сети");
         cacheComplete = false;
         cacheAllowed  = (from == 0);
-        if (cacheAllowed && !cacheFile)
-            cacheFile = std::fopen(cacheTmp.c_str(), "wb");
+        if (cacheAllowed)
+            restartCache();
         feedFromNetwork(from);
         return;
     }
@@ -323,7 +397,8 @@ int HttpStream::performRange(int64_t from)
         return -1;
 
     expectPartial = from > 0;
-    rangeIgnored  = false;
+    httpStatus    = 0;
+    textBody      = false;
 
     curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, curlWrite);
@@ -363,7 +438,7 @@ int HttpStream::performRange(int64_t from)
 
     const CURLcode result = curl_easy_perform(curl);
 
-    if (contentLength.load() < 0)
+    if (contentLength.load() < 0 && responseAccepted())
     {
         curl_off_t length = 0;
         if (curl_easy_getinfo(curl, CURLINFO_CONTENT_LENGTH_DOWNLOAD_T, &length) == CURLE_OK

@@ -102,11 +102,19 @@ class HttpStream
     /// места продолжать после обрыва
     std::atomic<long long> requestReceived { 0 };
     std::atomic_bool readerPaused { false };
-    /// сервер вернул 200 вместо 206 на запрос диапазона — дописывать
-    /// такой ответ в конец буфера нельзя, это склеит файл с самим собой
-    std::atomic_bool rangeIgnored { false };
+    /// Код ответа текущего запроса; при редиректах — последнего в цепочке.
+    /// Ноль, пока статусной строки не было, то есть до ответа сервера.
+    std::atomic_int httpStatus { 0 };
+    /// сервер прислал вместо ролика текст — страницу ошибки или вход в
+    /// гостевую сеть; такой ответ нельзя ни показывать, ни класть в кэш
+    std::atomic_bool textBody { false };
     /// ждём ли мы сейчас диапазон (from > 0)
     bool expectPartial = false;
+    /// Ответ — тот, что мы просили: 200 на запрос с нуля, 206 на диапазон,
+    /// и не текст. Всё прочее — 200 вместо 206 (сервер проигнорировал Range и
+    /// склеил бы файл с самим собой), 403/404/429/5xx, страница гостевой
+    /// сети — в демуксер и в кэш не пускаем.
+    bool responseAccepted() const;
     std::atomic<long long> received { 0 };
     std::atomic<long long> contentLength { -1 };
 
@@ -119,8 +127,14 @@ class HttpStream
     // запись в кэш идёт, только пока чтение шло подряд с нуля
     std::FILE* cacheFile = nullptr;
     std::string cacheTmp;
+    /// сколько байт fwrite действительно положил во временный файл
+    long long cacheWritten = 0;
     bool cacheAllowed = true;
     std::atomic_bool cacheComplete { false };
 
-    void closeCache(bool keep);
+    /// keep — сделать временный файл кэшем, если в нём ровно expectedSize
+    /// байт и он закрылся без ошибки; иначе файл удаляется.
+    void closeCache(bool keep, long long expectedSize = -1);
+    /// Открывает временный файл кэша с нуля, отбрасывая прежнее содержимое.
+    void restartCache();
 };

@@ -35,6 +35,11 @@ void RemoteImage::load(const std::string& url)
         // несколько кадров на каждый — открытие карточки заметно подвисало.
         auto pixels = std::make_shared<asyncimage::Pixels>(
             asyncimage::decode(data.data(), data.size()));
+        // Не разобралось — значит в кэше мусор: недописанный файл или
+        // страница вместо картинки. Убираем, чтобы следующее открытие
+        // карточки скачало скриншот заново.
+        if (!data.empty() && !pixels->valid())
+            net::forgetCached(url);
         if (!*flag)
             return;
 
