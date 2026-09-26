@@ -39,7 +39,7 @@ via `pl:u`; no copy of the font is distributed with the app.
 | Library | License | Source |
 |---|---|---|
 | [borealis](https://github.com/xfangfang/borealis) (fork by xfangfang) | Apache-2.0 | `app/lib/borealis` (submodule) |
-| [FFmpeg](https://ffmpeg.org/) 7.1 — libavformat, libavcodec, libswscale, libswresample, libavutil | **LGPL-2.1-or-later** — built without `--enable-gpl` / `--enable-nonfree`; h264, aac, mp3, pcm decoders only | built by `app/tools/build_ffmpeg_slim.sh` from FFmpeg 7.1 with the [devkitPro `switch-ffmpeg` patch](https://github.com/devkitPro/pacman-packages) (`--enable-libnx --enable-nvtegra`) |
+| [FFmpeg](https://ffmpeg.org/) 7.1.5 — libavformat, libavcodec, libswscale, libswresample, libavutil | **LGPL-2.1-or-later** — built without `--enable-gpl` / `--enable-nonfree`; h264, aac, mp3, pcm decoders only | built by `app/tools/build_ffmpeg_slim.sh` from FFmpeg 7.1.5 with the [devkitPro `switch-ffmpeg` patch for 7.1](https://github.com/devkitPro/pacman-packages) (`--enable-libnx`) |
 | [libnx](https://github.com/switchbrew/libnx) | ISC | devkitPro |
 | [curl](https://curl.se/) | curl (MIT-style) | devkitPro `switch-curl` |
 | [Mbed TLS](https://github.com/Mbed-TLS/mbedtls) | Apache-2.0 | devkitPro `switch-mbedtls` |
@@ -64,15 +64,15 @@ FFmpeg линкуется статически. Согласно LGPL 2.1 §6 п
 возможность пересобрать приложение с изменённой версией библиотеки. Для этого:
 
 * исходники FFmpeg — [ffmpeg.org](https://ffmpeg.org/download.html), версия
-  7.1; патч devkitPro и точная конфигурация — в
+  7.1.5; патч devkitPro и точная конфигурация — в
   [`app/tools/build_ffmpeg_slim.sh`](../app/tools/build_ffmpeg_slim.sh);
 * приложение собирается из этого репозитория по инструкции в README
-  («Сборка»); замена `app/lib/ffmpeg-slim` на другую сборку FFmpeg 7.1 с тем
+  («Сборка»); замена `app/lib/ffmpeg-slim` на другую сборку FFmpeg 7.1.x с тем
   же набором компонентов и повторная сборка `.nro` — и есть перелинковка;
 * текст лицензии: <https://www.gnu.org/licenses/old-licenses/lgpl-2.1.html>.
 
 FFmpeg is statically linked. Under LGPL 2.1 §6 users must be able to relink the
-application against a modified library: FFmpeg 7.1 sources are at
+application against a modified library: FFmpeg 7.1.5 sources are at
 ffmpeg.org, the devkitPro patch and exact configure line are in
 `app/tools/build_ffmpeg_slim.sh`, and rebuilding the `.nro` from this
 repository with a replaced `app/lib/ffmpeg-slim` is the relink.

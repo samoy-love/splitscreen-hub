@@ -67,16 +67,12 @@ build_native() {
 
 # Исходники FFmpeg и патчи devkitPro — тоже с хоста, если урезанной сборки
 # ещё нет: build_ffmpeg_slim.sh качает их сам, но не из контейнера на
-# раннере (см. ниже). Адреса и версия — из самого build_ffmpeg_slim.sh.
+# раннере (см. ниже). Качает и сверяет суммы он же, в режиме --fetch-only:
+# адреса, версии и суммы живут в одном файле, и выдёргивать их отсюда grep'ом
+# значило бы продублировать проверку или тихо её потерять.
 prefetch_ffmpeg() {
     [ -f "$APP/lib/ffmpeg-slim/lib/libavcodec.a" ] && return 0
-    local ver base work
-    ver="$(grep -m1 '^VER=' "$APP/tools/build_ffmpeg_slim.sh" | cut -d= -f2-)"
-    base="$(grep -m1 '^BASE=' "$APP/tools/build_ffmpeg_slim.sh" | cut -d= -f2- | tr -d '"')"
-    work="$APP/build-ffmpeg"; mkdir -p "$work"
-    [ -f "$work/ffmpeg-$ver.tar.xz" ] || curl -fsSL --retry 3 --connect-timeout 20 -o "$work/ffmpeg-$ver.tar.xz" "https://ffmpeg.org/releases/ffmpeg-$ver.tar.xz"
-    [ -f "$work/ffmpeg-$ver.patch" ]  || curl -fsSL --retry 3 --connect-timeout 20 -o "$work/ffmpeg-$ver.patch" "$base/ffmpeg-$ver.patch"
-    [ -f "$work/tls.patch" ]          || curl -fsSL --retry 3 --connect-timeout 20 -o "$work/tls.patch" "$base/tls.patch"
+    bash "$APP/tools/build_ffmpeg_slim.sh" --fetch-only
 }
 
 # Всё, что тянется из сети, скачивается здесь, до выбора окружения, — с
@@ -98,6 +94,11 @@ elif command -v docker >/dev/null 2>&1; then
     # Portlibs (curl, mbedtls, SDL2, zlib, bzip2) в образе уже есть — он
     # ставит группу switch-portlibs целиком. dkp-pacman отсюда не зовём:
     # pkg.devkitpro.org отвечает CI-раннерам 403, ради чего образы и сделаны.
+    #
+    # Код возврата запоминаем, а не отдаём set -e: упавшая сборка иначе
+    # выходила бы до chown ниже, и файлы root оставались бы в рабочем
+    # каталоге раннера — ровно тогда, когда прогон и так красный.
+    rc=0
     docker run --rm -v "$ROOT:/work" -w /work "$IMAGE" bash -c '
         set -e
         git config --global --add safe.directory "*"
@@ -108,7 +109,7 @@ elif command -v docker >/dev/null 2>&1; then
         git config --global http.version HTTP/1.1
         apt-get update -qq && apt-get install -y -qq ninja-build make patch xz-utils curl >/dev/null
         bash app/tools/build_release.sh
-    '
+    ' || rc=$?
     # Всё дерево, а не только build/ и lib/: контейнер пишет ещё в
     # build-ffmpeg/ и подмодули, а любой файл root в рабочем каталоге
     # раннера потом ломает post-шаги кеша — их hashFiles обходит дерево
@@ -116,6 +117,7 @@ elif command -v docker >/dev/null 2>&1; then
     if command -v id >/dev/null 2>&1; then
         docker run --rm -v "$ROOT:/work" -w /work "$IMAGE" chown -R "$(id -u):$(id -g)" . || true
     fi
+    exit "$rc"
 else
     echo "нет ни devkitPro, ни docker — собирать нечем" >&2
     exit 1
