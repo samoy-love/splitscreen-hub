@@ -211,6 +211,14 @@ int main(int argc, char* argv[])
             if (std::strcmp(argv[i], "-d") == 0)
                 brls::Logger::setLogLevel(brls::LogLevel::LOG_DEBUG);
 
+        // Прошлую подмену оборвали на полпути, и нас запустили из резервной
+        // копии: возвращаем ей основное имя и перезапускаемся оттуда.
+        if (updater::recoverInterruptedSwap())
+        {
+            step("restored from backup, restarting");
+            return EXIT_SUCCESS;
+        }
+
         // Обновление, скачанное в прошлый раз, но не поставленное (вышли по
         // HOME, не по кнопке): подменяем файл сейчас, пока romfs можно
         // отпустить без потерь — интерфейса ещё нет, — и сразу перезапускаемся
@@ -277,6 +285,15 @@ int main(int argc, char* argv[])
         // Шрифт — системный, из pl:u; в romfs своего нет (см. fonts.cpp).
         fonts::useConsoleFont();
         brls::Application::setGlobalQuit(true);
+
+        // Текстуры обложек принадлежат контексту nanovg, а его borealis
+        // уничтожает сама, ещё внутри mainLoop(): последний виток цикла зовёт
+        // Application::exit(), и тот удаляет платформу вместе с видеоконтекстом.
+        // После выхода из цикла освобождать их уже не во что — вызов шёл по
+        // освобождённой памяти и мог уронить приложение раньше, чем дело дойдёт
+        // до подмены скачанного обновления. Событие выхода срабатывает в самом
+        // начале exit(), пока контекст ещё жив.
+        brls::Application::getExitEvent()->subscribe([]() { covers::clear(); });
 
         step("threads");
         tasks::start();
@@ -405,7 +422,7 @@ int main(int argc, char* argv[])
             {
                 firstFrame = false;
                 step("первый кадр");
-                // Новая версия дожила до экрана — прежняя сборка .old и
+                // Новая версия дожила до экрана — прежняя сборка .old.nro и
                 // обрывки закачек больше не нужны.
                 updater::cleanupLeftovers();
                 previousFrame = lastComplaint = lastSummary = std::chrono::steady_clock::now();
@@ -456,8 +473,9 @@ int main(int argc, char* argv[])
 
         step("shutdown");
         perf::report();
-        // До остановки borealis: текстуры принадлежат её контексту nanovg.
-        covers::clear();
+        // Отсюда и ниже borealis уже остановлена и её платформы нет: ни nanovg,
+        // ни видов, ни brls::sync. Обложки освобождены по событию выхода (см.
+        // выше), а трогать здесь можно только собственные потоки, сеть и файлы.
         tasks::stop();
         net::shutdown();
         step("done");

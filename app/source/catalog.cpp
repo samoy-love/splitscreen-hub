@@ -20,6 +20,16 @@ const char CATALOG_MAGIC[4] = { 'S', 'S', 'H', 'C' };
 const char DETAILS_MAGIC[4] = { 'S', 'S', 'H', 'D' };
 constexpr unsigned FORMAT_VERSION = 2;
 
+/// Наименьший размер записей в catalog.bin: название жанра — одна длина u16,
+/// игра — пять пустых строк, пять u16, i64, два u8, u64 и два u32.
+constexpr size_t MIN_GENRE_BYTES = 2;
+constexpr size_t MIN_GAME_BYTES  = 5 * 2 + 5 * 2 + 8 + 2 + 8 + 4 + 4;
+
+/// Потолок одной записи details.bin, сжатой и развёрнутой. Настоящие — единицы
+/// килобайт; размеры берутся из catalog.bin, и испорченное число не должно
+/// превращаться в попытку выделить гигабайты.
+constexpr unsigned MAX_DETAILS_RECORD = 1u << 22;
+
 /// Последовательное чтение из буфера в памяти.
 ///
 /// Проверяет границы на каждом шаге и после первого выхода за них молча отдаёт
@@ -34,6 +44,11 @@ class Reader
     }
 
     bool ok() const { return !failed; }
+
+    /// Сколько байт ещё не прочитано. Нужен, чтобы счётчикам из файла не
+    /// верить на слово: резервировать память под четыре миллиарда записей
+    /// из испорченного заголовка — это bad_alloc, а не пустой каталог.
+    size_t remaining() const { return failed ? 0 : size - pos; }
 
     unsigned char u8()
     {
@@ -217,95 +232,120 @@ bool Catalog::open(const std::string& directory)
 
 void Catalog::loadBriefs()
 {
+    // Флаг готовности выставляется при любом исходе, включая исключение:
+    // queryBrief его дожидается, и невыставленный подвесил бы рабочий поток
+    // навсегда — а с ним и tasks::stop() при выходе, который этот поток
+    // джойнит. Вместо этого — пустой каталог с честной надписью «ничего не
+    // найдено» и строка в журнале.
+    struct ReadyOnExit
+    {
+        Catalog& catalog;
+        ~ReadyOnExit()
+        {
+            {
+                std::lock_guard<std::mutex> lock(catalog.briefsMutex);
+                catalog.briefsLoaded = true;
+            }
+            catalog.briefsReady.notify_all();
+        }
+    } ready { *this };
+
     perf::Scope timer("каталог в память");
 
     std::vector<catalogq::Brief> loaded;
     std::vector<std::string> names;
     std::vector<unsigned char> dictionary;
 
-    const std::vector<unsigned char> data = readWhole(catalogPath);
-
-    Reader r(data.data(), data.size());
-    if (data.empty() || !r.magic(CATALOG_MAGIC) || r.u32() != FORMAT_VERSION)
+    try
     {
-        brls::Logger::error("каталог: {} не читается или чужого формата", catalogPath);
-    }
-    else
-    {
-        const unsigned games = r.u32();
-        const unsigned kinds = r.u32();
+        const std::vector<unsigned char> data = readWhole(catalogPath);
 
-        names.reserve(kinds);
-        for (unsigned i = 0; i < kinds && r.ok(); i++)
-            names.push_back(r.str16());
-
-        loaded.reserve(games);
-        for (unsigned i = 0; i < games && r.ok(); i++)
+        Reader r(data.data(), data.size());
+        if (data.empty() || !r.magic(CATALOG_MAGIC) || r.u32() != FORMAT_VERSION)
         {
-            catalogq::Brief b;
-            b.nsuid      = r.str16();
-            b.title      = r.str16();
-            b.sortTitle  = r.str16();
-            b.titleId    = r.str16();
-            b.boxArt     = r.str16();
-            b.minPlayers = (int)r.u16();
-            b.maxPlayers = (int)r.u16();
-            b.mentions   = (int)r.u16();
-            b.score      = (int)r.u16();
-            b.year       = (int)r.u16();
-            b.romSize    = r.i64();
-
-            const unsigned char flags = r.u8();
-            b.hasRussian              = (flags & 1) != 0;
-            b.isRetro                 = (flags & 2) != 0;
-
-            const unsigned char genres = r.u8();
-            b.genreIds.reserve(genres);
-            for (unsigned char g = 0; g < genres; g++)
-                b.genreIds.push_back((int)r.u8());
-
-            b.detailsOffset = r.u64();
-            b.detailsPacked = r.u32();
-            b.detailsRaw    = r.u32();
-
-            // Ключ поиска считаем здесь, а не храним в файле: это тот же title
-            // в нижнем регистре, и лишние 268 КБ в romfs ради него не нужны.
-            b.searchTitle = catalogq::searchKey(b.title);
-
-            loaded.push_back(std::move(b));
+            brls::Logger::error("каталог: {} не читается или чужого формата", catalogPath);
         }
-
-        if (!r.ok())
-            brls::Logger::error("каталог: {} оборван на игре {}", catalogPath, loaded.size());
-    }
-
-    // Словарь из details.bin: без него ни одна запись карточки не развернётся.
-    std::FILE* file = std::fopen(detailsPath.c_str(), "rb");
-    if (file)
-    {
-        unsigned char head[12] = {};
-        if (std::fread(head, 1, sizeof(head), file) == sizeof(head)
-            && std::memcmp(head, DETAILS_MAGIC, 4) == 0)
+        else
         {
-            unsigned version = 0, size = 0;
-            std::memcpy(&version, head + 4, 4);
-            std::memcpy(&size, head + 8, 4);
+            const unsigned games = r.u32();
+            const unsigned kinds = r.u32();
 
-            if (version == FORMAT_VERSION && size > 0 && size <= (1u << 20))
+            names.reserve(std::min<size_t>(kinds, r.remaining() / MIN_GENRE_BYTES));
+            for (unsigned i = 0; i < kinds && r.ok(); i++)
+                names.push_back(r.str16());
+
+            loaded.reserve(std::min<size_t>(games, r.remaining() / MIN_GAME_BYTES));
+            for (unsigned i = 0; i < games && r.ok(); i++)
             {
-                dictionary.resize(size);
-                if (std::fread(dictionary.data(), 1, size, file) != size)
-                    dictionary.clear();
-            }
-        }
-        std::fclose(file);
-    }
-    if (dictionary.empty())
-        brls::Logger::error("каталог: словарь из {} не прочитался", detailsPath);
+                catalogq::Brief b;
+                b.nsuid      = r.str16();
+                b.title      = r.str16();
+                b.sortTitle  = r.str16();
+                b.titleId    = r.str16();
+                b.boxArt     = r.str16();
+                b.minPlayers = (int)r.u16();
+                b.maxPlayers = (int)r.u16();
+                b.mentions   = (int)r.u16();
+                b.score      = (int)r.u16();
+                b.year       = (int)r.u16();
+                b.romSize    = r.i64();
 
-    // Флаг готовности выставляется при любом исходе: queryBrief его дожидается,
-    // и невыставленный подвесил бы рабочий поток навсегда вместо пустого
-    // каталога с честной надписью «ничего не найдено».
+                const unsigned char flags = r.u8();
+                b.hasRussian              = (flags & 1) != 0;
+                b.isRetro                 = (flags & 2) != 0;
+
+                const unsigned char genres = r.u8();
+                b.genreIds.reserve(genres);
+                for (unsigned char g = 0; g < genres; g++)
+                    b.genreIds.push_back((int)r.u8());
+
+                b.detailsOffset = r.u64();
+                b.detailsPacked = r.u32();
+                b.detailsRaw    = r.u32();
+
+                // Ключ поиска считаем здесь, а не храним в файле: это тот же title
+                // в нижнем регистре, и лишние 268 КБ в romfs ради него не нужны.
+                b.searchTitle = catalogq::searchKey(b.title);
+
+                loaded.push_back(std::move(b));
+            }
+
+            if (!r.ok())
+                brls::Logger::error("каталог: {} оборван на игре {}", catalogPath, loaded.size());
+        }
+
+        // Словарь из details.bin: без него ни одна запись карточки не развернётся.
+        std::FILE* file = std::fopen(detailsPath.c_str(), "rb");
+        if (file)
+        {
+            unsigned char head[12] = {};
+            if (std::fread(head, 1, sizeof(head), file) == sizeof(head)
+                && std::memcmp(head, DETAILS_MAGIC, 4) == 0)
+            {
+                unsigned version = 0, size = 0;
+                std::memcpy(&version, head + 4, 4);
+                std::memcpy(&size, head + 8, 4);
+
+                if (version == FORMAT_VERSION && size > 0 && size <= (1u << 20))
+                {
+                    dictionary.resize(size);
+                    if (std::fread(dictionary.data(), 1, size, file) != size)
+                        dictionary.clear();
+                }
+            }
+            std::fclose(file);
+        }
+        if (dictionary.empty())
+            brls::Logger::error("каталог: словарь из {} не прочитался", detailsPath);
+    }
+    catch (const std::exception& e)
+    {
+        brls::Logger::error("каталог: чтение оборвалось исключением, каталог пуст: {}", e.what());
+        loaded.clear();
+        names.clear();
+        dictionary.clear();
+    }
+
     {
         std::lock_guard<std::mutex> lock(briefsMutex);
 
@@ -316,10 +356,7 @@ void Catalog::loadBriefs()
         byId.reserve(briefs.size());
         for (size_t i = 0; i < briefs.size(); i++)
             byId[briefs[i].nsuid] = i;
-
-        briefsLoaded = true;
     }
-    briefsReady.notify_all();
 
     brls::Logger::info("каталог: в памяти {} игр, жанров {}", briefs.size(), allGenres.size());
 }
@@ -410,6 +447,12 @@ bool Catalog::detailsFor(const std::string& nsuid, Details& out) const
         offset = briefs[it->second].detailsOffset;
         packed = briefs[it->second].detailsPacked;
         raw    = briefs[it->second].detailsRaw;
+    }
+
+    if (packed == 0 || packed > MAX_DETAILS_RECORD || raw == 0 || raw > MAX_DETAILS_RECORD)
+    {
+        brls::Logger::error("карточка: у записи {} негодные размеры {}/{}", nsuid, packed, raw);
+        return false;
     }
 
     std::vector<unsigned char> blob(packed);

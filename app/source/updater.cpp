@@ -35,7 +35,27 @@ std::atomic_bool installing { false };
 /// Скачанный .nro и его метка «сверено» рядом с приложением.
 std::string newPath(const std::string& self) { return self + ".new"; }
 std::string okPath(const std::string& self) { return self + ".new.ok"; }
-std::string oldPath(const std::string& self) { return self + ".old"; }
+
+/// Прежняя сборка на время подмены. Имя кончается на .nro нарочно: hbmenu
+/// показывает только такие файлы, и если питание пропадёт между двумя
+/// переименованиями в applyPending(), приложение останется в меню хотя бы
+/// под этим именем — а запущенное оттуда, само вернёт себе основное (см.
+/// recoverInterruptedSwap).
+const char* BACKUP_SUFFIX = ".old.nro";
+
+bool endsWith(const std::string& s, const std::string& tail)
+{
+    return s.size() > tail.size() && s.compare(s.size() - tail.size(), tail.size(), tail) == 0;
+}
+
+std::string oldPath(const std::string& self)
+{
+    return endsWith(self, ".nro") ? self.substr(0, self.size() - 4) + BACKUP_SUFFIX
+                                  : self + ".old";
+}
+
+/// Так резервную копию называли прежние сборки: hbmenu её не видел.
+std::string legacyOldPath(const std::string& self) { return self + ".old"; }
 
 bool exists(const std::string& path)
 {
@@ -49,7 +69,8 @@ long long fileSize(const std::string& path)
     return ::stat(path.c_str(), &st) == 0 ? static_cast<long long>(st.st_size) : -1;
 }
 
-/// sha256 файла шестнадцатеричной строкой; пусто, если считать нечем.
+/// sha256 файла шестнадцатеричной строкой в нижнем регистре; пусто, если
+/// считать нечем или файл не прочитался до конца.
 std::string fileSha256(const std::string& path)
 {
 #ifdef __SWITCH__
@@ -63,7 +84,15 @@ std::string fileSha256(const std::string& path)
     size_t n;
     while ((n = std::fread(buf, 1, sizeof buf, f)) > 0)
         mbedtls_sha256_update_ret(&ctx, buf, n);
+    // Ошибка чтения посреди файла дала бы сумму его начала — это не «не
+    // сошлось», а «не посчитали», и ответ должен быть пустым.
+    const bool readFailed = std::ferror(f) != 0;
     std::fclose(f);
+    if (readFailed)
+    {
+        mbedtls_sha256_free(&ctx);
+        return {};
+    }
     unsigned char out[32];
     mbedtls_sha256_finish_ret(&ctx, out);
     mbedtls_sha256_free(&ctx);
@@ -75,6 +104,65 @@ std::string fileSha256(const std::string& path)
     (void)path;
     return {};
 #endif
+}
+
+/// Сумма из манифеста в том виде, в каком её считает fileSha256(): ровно 64
+/// шестнадцатеричных знака в нижнем регистре. Пусто, если это не sha256 —
+/// регистр в манифесте нам не указ, а вот обрезанная или чужая строка должна
+/// остановить обновление, а не пройти сравнение по случайности.
+std::string normalizeSha256(const std::string& value)
+{
+    if (value.size() != 64)
+        return {};
+    std::string out(value);
+    for (char& c : out)
+    {
+        if (c >= 'A' && c <= 'F')
+            c = static_cast<char>(c - 'A' + 'a');
+        else if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')))
+            return {};
+    }
+    return out;
+}
+
+/// Метка «сверено»: одна строка «sha256=<64 знака> size=<байт>». Ключи в
+/// самой строке — чтобы метку, записанную прежними сборками (там сумма могла
+/// оказаться пустой, и строка начиналась с пробела), нельзя было прочитать
+/// как годную: такая не разбирается, и файл при подмене считается чужим.
+bool writeMark(const std::string& path, const std::string& sha, long long size)
+{
+    FILE* f = std::fopen(path.c_str(), "w");
+    if (!f)
+        return false;
+    const bool written = std::fprintf(f, "sha256=%s size=%lld\n", sha.c_str(), size) > 0;
+    return std::fclose(f) == 0 && written;
+}
+
+bool readMark(const std::string& path, std::string& sha, long long& size)
+{
+    FILE* f = std::fopen(path.c_str(), "r");
+    if (!f)
+        return false;
+    char line[160] = {};
+    const bool got = std::fgets(line, sizeof line, f) != nullptr;
+    std::fclose(f);
+    if (!got)
+        return false;
+
+    char hex[65] = {};
+    long long n  = -1;
+    int consumed = 0;
+    if (std::sscanf(line, "sha256=%64[0-9a-f] size=%lld%n", hex, &n, &consumed) != 2)
+        return false;
+    // После размера — только перевод строки: хвост означает, что метка чужая
+    // или испорчена.
+    for (const char* rest = line + consumed; *rest; rest++)
+        if (*rest != '\n' && *rest != '\r')
+            return false;
+
+    sha  = normalizeSha256(hex);
+    size = n;
+    return !sha.empty() && size > 0;
 }
 
 }  // namespace
@@ -199,29 +287,49 @@ void install(const Info& info, std::function<void(const Progress&)> onProgress,
 
         // Сумма — единственное, что отличает целый файл от оборванного на
         // полпути или подменённого по дороге: TLS мы не проверяем (см. net).
-        if (!info.sha256.empty())
+        // Поэтому без неё не ставим ничего: ни когда её нет в манифесте, ни
+        // когда её не удалось посчитать. Прежде в обоих случаях проверка
+        // молча пропускалась, и непроверенный файл уходил в подмену.
+        auto reject = [&tmp, &finish](const std::string& code) {
+            std::remove(tmp.c_str());
+            finish(false, code);
+        };
+
+        const std::string expected = normalizeSha256(info.sha256);
+        if (expected.empty())
         {
-            const std::string got = fileSha256(tmp);
-            if (!got.empty() && got != info.sha256)
-            {
-                std::remove(tmp.c_str());
-                brls::Logger::error("updater: сумма не сошлась: {} вместо {}", got, info.sha256);
-                return finish(false, "checksum");
-            }
+            brls::Logger::error("updater: в манифесте нет годной суммы: «{}»", info.sha256);
+            return reject("no checksum");
+        }
+
+        // Размер из манифеста сверяем отдельно и раньше суммы: оборванная
+        // закачка видна сразу, без чтения всего файла.
+        const long long got = fileSize(tmp);
+        if (info.size > 0 && got != info.size)
+        {
+            brls::Logger::error("updater: размер не сошёлся: {} вместо {}", got, info.size);
+            return reject("checksum");
+        }
+
+        const std::string actual = fileSha256(tmp);
+        if (actual.empty())
+        {
+            brls::Logger::error("updater: сумму {} посчитать не удалось", tmp);
+            return reject("hash");
+        }
+        if (actual != expected)
+        {
+            brls::Logger::error("updater: сумма не сошлась: {} вместо {}", actual, expected);
+            return reject("checksum");
         }
 
         // Метка «сверено»: без неё файл .new при старте считается обрывком и
         // удаляется. Внутри — сумма и размер, размер сверяется ещё раз перед
         // самой подменой.
-        if (FILE* ok = std::fopen(okPath(self).c_str(), "w"))
+        if (!writeMark(okPath(self), actual, got))
         {
-            std::fprintf(ok, "%s %lld\n", info.sha256.c_str(), fileSize(tmp));
-            std::fclose(ok);
-        }
-        else
-        {
-            std::remove(tmp.c_str());
-            return finish(false, "mark");
+            std::remove(okPath(self).c_str());
+            return reject("mark");
         }
 
         finish(true, info.version);
@@ -244,17 +352,12 @@ bool applyPending(std::string& error)
     }
     const std::string tmp = newPath(self), ok = okPath(self), old = oldPath(self);
 
+    std::string sha;
     long long expected = -1;
-    if (FILE* f = std::fopen(ok.c_str(), "r"))
+    if (!readMark(ok, sha, expected) || fileSize(tmp) != expected)
     {
-        char sha[80] = {};
-        if (std::fscanf(f, "%79s %lld", sha, &expected) != 2)
-            expected = -1;
-        std::fclose(f);
-    }
-    if (expected <= 0 || fileSize(tmp) != expected)
-    {
-        // Метка есть, а файл не тот — недописан или подменён. Не рискуем.
+        // Метка есть, а файл не тот — недописан или подменён; или метка не
+        // читается, то есть сверка не доказана. Не рискуем.
         std::remove(tmp.c_str());
         std::remove(ok.c_str());
         error = "size";
@@ -267,20 +370,33 @@ bool applyPending(std::string& error)
     romfsExit();
 #endif
 
+    // Подмена сорвалась, и файл снова на своём месте: возвращаем romfs. При
+    // старте без него приложение не прочло бы каталог и закрылось бы с
+    // ошибкой вместо того, чтобы работать прежней версией.
+    auto remount = []() {
+#ifdef __SWITCH__
+        romfsInit();
+#endif
+    };
+
     // FAT не переименовывает поверх существующего: старую сборку сначала
-    // убираем с дороги под именем .old — она же и путь отката, если подмена
-    // сорвётся на полпути; при удачном старте новой версии её удалит
-    // cleanupLeftovers().
+    // убираем с дороги под именем .old.nro — она же и путь отката, если
+    // подмена сорвётся на полпути; при удачном старте новой версии её удалит
+    // cleanupLeftovers(). Между двумя rename основного файла нет вовсе, и
+    // выключение консоли в этот момент оставило бы в hbmenu только копию —
+    // поэтому у неё имя, которое hbmenu показывает.
     std::remove(old.c_str());
     if (std::rename(self.c_str(), old.c_str()) != 0)
     {
         error = std::string("rename self: ") + std::strerror(errno);
+        remount();
         return false;
     }
     if (std::rename(tmp.c_str(), self.c_str()) != 0)
     {
         error = std::string("rename new: ") + std::strerror(errno);
-        std::rename(old.c_str(), self.c_str());
+        if (std::rename(old.c_str(), self.c_str()) == 0)
+            remount();
         return false;
     }
     std::remove(ok.c_str());
@@ -297,12 +413,58 @@ bool applyPending(std::string& error)
     return true;
 }
 
+bool recoverInterruptedSwap()
+{
+#ifdef __SWITCH__
+    // Запущены не из резервной копии — восстанавливать нечего.
+    const std::string self = selfPath();
+    if (!endsWith(self, BACKUP_SUFFIX))
+        return false;
+
+    // Основной файл на месте: копию запустили руками, например потому, что
+    // новая версия не стартует. Это законный откат — просто работаем.
+    const std::string main = self.substr(0, self.size() - std::strlen(BACKUP_SUFFIX)) + ".nro";
+    if (exists(main))
+        return false;
+
+    // Подмену прервали между двумя rename: основного файла нет, а мы — его
+    // прежняя сборка. Возвращаем себе основное имя и перезапускаемся уже
+    // оттуда; скачанное обновление с меткой лежит рядом с основным именем, и
+    // перезапущенная сборка сама доведёт подмену до конца. Свой .nro держит
+    // открытым romfs, поэтому сначала отпускаем его.
+    romfsExit();
+    if (std::rename(self.c_str(), main.c_str()) != 0)
+    {
+        brls::Logger::error("updater: не удалось вернуть {} на место {}: {}", self, main,
+                            std::strerror(errno));
+        romfsInit();
+        return false;
+    }
+
+    // Без envSetNextLoad перезапуска не будет, но и продолжать нельзя: файла,
+    // из которого смонтирован romfs, под прежним именем уже нет. Человек
+    // запустит приложение из hbmenu — теперь под обычным именем.
+    if (envHasNextLoad())
+    {
+        const std::string argv = "\"" + main + "\"";
+        envSetNextLoad(main.c_str(), argv.c_str());
+    }
+    return true;
+#else
+    return false;
+#endif
+}
+
 void cleanupLeftovers()
 {
     const std::string self = selfPath();
     if (self.empty())
         return;
-    std::remove(oldPath(self).c_str());
+    // Копию, из которой нас запустили, не трогаем: удалить работающий файл
+    // консоль не даст, а если это откат, копия ещё пригодится.
+    if (!endsWith(self, BACKUP_SUFFIX))
+        std::remove(oldPath(self).c_str());
+    std::remove(legacyOldPath(self).c_str());
     if (exists(newPath(self)) && !exists(okPath(self)))
         std::remove(newPath(self).c_str());
 }
