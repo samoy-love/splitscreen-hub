@@ -23,7 +23,8 @@ done
 mkdir -p app/build
 # Детерминированный архив: одинаковые данные — одинаковая сумма, и
 # VERIFY_URL в deploy-kit сверяется без ложных расхождений.
+# *.tmp — недокачанные обложки download_art.py: в бандл и в romfs им нельзя.
 tar --sort=name --owner=0 --group=0 --numeric-owner --mtime='2000-01-01 00:00Z' \
-    -czf "$OUT" app/resources/art app/resources/catalog.bin app/resources/details.bin \
+    --exclude='*.tmp' -czf "$OUT" app/resources/art app/resources/catalog.bin app/resources/details.bin \
     pipeline/translations.db
 ls -l "$OUT"
