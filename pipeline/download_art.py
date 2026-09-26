@@ -83,16 +83,15 @@ def main():
     todo = [(n, u) for n, u in targets.items()
             if not os.path.exists(os.path.join(OUT_DIR, f"{n}.jpg"))]
     print(f"обложек всего {len(targets)}, качаем {len(todo)}")
-    if not todo:
-        return report(targets)
 
     lock = threading.Lock()
     done = [0, 0]
+    errors = {}
 
     def fetch(item):
         nsuid, url = item
         path = os.path.join(OUT_DIR, f"{nsuid}.jpg")
-        ok = False
+        reason = None
         for _ in range(3):
             try:
                 req = urllib.request.Request(art_url(url), headers={"User-Agent": "Mozilla/5.0"})
@@ -103,20 +102,46 @@ def main():
                     with open(tmp, "wb") as f:
                         f.write(optimize_jpeg(data))
                     os.replace(tmp, path)
-                    ok = True
+                    reason = None
+                else:
+                    reason = f"ответ {len(data)} байт — заглушка, а не обложка"
                 break
-            except Exception:  # noqa: BLE001
+            except Exception as e:  # noqa: BLE001
+                reason = f"{type(e).__name__}: {e}"
                 continue
         with lock:
             done[0] += 1
-            done[1] += not ok
+            if reason:
+                done[1] += 1
+                errors[nsuid] = reason
             if done[0] % 200 == 0 or done[0] == len(todo):
                 print(f"  {done[0]}/{len(todo)}, не скачалось {done[1]}")
 
-    with concurrent.futures.ThreadPoolExecutor(WORKERS) as pool:
-        list(pool.map(fetch, todo))
+    if todo:
+        with concurrent.futures.ThreadPoolExecutor(WORKERS) as pool:
+            list(pool.map(fetch, todo))
 
-    return report(targets)
+    clean_up()
+    return report(targets, errors)
+
+
+def clean_up():
+    """Убирает из art/ всё, что не обложка игры из базы.
+
+    Каталог копит мусор: обложки игр, выпавших из базы, и .tmp от
+    оборванных загрузок. Всё это уезжает в бандл данных и в romfs .nro, так
+    что оставлять его «на всякий случай» — платить местом за ничто."""
+    db = sqlite3.connect(DB)
+    wanted = {r[0] for r in db.execute(
+        "SELECT box_art_file FROM games WHERE box_art_file IS NOT NULL")}
+    db.close()
+    stray = sorted(f for f in os.listdir(OUT_DIR)
+                   if f not in wanted and os.path.isfile(os.path.join(OUT_DIR, f)))
+    for f in stray:
+        os.remove(os.path.join(OUT_DIR, f))
+    if stray:
+        print(f"удалено лишних файлов: {len(stray)} ({', '.join(stray[:5])}"
+              f"{', …' if len(stray) > 5 else ''})")
 
 
 def missing_titles(targets):
@@ -132,7 +157,8 @@ def missing_titles(targets):
     return [(n, names.get(n, "?")) for n in gone]
 
 
-def report(targets):
+def report(targets, errors=None):
+    errors = errors or {}
     files = [f for f in os.listdir(OUT_DIR) if f.endswith(".jpg")]
     total = sum(os.path.getsize(os.path.join(OUT_DIR, f)) for f in files)
     avg = total / len(files) if files else 0
@@ -148,7 +174,8 @@ def report(targets):
     if gone:
         print(f"\nБЕЗ ОБЛОЖКИ: {len(gone)}", file=sys.stderr)
         for nsuid, title in gone:
-            print(f"  {nsuid}  {title}", file=sys.stderr)
+            why = errors.get(nsuid)
+            print(f"  {nsuid}  {title}{('  — ' + why) if why else ''}", file=sys.stderr)
         print("Повторный запуск скачает только их.", file=sys.stderr)
     return len(gone)
 
