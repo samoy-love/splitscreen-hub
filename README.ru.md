@@ -272,6 +272,7 @@ python pipeline/build_db.py                  # повторно: подмеши�
 python pipeline/download_art.py              # обложки 240x240 -> app/resources/art/
 python pipeline/verify_db.py                 # инварианты данных
 python pipeline/make_ship_data.py            # catalog.bin и details.bin -> app/resources/
+python pipeline/verify_ship_data.py          # упакованные файлы читаются так, как их прочтёт консоль
 ```
 
 `build_db.py` запускается дважды: `rank_toplists.py` сопоставляет названия из
@@ -346,6 +347,7 @@ cmake --build build --target SplitScreenHub.nro
 python app/tools/check_xml.py    # разметка против атрибутов, которые понимает borealis
 bash   app/tools/run_tests.sh    # тесты чистых функций, обычный g++
 python pipeline/verify_db.py     # инварианты catalog.db перед упаковкой
+python pipeline/verify_ship_data.py  # catalog.bin и details.bin глазами catalog.cpp
 ```
 
 CI гоняет первые две на каждый push. На Windows тесты надо запускать из msys2,
