@@ -373,11 +373,19 @@ void VideoDecoder::decodeLoop(std::string url, std::string cachePath,
 
         if (paused.load())
         {
+            // Декодер встаёт, а очередь SDL — нет: без паузы устройства
+            // пользователь слышал ещё до секунды уже поставленного звука
+            // поверх замершего кадра. Очередь не чистим — после паузы она
+            // доиграет ровно с того места.
+            if (dev)
+                SDL_PauseAudioDevice(dev, 1);
             const int64_t pauseBegan = av_gettime();
             while (paused.load() && running.load() && !seekRequested.load())
                 interruptibleSleep(30000);
             // простой не должен считаться отставанием
             clockStartUs += av_gettime() - pauseBegan;
+            if (dev)
+                SDL_PauseAudioDevice(dev, 0);
             continue;
         }
 
