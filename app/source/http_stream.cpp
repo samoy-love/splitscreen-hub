@@ -58,6 +58,10 @@ size_t curlWrite(void* chunk, size_t size, size_t count, void* userdata)
 // onData объявлен приватным, но нужен колбэку curl — пробрасываем.
 size_t HttpStream::onDataPublic(const uint8_t* data, size_t size)
 {
+    // Проверка здесь, а не в onData: onData кормит и чтение из кэша, где
+    // никакого ответа сервера нет.
+    if (!responseAccepted())
+        return 0;  // ноль обрывает передачу
     return onData(data, size);
 }
 
@@ -70,20 +74,33 @@ size_t HttpStream::onHeaderPublic(const char* line, size_t size)
 
     if (header.compare(0, 5, "http/") == 0)
     {
-        // На запрос диапазона обязан прийти 206. Если сервер прислал 200,
-        // он проигнорировал Range и отдаёт файл сначала — такие байты
-        // нельзя дописывать в конец буфера.
+        // При редиректах статусных строк несколько, и каждая начинает новый
+        // набор заголовков — в силе остаётся последняя.
         const size_t space = header.find(' ');
-        const int code = space == std::string::npos ? 0 : std::atoi(header.c_str() + space + 1);
-        if (expectPartial && code == 200)
-            rangeIgnored = true;
+        httpStatus = space == std::string::npos ? 0 : std::atoi(header.c_str() + space + 1);
+        textBody   = false;
+        return size;
     }
 
+    // Гостевая сеть отвечает на любой адрес своей страницей входа с кодом
+    // 200 — по коду её от ролика не отличить, а по типу содержимого можно.
+    if (header.compare(0, 13, "content-type:") == 0
+        && header.find("text/", 13) != std::string::npos)
+        textBody = true;
+
+    // Размер берём только из годного ответа: Content-Range у 416 или длина
+    // страницы ошибки дали бы ложный конец файла.
     const size_t slash = header.rfind('/');
-    if (header.compare(0, 14, "content-range:") == 0 && slash != std::string::npos)
+    if (header.compare(0, 14, "content-range:") == 0 && slash != std::string::npos
+        && httpStatus.load() == 206)
         contentLength = std::atoll(header.c_str() + slash + 1);
 
     return size;
+}
+
+bool HttpStream::responseAccepted() const
+{
+    return httpStatus.load() == (expectPartial ? 206 : 200) && !textBody.load();
 }
 
 void HttpStream::setReaderPaused(bool paused)
@@ -141,7 +158,7 @@ void HttpStream::closeCache(bool keep)
 
 size_t HttpStream::onData(const uint8_t* data, size_t size)
 {
-    if (!alive->load() || rangeIgnored.load())
+    if (!alive->load())
         return 0;  // ноль обрывает передачу
 
     // попутная запись в кэш, пока читаем подряд с начала файла
@@ -212,12 +229,18 @@ void HttpStream::feedFromNetwork(int64_t from)
         const int result = performRange(offset);
         offset += requestReceived.load();
 
+        // Ответ пришёл, но не тот. Конец файла признаём только у годного
+        // ответа, иначе пустая страница ошибки сошла бы за дочитанный ролик и
+        // легла в кэш.
+        const int status    = httpStatus.load();
+        const bool rejected = status != 0 && !responseAccepted();
+
         const long long length = contentLength.load();
         const bool complete    = length > 0 && offset >= length;
 
         // Дочитали до конца — либо по известной длине, либо сервер сам
         // закрыл соединение без ошибки и длины мы не знаем.
-        if (complete || (result == 0 && length <= 0))
+        if (!rejected && (complete || (result == 0 && length <= 0)))
         {
             brls::Logger::info("поток: файл дочитан, {} Б, кеширование {}", offset,
                                cacheAllowed ? "включено" : "выключено");
@@ -229,12 +252,19 @@ void HttpStream::feedFromNetwork(int64_t from)
         if (!workerRunning.load() || !alive->load())
             break;
 
-        if (rangeIgnored.load())
+        if (rejected)
         {
-            // сервер не поддержал докачку — продолжать нечем
-            brls::Logger::error("поток: сервер ответил 200 вместо 206, докачка невозможна");
-            connectionFailed = true;
-            break;
+            // 408, 429 и 5xx — временные, их стоит переждать; остальное
+            // (404, 403, 200 вместо 206, страница гостевой сети) повтор не
+            // исправит
+            const bool transient = status == 408 || status == 429 || status >= 500;
+            brls::Logger::error("поток: негодный ответ сервера, http {}{}, с байта {}", status,
+                                textBody.load() ? ", текст вместо видео" : "", offset);
+            if (!transient || textBody.load())
+            {
+                connectionFailed = true;
+                break;
+            }
         }
 
         // Пауза показа — не обрыв связи: читатель просто перестал
@@ -323,7 +353,8 @@ int HttpStream::performRange(int64_t from)
         return -1;
 
     expectPartial = from > 0;
-    rangeIgnored  = false;
+    httpStatus    = 0;
+    textBody      = false;
 
     curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, curlWrite);
@@ -363,7 +394,7 @@ int HttpStream::performRange(int64_t from)
 
     const CURLcode result = curl_easy_perform(curl);
 
-    if (contentLength.load() < 0)
+    if (contentLength.load() < 0 && responseAccepted())
     {
         curl_off_t length = 0;
         if (curl_easy_getinfo(curl, CURLINFO_CONTENT_LENGTH_DOWNLOAD_T, &length) == CURLE_OK

@@ -173,6 +173,9 @@ void VideoDecoder::decodeLoop(std::string url, std::string cachePath,
         {
             brls::Logger::error("плеер: кешированный файл не открылся ({}): {}", avErr(rc),
                                 cachePath);
+            // Битый файл в кэше иначе ломал бы ролик навсегда: он всегда
+            // выигрывает у сети. Убираем — следующий показ скачает заново.
+            std::remove(cachePath.c_str());
             error = true;
             return;
         }
@@ -217,6 +220,8 @@ void VideoDecoder::decodeLoop(std::string url, std::string cachePath,
     {
         brls::Logger::error("плеер: не разобрать дорожки ({})", avErr(rc));
         avformat_close_input(&fmt);
+        if (!stream)
+            std::remove(cachePath.c_str());  // см. выше: битый кэш не держим
         error = true;
         return;
     }
