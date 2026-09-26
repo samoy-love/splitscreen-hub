@@ -272,6 +272,7 @@ void VideoDecoder::decodeLoop(std::string url, std::string cachePath,
     AVCodecContext* actx  = nullptr;
     SwrContext* swr       = nullptr;
     SDL_AudioDeviceID dev = 0;
+    bool audioSubsystem   = false;
     int outChannels       = 2;
 
     if (audioIdx >= 0)
@@ -299,8 +300,11 @@ void VideoDecoder::decodeLoop(std::string url, std::string cachePath,
                 // sdl_platform.cpp это EVENTS и TIMER, в sdl_video.cpp — VIDEO.
                 // Без SDL_INIT_AUDIO SDL_OpenAudioDevice возвращает ноль, и
                 // трейлер молча играл беззвучно. Подсистему можно поднять
-                // отдельно; повторный вызов безвреден.
-                if (SDL_InitSubSystem(SDL_INIT_AUDIO) != 0)
+                // отдельно. Каждый успешный вызов увеличивает счётчик ссылок
+                // SDL, поэтому запоминаем успех и опускаем её ровно столько
+                // же раз — даже если устройство потом не открылось.
+                audioSubsystem = SDL_InitSubSystem(SDL_INIT_AUDIO) == 0;
+                if (!audioSubsystem)
                     brls::Logger::error("плеер: не поднялась звуковая подсистема SDL: {}",
                                         SDL_GetError());
 
@@ -330,6 +334,7 @@ void VideoDecoder::decodeLoop(std::string url, std::string cachePath,
     }
 
     SwsContext* sws  = nullptr;
+    bool scalerFailed = false;
     int scaledW = 0, scaledH = 0;
     AVFrame* frame    = av_frame_alloc();
     AVFrame* rgbFrame = av_frame_alloc();
@@ -427,8 +432,19 @@ void VideoDecoder::decodeLoop(std::string url, std::string cachePath,
                         sws = sws_getContext(frame->width, frame->height,
                             static_cast<AVPixelFormat>(frame->format), frame->width, frame->height,
                             AV_PIX_FMT_RGBA, SWS_BILINEAR, nullptr, nullptr, nullptr);
-                        av_image_alloc(rgbFrame->data, rgbFrame->linesize, frame->width,
-                            frame->height, AV_PIX_FMT_RGBA, 1);
+                        // Без преобразователя или буфера кадр не показать
+                        // вовсе. Раньше это не проверялось: sws оставался
+                        // нулём, ветка повторялась на каждом кадре и каждый
+                        // раз заново выделяла буфер, теряя прежний.
+                        if (!sws
+                            || av_image_alloc(rgbFrame->data, rgbFrame->linesize, frame->width,
+                                   frame->height, AV_PIX_FMT_RGBA, 1) < 0)
+                        {
+                            brls::Logger::error("плеер: не подготовить кадр {}x{} формата {}",
+                                                frame->width, frame->height, frame->format);
+                            scalerFailed = true;
+                            break;
+                        }
                         scaledW = frame->width;
                         scaledH = frame->height;
                     }
@@ -464,6 +480,12 @@ void VideoDecoder::decodeLoop(std::string url, std::string cachePath,
                         break;
                 }
             }
+            if (scalerFailed)
+            {
+                av_packet_unref(packet);
+                error = true;
+                break;
+            }
         }
         else if (actx && packet->stream_index == audioIdx)
         {
@@ -476,7 +498,11 @@ void VideoDecoder::decodeLoop(std::string url, std::string cachePath,
                         swr_get_delay(swr, actx->sample_rate) + frame->nb_samples, actx->sample_rate,
                         actx->sample_rate, AV_ROUND_UP));
                     int lineSize = 0;
-                    av_samples_alloc(outBuf, &lineSize, outChannels, outSamples, AV_SAMPLE_FMT_S16, 0);
+                    // нет памяти под этот кусок — пропускаем его, а не
+                    // отдаём swr_convert нулевой указатель
+                    if (av_samples_alloc(outBuf, &lineSize, outChannels, outSamples,
+                                         AV_SAMPLE_FMT_S16, 0) < 0)
+                        continue;
                     int converted = swr_convert(swr, outBuf, outSamples,
                         const_cast<const uint8_t**>(frame->data), frame->nb_samples);
                     if (converted > 0 && dev)
@@ -493,12 +519,11 @@ void VideoDecoder::decodeLoop(std::string url, std::string cachePath,
     }
 
     if (dev)
-    {
         SDL_CloseAudioDevice(dev);
-        // Подсистему поднимали мы, значит и опускать нам: borealis о ней не
-        // знает и при выходе её не тронет.
+    // Подсистему поднимали мы, значит и опускать нам: borealis о ней не
+    // знает и при выходе её не тронет.
+    if (audioSubsystem)
         SDL_QuitSubSystem(SDL_INIT_AUDIO);
-    }
     if (swr)
         swr_free(&swr);
     if (sws)
