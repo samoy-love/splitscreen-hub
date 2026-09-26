@@ -11,11 +11,36 @@
 #     git config core.hooksPath .githooks
 #
 # Хуки не переносятся клоном сами — это ограничение git, а не недосмотр.
+#
+# Этот же файл — единственный источник правды для CI: задача `commits` в
+# .github/workflows/checks.yml прогоняет через него каждое сообщение коммита и
+# заголовок с описанием PR. Два списка шаблонов рано или поздно разъехались бы,
+# и хук с CI начали бы спорить о том, что считать нарушением. Поэтому шаблоны
+# правятся только здесь, а в CI своего списка нет.
+#
+# Шаблоны намеренно узкие. «cursor», «codex», «gemini» — обычные слова в
+# коммитах про интерфейс и код («Починить курсор», «cursor position»), и
+# искать их по всему тексту значило бы валить честные коммиты. Считается
+# только то, что однозначно приписывает авторство:
+#   * любой трейлер вида `Что-то-by:` (Co-Authored-By, Assisted-by,
+#     Generated-by…) с именем инструмента или вендора — все названия
+#     трейлеров заранее не перечислить, а суффикс -by у них общий;
+#   * служебный адрес noreply@anthropic.com — агент подставляет его, даже
+#     когда имя в трейлере другое;
+#   * фраза «generated/created/written/made/assisted with/by …» с названием
+#     инструмента не дальше трёх слов после предлога и без знака препинания
+#     между ними («made by the artist; cursor moves» — не подпись). Так
+#     выглядят подписи, которые агенты дописывают в конец описания PR;
+#   * 🤖 — с него такие подписи начинаются.
 
 msg_file="$1"
 
-if grep -qiE '^Co-[Aa]uthored-[Bb]y:.*(claude|anthropic|copilot|gpt)' "$msg_file" \
-  || grep -qiE '(generated|created|written) with .*(claude|copilot|chatgpt)' "$msg_file" \
+tools='(claude|anthropic|copilot|gpt|gemini|cursor|codex)'
+products='(claude|copilot|chatgpt|gemini|cursor|codex)'
+
+if grep -qiE "^[[:space:]]*[a-z-]+-by:.*${tools}" "$msg_file" \
+  || grep -qiE 'noreply@anthropic\.com' "$msg_file" \
+  || grep -qiE "(generated|created|written|made|assisted)[[:space:]]+(with|by)[[:space:]]+([^[:space:];,.:!?]+[[:space:]]+){0,3}[^[:space:]]*${products}" "$msg_file" \
   || grep -q '🤖' "$msg_file"; then
     echo "✗ В сообщении коммита есть упоминание ИИ." >&2
     echo "  Авторство принадлежит владельцу репозитория — см. CLAUDE.md." >&2

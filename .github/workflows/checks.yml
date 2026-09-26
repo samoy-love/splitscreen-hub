@@ -1,7 +1,8 @@
 # Проверки, которым не нужны ни консоль, ни тулчейн devkitPro: разметка против
 # атрибутов, которые понимает borealis, тесты чистых функций и сообщения
 # коммитов без упоминаний ИИ (правило из CLAUDE.md; локально его ловит хук
-# .githooks/commit-msg, но хук не переносится клоном — здесь страховка).
+# .githooks/commit-msg, но хук не переносится клоном — здесь страховка тем
+# же самым хуком).
 name: checks
 
 on:
@@ -49,21 +50,36 @@ jobs:
         with:
           fetch-depth: 0
 
+      # Шаблонов здесь нет: каждое сообщение прогоняется через тот же
+      # .githooks/commit-msg, что стоит у разработчика локально. Раньше список
+      # был продублирован в этом шаге, и две копии регулярки обязаны были
+      # совпадать только на честном слове. Хук берёт файл, поэтому сообщение
+      # каждого коммита пишется во временный файл — ровно как это делает git.
+      #
+      # Значения из контекста github передаются через env, а не подставляются
+      # в скрипт выражениями: подстановка идёт в текст скрипта до запуска
+      # оболочки, и имя ветки с кавычками стало бы кодом.
       - name: Сообщения коммитов без упоминаний ИИ
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE_REF: ${{ github.base_ref }}
         run: |
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            RANGE="origin/${{ github.base_ref }}..HEAD"
+          if [ "$EVENT" = "pull_request" ]; then
+            RANGE="origin/$BASE_REF..HEAD"
           else
             RANGE="HEAD"
           fi
-          BAD=$(git log "$RANGE" --format='%H %B' \
-            | grep -iE '^Co-[Aa]uthored-[Bb]y:.*(claude|anthropic|copilot|gpt)|(generated|created|written) with .*(claude|copilot|chatgpt)|🤖' \
-            || true)
-          if [ -n "$BAD" ]; then
-            echo "::error::в сообщениях коммитов есть упоминания ИИ — см. CLAUDE.md"
-            echo "$BAD"
-            exit 1
-          fi
+          msg=$(mktemp)
+          bad=0
+          for sha in $(git rev-list "$RANGE"); do
+            git log -1 --format=%B "$sha" > "$msg"
+            if ! sh .githooks/commit-msg "$msg"; then
+              echo "::error::упоминание ИИ в коммите $sha — см. CLAUDE.md"
+              git log -1 --format='  %h %s' "$sha"
+              bad=1
+            fi
+          done
+          [ "$bad" = 0 ] || exit 1
           echo "чисто"
 
   # Топология боевого контура публичному репозиторию не нужна: проверка
