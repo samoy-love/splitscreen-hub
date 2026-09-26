@@ -77,7 +77,11 @@ The app updates itself. On startup it reads
 one baked into the `.nro`, shows a toast and an **Install** button on the
 Settings tab. The new `.nro` is streamed next to the running one, checked
 against the sha256 (TLS is not verified on the console — see below), and
-swapped in; it starts on the next launch. Code: [`updater.cpp`](app/source/updater.cpp).
+swapped in; it starts on the next launch. A file whose checksum does not match
+is never installed. During the swap the previous build sits next to it as
+`SplitScreenHub.old.nro`: if the console powers off mid-swap, that copy stays
+in the Homebrew Menu, and when launched it takes back the usual name and
+finishes the update. Code: [`updater.cpp`](app/source/updater.cpp).
 
 The manifest is written by the release pipeline. Every push to `master` that
 touches `app/**` runs [`deploy.yml`](.github/workflows/deploy.yml), which calls

@@ -211,6 +211,14 @@ int main(int argc, char* argv[])
             if (std::strcmp(argv[i], "-d") == 0)
                 brls::Logger::setLogLevel(brls::LogLevel::LOG_DEBUG);
 
+        // Прошлую подмену оборвали на полпути, и нас запустили из резервной
+        // копии: возвращаем ей основное имя и перезапускаемся оттуда.
+        if (updater::recoverInterruptedSwap())
+        {
+            step("restored from backup, restarting");
+            return EXIT_SUCCESS;
+        }
+
         // Обновление, скачанное в прошлый раз, но не поставленное (вышли по
         // HOME, не по кнопке): подменяем файл сейчас, пока romfs можно
         // отпустить без потерь — интерфейса ещё нет, — и сразу перезапускаемся
@@ -414,7 +422,7 @@ int main(int argc, char* argv[])
             {
                 firstFrame = false;
                 step("первый кадр");
-                // Новая версия дожила до экрана — прежняя сборка .old и
+                // Новая версия дожила до экрана — прежняя сборка .old.nro и
                 // обрывки закачек больше не нужны.
                 updater::cleanupLeftovers();
                 previousFrame = lastComplaint = lastSummary = std::chrono::steady_clock::now();

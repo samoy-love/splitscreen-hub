@@ -35,7 +35,27 @@ std::atomic_bool installing { false };
 /// Скачанный .nro и его метка «сверено» рядом с приложением.
 std::string newPath(const std::string& self) { return self + ".new"; }
 std::string okPath(const std::string& self) { return self + ".new.ok"; }
-std::string oldPath(const std::string& self) { return self + ".old"; }
+
+/// Прежняя сборка на время подмены. Имя кончается на .nro нарочно: hbmenu
+/// показывает только такие файлы, и если питание пропадёт между двумя
+/// переименованиями в applyPending(), приложение останется в меню хотя бы
+/// под этим именем — а запущенное оттуда, само вернёт себе основное (см.
+/// recoverInterruptedSwap).
+const char* BACKUP_SUFFIX = ".old.nro";
+
+bool endsWith(const std::string& s, const std::string& tail)
+{
+    return s.size() > tail.size() && s.compare(s.size() - tail.size(), tail.size(), tail) == 0;
+}
+
+std::string oldPath(const std::string& self)
+{
+    return endsWith(self, ".nro") ? self.substr(0, self.size() - 4) + BACKUP_SUFFIX
+                                  : self + ".old";
+}
+
+/// Так резервную копию называли прежние сборки: hbmenu её не видел.
+std::string legacyOldPath(const std::string& self) { return self + ".old"; }
 
 bool exists(const std::string& path)
 {
@@ -350,20 +370,33 @@ bool applyPending(std::string& error)
     romfsExit();
 #endif
 
+    // Подмена сорвалась, и файл снова на своём месте: возвращаем romfs. При
+    // старте без него приложение не прочло бы каталог и закрылось бы с
+    // ошибкой вместо того, чтобы работать прежней версией.
+    auto remount = []() {
+#ifdef __SWITCH__
+        romfsInit();
+#endif
+    };
+
     // FAT не переименовывает поверх существующего: старую сборку сначала
-    // убираем с дороги под именем .old — она же и путь отката, если подмена
-    // сорвётся на полпути; при удачном старте новой версии её удалит
-    // cleanupLeftovers().
+    // убираем с дороги под именем .old.nro — она же и путь отката, если
+    // подмена сорвётся на полпути; при удачном старте новой версии её удалит
+    // cleanupLeftovers(). Между двумя rename основного файла нет вовсе, и
+    // выключение консоли в этот момент оставило бы в hbmenu только копию —
+    // поэтому у неё имя, которое hbmenu показывает.
     std::remove(old.c_str());
     if (std::rename(self.c_str(), old.c_str()) != 0)
     {
         error = std::string("rename self: ") + std::strerror(errno);
+        remount();
         return false;
     }
     if (std::rename(tmp.c_str(), self.c_str()) != 0)
     {
         error = std::string("rename new: ") + std::strerror(errno);
-        std::rename(old.c_str(), self.c_str());
+        if (std::rename(old.c_str(), self.c_str()) == 0)
+            remount();
         return false;
     }
     std::remove(ok.c_str());
@@ -380,12 +413,58 @@ bool applyPending(std::string& error)
     return true;
 }
 
+bool recoverInterruptedSwap()
+{
+#ifdef __SWITCH__
+    // Запущены не из резервной копии — восстанавливать нечего.
+    const std::string self = selfPath();
+    if (!endsWith(self, BACKUP_SUFFIX))
+        return false;
+
+    // Основной файл на месте: копию запустили руками, например потому, что
+    // новая версия не стартует. Это законный откат — просто работаем.
+    const std::string main = self.substr(0, self.size() - std::strlen(BACKUP_SUFFIX)) + ".nro";
+    if (exists(main))
+        return false;
+
+    // Подмену прервали между двумя rename: основного файла нет, а мы — его
+    // прежняя сборка. Возвращаем себе основное имя и перезапускаемся уже
+    // оттуда; скачанное обновление с меткой лежит рядом с основным именем, и
+    // перезапущенная сборка сама доведёт подмену до конца. Свой .nro держит
+    // открытым romfs, поэтому сначала отпускаем его.
+    romfsExit();
+    if (std::rename(self.c_str(), main.c_str()) != 0)
+    {
+        brls::Logger::error("updater: не удалось вернуть {} на место {}: {}", self, main,
+                            std::strerror(errno));
+        romfsInit();
+        return false;
+    }
+
+    // Без envSetNextLoad перезапуска не будет, но и продолжать нельзя: файла,
+    // из которого смонтирован romfs, под прежним именем уже нет. Человек
+    // запустит приложение из hbmenu — теперь под обычным именем.
+    if (envHasNextLoad())
+    {
+        const std::string argv = "\"" + main + "\"";
+        envSetNextLoad(main.c_str(), argv.c_str());
+    }
+    return true;
+#else
+    return false;
+#endif
+}
+
 void cleanupLeftovers()
 {
     const std::string self = selfPath();
     if (self.empty())
         return;
-    std::remove(oldPath(self).c_str());
+    // Копию, из которой нас запустили, не трогаем: удалить работающий файл
+    // консоль не даст, а если это откат, копия ещё пригодится.
+    if (!endsWith(self, BACKUP_SUFFIX))
+        std::remove(oldPath(self).c_str());
+    std::remove(legacyOldPath(self).c_str());
     if (exists(newPath(self)) && !exists(okPath(self)))
         std::remove(newPath(self).c_str());
 }
