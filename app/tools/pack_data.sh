@@ -9,6 +9,11 @@
 #   pipeline/translations.db    русские тексты игр
 # Пути в архиве — от корня репозитория, чтобы распаковка была одной командой
 # и с той стороны (build_release.sh), и на машине другого разработчика.
+#
+#   pack_data.sh             собрать архив
+#   pack_data.sh --version   напечатать версию бандла — начало sha256 того
+#                            же архива, файл не пишется (VERSION_CMD в
+#                            .deploy-kit/data.env)
 set -Eeuo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
@@ -20,11 +25,30 @@ for f in app/resources/catalog.bin app/resources/details.bin pipeline/translatio
 done
 [ -n "$(ls app/resources/art 2>/dev/null)" ] || { echo "app/resources/art пуст — запустите pipeline/download_art.py" >&2; exit 1; }
 
-mkdir -p app/build
-# Детерминированный архив: одинаковые данные — одинаковая сумма, и
-# VERIFY_URL в deploy-kit сверяется без ложных расхождений.
+# Детерминированный архив: одинаковые данные — байт в байт одинаковый файл.
+# На этом держатся и сверка VERIFY_URL в deploy-kit, и версия бандла.
+# Имена по порядку, владелец, права и время — постоянные: иначе архив зависел
+# бы от того, на чьей машине и когда скачаны обложки. gzip -n — без имени и
+# времени в заголовке; tar -z этого не гарантирует: gzip, читающий из трубы,
+# может записать туда время.
 # *.tmp — недокачанные обложки download_art.py: в бандл и в romfs им нельзя.
-tar --sort=name --owner=0 --group=0 --numeric-owner --mtime='2000-01-01 00:00Z' \
-    --exclude='*.tmp' -czf "$OUT" app/resources/art app/resources/catalog.bin app/resources/details.bin \
-    pipeline/translations.db
+pack() {
+    tar --sort=name --format=gnu --owner=0 --group=0 --numeric-owner \
+        --mode='a+rX,u+w,go-w' --mtime='2000-01-01 00:00Z' --exclude='*.tmp' \
+        -cf - app/resources/art app/resources/catalog.bin app/resources/details.bin \
+        pipeline/translations.db \
+        | gzip -9 -n
+}
+
+if [ "${1:-}" = "--version" ]; then
+    # deploy-kit спрашивает версию ДО сборки, поэтому архив собирается здесь
+    # ещё раз в трубу. Отпечаток всего архива, а не только catalog.bin и
+    # details.bin: смена одних обложек — тоже новые данные и новая версия.
+    pack | sha256sum | cut -c1-12
+    exit 0
+fi
+
+mkdir -p app/build
+pack > "$OUT.tmp"
+mv -f "$OUT.tmp" "$OUT"
 ls -l "$OUT"
