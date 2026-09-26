@@ -314,38 +314,63 @@ def _normalize_page_product(p):
 
 
 def fetch_from_page(url):
+    """Возвращает (товар, None) или (None, причина неудачи).
+
+    Причина нужна не для красоты: без неё в local_multiplayer.json у игры
+    остаётся только код GraphQL, и не понять, страница не открылась (сеть,
+    406 без заголовков) или открылась, но товара в ней нет."""
     req = urllib.request.Request(url, headers=BROWSER_HEADERS)
     try:
         with urllib.request.urlopen(req, timeout=60) as r:
             html = r.read().decode("utf-8", "replace")
-    except Exception:  # noqa: BLE001
-        return None
+    except urllib.error.HTTPError as e:
+        return None, f"HTTP {e.code}"
+    except Exception as e:  # noqa: BLE001
+        return None, type(e).__name__
     m = NEXT_DATA_RE.search(html)
     if not m:
-        return None
+        return None, "нет __NEXT_DATA__"
     try:
         p = _find_product(json.loads(m.group(1)))
-    except ValueError:
-        return None
-    return _normalize_page_product(p) if p else None
+    except ValueError as e:
+        return None, f"__NEXT_DATA__ не разбирается: {e}"
+    if not p:
+        return None, "в __NEXT_DATA__ нет товара"
+    return _normalize_page_product(p), None
 
 
 CACHE_FILE = PRODUCTS_CACHE
+
+
+def is_permanent_error(reason):
+    """Ошибка по существу, а не сбой связи: повторять в следующий раз незачем.
+
+    Причина может быть составной — «UNAUTHORIZED; страница: HTTP 503»: решает
+    ответ GraphQL, а страница пробуется заново на каждом прогоне."""
+    head = (reason or "").split(";")[0].strip()
+    return bool(head) and all(c in PERMANENT_ERRORS for c in head.split(","))
 
 
 def _load_cache():
     try:
         with open(CACHE_FILE, encoding="utf-8") as f:
             c = json.load(f)
-        return c.get("products", {}), c.get("failed", {})
     except (OSError, ValueError):
         return {}, {}
+    products = c.get("products", {})
+    # Временные сбои прошлых прогонов (5xx, таймауты) в кэше не храним: они
+    # навсегда исключали бы игру из запросов. Старый кэш мог их накопить.
+    failed = {n: r for n, r in c.get("failed", {}).items() if is_permanent_error(r)}
+    return products, failed
 
 
 def _save_cache(out, failed):
     tmp = CACHE_FILE + ".tmp"
     with open(tmp, "w", encoding="utf-8") as f:
-        json.dump({"products": out, "failed": failed}, f, ensure_ascii=False)
+        json.dump({
+            "products": out,
+            "failed": {n: r for n, r in failed.items() if is_permanent_error(r)},
+        }, f, ensure_ascii=False)
     os.replace(tmp, CACHE_FILE)
 
 
@@ -386,13 +411,17 @@ def fetch_missing_from_pages(games, out, failed, use_cache=True):
     done = [0]
 
     def worker(g):
-        p = fetch_from_page("https://www.nintendo.com" + (g.get("url") or ""))
+        p, reason = fetch_from_page("https://www.nintendo.com" + (g.get("url") or ""))
+        nsuid = g["nsuid"]
         with lock:
             done[0] += 1
             if p:
-                p.setdefault("nsuid", g["nsuid"])
-                out[g["nsuid"]] = p
-                failed.pop(g["nsuid"], None)
+                p.setdefault("nsuid", nsuid)
+                out[nsuid] = p
+                failed.pop(nsuid, None)
+            else:
+                head = failed[nsuid].split(";")[0]
+                failed[nsuid] = f"{head}; страница: {reason}"
             if done[0] % 100 == 0:
                 print(f"  {done[0]}/{len(todo)} -> {len(out)}")
                 if use_cache:
