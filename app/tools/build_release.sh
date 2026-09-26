@@ -94,6 +94,11 @@ elif command -v docker >/dev/null 2>&1; then
     # Portlibs (curl, mbedtls, SDL2, zlib, bzip2) в образе уже есть — он
     # ставит группу switch-portlibs целиком. dkp-pacman отсюда не зовём:
     # pkg.devkitpro.org отвечает CI-раннерам 403, ради чего образы и сделаны.
+    #
+    # Код возврата запоминаем, а не отдаём set -e: упавшая сборка иначе
+    # выходила бы до chown ниже, и файлы root оставались бы в рабочем
+    # каталоге раннера — ровно тогда, когда прогон и так красный.
+    rc=0
     docker run --rm -v "$ROOT:/work" -w /work "$IMAGE" bash -c '
         set -e
         git config --global --add safe.directory "*"
@@ -104,7 +109,7 @@ elif command -v docker >/dev/null 2>&1; then
         git config --global http.version HTTP/1.1
         apt-get update -qq && apt-get install -y -qq ninja-build make patch xz-utils curl >/dev/null
         bash app/tools/build_release.sh
-    '
+    ' || rc=$?
     # Всё дерево, а не только build/ и lib/: контейнер пишет ещё в
     # build-ffmpeg/ и подмодули, а любой файл root в рабочем каталоге
     # раннера потом ломает post-шаги кеша — их hashFiles обходит дерево
@@ -112,6 +117,7 @@ elif command -v docker >/dev/null 2>&1; then
     if command -v id >/dev/null 2>&1; then
         docker run --rm -v "$ROOT:/work" -w /work "$IMAGE" chown -R "$(id -u):$(id -g)" . || true
     fi
+    exit "$rc"
 else
     echo "нет ни devkitPro, ни docker — собирать нечем" >&2
     exit 1
