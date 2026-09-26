@@ -101,7 +101,7 @@ if [ ! -f config.h ]; then
     --enable-libnx
 fi
 
-make -j"$(nproc)"
+make -j"$(sh "$APP/tools/build_jobs.sh")"
 make install
 
 echo
