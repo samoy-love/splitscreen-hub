@@ -156,6 +156,17 @@ void HttpStream::closeCache(bool keep)
     }
 }
 
+void HttpStream::restartCache()
+{
+    // Всегда заново, даже если файл уже открыт. Новый проход с нуля — это,
+    // например, перемотка в начало до конца закачки: прежний файл держит
+    // недокачанное начало, и дописывание в него дало бы начало ролика, за
+    // которым снова весь ролик, — а такой файл потом ушёл бы в кэш.
+    if (cacheFile)
+        std::fclose(cacheFile);
+    cacheFile = std::fopen(cacheTmp.c_str(), "wb");
+}
+
 size_t HttpStream::onData(const uint8_t* data, size_t size)
 {
     if (!alive->load())
@@ -209,9 +220,9 @@ void HttpStream::startWorker(int64_t from)
 
     // кэшируем только полный проход с нуля
     cacheAllowed = (from == 0);
-    if (cacheAllowed && !cacheFile)
-        cacheFile = std::fopen(cacheTmp.c_str(), "wb");
-    if (!cacheAllowed)
+    if (cacheAllowed)
+        restartCache();
+    else
         closeCache(false);
 
     workerRunning = true;
@@ -321,8 +332,8 @@ void HttpStream::feedFromCache(int64_t from)
         brls::Logger::warning("поток: кэш пропал, возвращаемся к сети");
         cacheComplete = false;
         cacheAllowed  = (from == 0);
-        if (cacheAllowed && !cacheFile)
-            cacheFile = std::fopen(cacheTmp.c_str(), "wb");
+        if (cacheAllowed)
+            restartCache();
         feedFromNetwork(from);
         return;
     }

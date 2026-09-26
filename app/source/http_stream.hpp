@@ -131,4 +131,6 @@ class HttpStream
     std::atomic_bool cacheComplete { false };
 
     void closeCache(bool keep);
+    /// Открывает временный файл кэша с нуля, отбрасывая прежнее содержимое.
+    void restartCache();
 };
