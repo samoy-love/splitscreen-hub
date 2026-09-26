@@ -485,31 +485,46 @@ def build_rows(games, products, failed):
 LIST_FIELDS = ("images", "videos")
 
 
-OUTPUTS = (LOCAL_MULTIPLAYER, LOCAL_MULTIPLAYER_CSV)
+def write_outputs(rows):
+    """Пишет json и csv во временные файлы и подменяет прежние в конце.
+
+    Раньше прошлый результат сносился в начале прогона, чтобы старые файлы не
+    выглядели актуальными, — но тогда любой сбой по дороге оставлял пайплайн
+    вообще без local_multiplayer.json. Теперь прежний файл живёт, пока новый
+    не записан целиком: неудачный прогон ничего не портит, удачный подменяет
+    результат за одну операцию."""
+    json_tmp = LOCAL_MULTIPLAYER + ".tmp"
+    csv_tmp = LOCAL_MULTIPLAYER_CSV + ".tmp"
+    try:
+        with open(json_tmp, "w", encoding="utf-8") as f:
+            json.dump(rows, f, ensure_ascii=False, indent=1)
+        with open(csv_tmp, "w", encoding="utf-8-sig", newline="") as f:
+            w = csv.DictWriter(f, fieldnames=list(rows[0]))
+            w.writeheader()
+            for r in rows:
+                w.writerow({**r, **{k: " | ".join(r[k]) for k in LIST_FIELDS}})
+        os.replace(json_tmp, LOCAL_MULTIPLAYER)
+        os.replace(csv_tmp, LOCAL_MULTIPLAYER_CSV)
+    finally:
+        for tmp in (json_tmp, csv_tmp):
+            if os.path.exists(tmp):
+                os.remove(tmp)
 
 
 def main():
-    # сносим прошлый результат сразу, иначе устаревшие файлы весь прогон
-    # выглядят как актуальные (пишем-то мы их только в самом конце)
-    for path in OUTPUTS:
-        if os.path.exists(path):
-            os.remove(path)
-
     games = fetch_catalog()
     nsuids = [g["nsuid"] for g in games if g.get("nsuid")]
     print(f"Игр с мультиплеером на одном экране: {len(games)} (с nsuid: {len(nsuids)})")
+    if not games:
+        # пустой ответ — сбой источника, а не пустой каталог: прежний
+        # результат не трогаем
+        raise SystemExit("Algolia не вернула ни одной игры, результат не записан")
 
     products, failed = fetch_products(nsuids)
     fetch_missing_from_pages(games, products, failed)
     rows = build_rows(games, products, failed)
 
-    with open(LOCAL_MULTIPLAYER, "w", encoding="utf-8") as f:
-        json.dump(rows, f, ensure_ascii=False, indent=1)
-    with open(LOCAL_MULTIPLAYER_CSV, "w", encoding="utf-8-sig", newline="") as f:
-        w = csv.DictWriter(f, fieldnames=list(rows[0]))
-        w.writeheader()
-        for r in rows:
-            w.writerow({**r, **{k: " | ".join(r[k]) for k in LIST_FIELDS}})
+    write_outputs(rows)
 
     known = sum(1 for r in rows if r["same_screen_max"])
     print(f"Сохранено {len(rows)} игр, точное число игроков у {known}")
