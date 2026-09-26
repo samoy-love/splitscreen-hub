@@ -156,6 +156,13 @@ ALIASES = {
     "thestretchers": "The Stretchers",
     "untitledgoosegame": "", "killerqueenblack": "", "crawl": "",
     "splitfiction": "", "trine": "", "splatoon": "", "nintendoland": "",
+    # Совпадали только по первым 14 знакам, и под этим префиксом в каталоге
+    # несколько игр — голос доставался той, что раньше лежит в базе.
+    # «Hyrule Warriors» в тредах — и Definitive Edition, и Age of Calamity;
+    # «TMNT» — пять разных игр, а Shredder's Revenge и так ловит свой ключ.
+    # Banana Mania в каталоге нет, а префикс уводил голос к Banana Rumble.
+    "hyrulewarriors": "", "teenagemutantninjaturtles": "",
+    "supermonkeyballbananamania": "",
 }
 
 # Ключ-подстрока ловит и более длинное название: «Overcooked 2» содержит
@@ -169,6 +176,34 @@ CONTAINED_IN = {
     "catquest2": [], "catquest3": [],
     "unravel2": [], "pikmin3": [],
 }
+
+# Несколько ключей могут вести к одной игре. Разные написания одного названия
+# («Diablo 3» и «Diablo III») в одном упоминании не встречаются, и их счёт —
+# это разные комментарии, его можно складывать; сюда же ключ с вычтенными
+# CONTAINED_IN. Остальные совпадения — части одного названия («Clubhouse
+# Games: 51 Worldwide Classics»), и один комментарий попадает в оба счётчика
+# сразу: сумма посчитала бы его дважды. Для них берётся наибольший счёт —
+# игра получает от треда один голос, а не по голосу на каждое слово названия.
+SPELLINGS = (
+    ("overcooked", "overcooked1", "overcookedallyoucaneat"),
+    ("diablo3", "diabloiii"),
+    ("unravel2", "unraveltwo"),
+    ("catquest2", "catquestii"),
+    ("catquest3", "catquestiii"),
+    ("mariowonder", "supermariobroswonder"),
+)
+
+
+def combine_keys(parts):
+    """{ключ: счёт} одной игры в одном треде -> один счёт (см. SPELLINGS)."""
+    left = dict(parts)
+    counts = []
+    for group in SPELLINGS:
+        same = [k for k in group if k in left]
+        if same:
+            counts.append(sum(left.pop(k) for k in same))
+    counts.extend(left.values())
+    return max(counts)
 
 # --- отрицательные упоминания ---------------------------------------------
 #
@@ -260,6 +295,9 @@ FAMIBOARDS = [
     ]),
 ]
 
+_ambiguous_seen = set()
+
+
 def resolve(title, exact, prefix):
     key = title if title in ALIASES else norm(title)
     if key in ALIASES:
@@ -268,7 +306,20 @@ def resolve(title, exact, prefix):
             return None
         title = alias
     n = norm(title)
-    return exact.get(n) or (prefix.get(n[:14]) if len(n) >= 14 else None)
+    if n in exact:
+        return exact[n]
+    if len(n) < 14:
+        return None
+    candidates = prefix.get(n[:14], [])
+    if len(candidates) == 1:
+        return candidates[0]
+    if len(candidates) > 1 and title not in _ambiguous_seen:
+        # Голос не засчитан. Если понятно, какая игра имелась в виду, — это
+        # строка в ALIASES; если нет — пустая строка там же, чтобы не шумело.
+        _ambiguous_seen.add(title)
+        print(f"неоднозначно, не засчитано: «{title}» -> "
+              + "; ".join(t for _, t in candidates), file=sys.stderr)
+    return None
 
 
 def decode_row(row):
@@ -324,7 +375,10 @@ def main():
         fam, year, ordered = SOURCE_META[s["name"]]
         hits = [(pos, resolve(t, exact, prefix))
                 for pos, t in enumerate(s["games"], 1)]
-        hits = [(pos, h) for pos, h in hits if h]
+        # одна игра — один голос источника, по лучшей позиции
+        seen = set()
+        hits = [(pos, h) for pos, h in hits
+                if h and not (h[0] in seen or seen.add(h[0]))]
         n = max(len(hits), 1)
         w = math.log(P / n) if n < P else 0.1
         w = max(w, 0.1)
@@ -358,7 +412,7 @@ def main():
             if base in by_key:
                 by_key[base] = max(0, by_key[base] - sum(by_key.get(l, 0)
                                                          for l in longer))
-        named = {}
+        parts = {}
         for key, d in by_key.items():
             if d <= 0:
                 continue
@@ -367,8 +421,9 @@ def main():
                 continue
             # доля упоминаний рядом с отрицательной оценкой — снимаем её часть
             d *= 1 - 0.5 * NEG_SHARE.get(key, 0.0)
-            named[hit[0]] = named.get(hit[0], 0) + d
+            parts.setdefault(hit[0], {})[key] = d
             titles[hit[0]] = hit[1]
+        named = {nsuid: combine_keys(p) for nsuid, p in parts.items()}
         bad = set()
         for t in DISLIKED.get(tid, []):
             hit = resolve(t, exact, prefix)
