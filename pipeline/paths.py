@@ -15,6 +15,8 @@ ROOT = os.path.dirname(HERE)                        # корень репози�
 LOCAL_MULTIPLAYER = os.path.join(HERE, "local_multiplayer.json")
 LOCAL_MULTIPLAYER_CSV = os.path.join(HERE, "local_multiplayer.csv")
 PRODUCTS_CACHE = os.path.join(HERE, "products_cache.json")
+# с какого адреса скачана каждая обложка (download_art.py)
+ART_SOURCES = os.path.join(HERE, "art_sources.json")
 # названия для добора repair_catalog.py, по строке на игру (может не быть)
 EXTRA_TITLES = os.path.join(HERE, "extra_titles.txt")
 

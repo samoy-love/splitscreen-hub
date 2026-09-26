@@ -20,11 +20,12 @@ import sys
 import threading
 import urllib.request
 
-from paths import ART_DIR, CATALOG_DB, LOCAL_MULTIPLAYER
+from paths import ART_DIR, ART_SOURCES, CATALOG_DB, LOCAL_MULTIPLAYER
 
 DB = CATALOG_DB
 SOURCE = LOCAL_MULTIPLAYER
 OUT_DIR = ART_DIR
+SOURCES_FILE = ART_SOURCES
 TRANSFORM = "w_240,q_70,f_jpg"
 WORKERS = 8
 MIN_BYTES = 500  # меньше — почти наверняка заглушка, а не обложка
@@ -76,12 +77,37 @@ def load_targets():
                 if g.get("nsuid") in wanted and g.get("box_art")}
 
 
+def load_sources():
+    try:
+        with open(SOURCES_FILE, encoding="utf-8") as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return {}
+
+
+def save_sources(sources):
+    tmp = SOURCES_FILE + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(sources, f, ensure_ascii=False, indent=0, sort_keys=True)
+    os.replace(tmp, SOURCES_FILE)
+
+
 def main():
     os.makedirs(OUT_DIR, exist_ok=True)
     targets = load_targets()
 
+    # Какой адрес обложки скачан в каждый файл. Издатель меняет обложку —
+    # у неё меняется адрес (в нём хеш), и файл надо перекачать; раньше
+    # скачанный однажды файл не обновлялся никогда. Файлам, скачанным до
+    # появления этого списка, засчитывается текущий адрес: перекачивать все
+    # три с половиной тысячи обложек ради неизвестности незачем.
+    sources = load_sources()
+    for n, u in targets.items():
+        if n not in sources and os.path.exists(os.path.join(OUT_DIR, f"{n}.jpg")):
+            sources[n] = u
+
     todo = [(n, u) for n, u in targets.items()
-            if not os.path.exists(os.path.join(OUT_DIR, f"{n}.jpg"))]
+            if sources.get(n) != u or not os.path.exists(os.path.join(OUT_DIR, f"{n}.jpg"))]
     print(f"обложек всего {len(targets)}, качаем {len(todo)}")
 
     lock = threading.Lock()
@@ -114,6 +140,8 @@ def main():
             if reason:
                 done[1] += 1
                 errors[nsuid] = reason
+            else:
+                sources[nsuid] = url
             if done[0] % 200 == 0 or done[0] == len(todo):
                 print(f"  {done[0]}/{len(todo)}, не скачалось {done[1]}")
 
@@ -121,6 +149,7 @@ def main():
         with concurrent.futures.ThreadPoolExecutor(WORKERS) as pool:
             list(pool.map(fetch, todo))
 
+    save_sources({n: u for n, u in sources.items() if n in targets})
     clean_up()
     return report(targets, errors)
 
@@ -177,6 +206,13 @@ def report(targets, errors=None):
             why = errors.get(nsuid)
             print(f"  {nsuid}  {title}{('  — ' + why) if why else ''}", file=sys.stderr)
         print("Повторный запуск скачает только их.", file=sys.stderr)
+    # Обновление не удалось, но прежняя обложка на месте: не провал, однако
+    # знать о нём надо — следующий запуск попробует снова.
+    stale = sorted(n for n in errors if n not in dict(gone))
+    if stale:
+        print(f"\nНЕ ОБНОВИЛИСЬ (оставлены прежние): {len(stale)}")
+        for n in stale:
+            print(f"  {n}  {errors[n]}")
     return len(gone)
 
 

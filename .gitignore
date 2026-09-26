@@ -24,6 +24,7 @@ app/resources/font/
 # кэш карточек eShop и сгенерированные базы: пересобираются скриптами пайплайна
 # (overrides.json — ручная работа, коммитится)
 pipeline/products_cache.json
+pipeline/art_sources.json
 pipeline/catalog.db
 pipeline/toplists.db
 pipeline/local_multiplayer.csv
