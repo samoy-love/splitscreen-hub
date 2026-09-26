@@ -136,19 +136,31 @@ HttpStream::~HttpStream()
     }
 }
 
-void HttpStream::closeCache(bool keep)
+void HttpStream::closeCache(bool keep, long long expectedSize)
 {
+    bool intact = cacheFile != nullptr;
     if (cacheFile)
     {
-        std::fclose(cacheFile);
+        // fclose сбрасывает на карту хвост буфера stdio: его ошибка значит,
+        // что конец файла так и не записан
+        intact    = std::fclose(cacheFile) == 0;
         cacheFile = nullptr;
     }
 
-    if (keep)
+    // Сверяем с тем, что реально легло на карту, а не с принятым из сети:
+    // на полной SD-карте fwrite молча пишет меньше, и файл выходил короче
+    // ролика, но всё равно становился кэшем.
+    if (keep && intact && cacheWritten == expectedSize)
     {
         std::remove(cachePath.c_str());
         if (std::rename(cacheTmp.c_str(), cachePath.c_str()) == 0)
             cacheComplete = true;
+    }
+    else if (keep)
+    {
+        brls::Logger::warning("поток: в кэш записано {} Б из {}, файл не сохраняем",
+                              cacheWritten, expectedSize);
+        std::remove(cacheTmp.c_str());
     }
     else if (!cacheComplete.load())
     {
@@ -164,17 +176,14 @@ void HttpStream::restartCache()
     // которым снова весь ролик, — а такой файл потом ушёл бы в кэш.
     if (cacheFile)
         std::fclose(cacheFile);
-    cacheFile = std::fopen(cacheTmp.c_str(), "wb");
+    cacheFile    = std::fopen(cacheTmp.c_str(), "wb");
+    cacheWritten = 0;
 }
 
 size_t HttpStream::onData(const uint8_t* data, size_t size)
 {
     if (!alive->load())
         return 0;  // ноль обрывает передачу
-
-    // попутная запись в кэш, пока читаем подряд с начала файла
-    if (cacheAllowed && cacheFile)
-        std::fwrite(data, 1, size, cacheFile);
 
     std::unique_lock<std::mutex> lock(mutex);
 
@@ -191,6 +200,23 @@ size_t HttpStream::onData(const uint8_t* data, size_t size)
     received += static_cast<long long>(size);
     requestReceived += static_cast<long long>(size);
     cv.notify_all();
+    lock.unlock();
+
+    // Попутная запись в кэш, пока читаем подряд с начала файла. Только после
+    // того, как байты приняты в буфер: иначе при отказе выше они оказались бы
+    // в файле, но не в счёте принятого, и докачка записала бы их второй раз.
+    if (cacheAllowed && cacheFile)
+    {
+        const size_t written = std::fwrite(data, 1, size, cacheFile);
+        cacheWritten += static_cast<long long>(written);
+        if (written != size)
+        {
+            // место на карте кончилось — кэш бросаем, ролик досматриваем
+            brls::Logger::warning("поток: запись в кэш оборвалась на {} Б", cacheWritten);
+            closeCache(false);
+            cacheAllowed = false;
+        }
+    }
     return size;
 }
 
@@ -256,7 +282,7 @@ void HttpStream::feedFromNetwork(int64_t from)
             brls::Logger::info("поток: файл дочитан, {} Б, кеширование {}", offset,
                                cacheAllowed ? "включено" : "выключено");
             if (cacheAllowed)
-                closeCache(true);
+                closeCache(true, length > 0 ? length : offset);
             break;
         }
 

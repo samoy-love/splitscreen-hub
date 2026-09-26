@@ -127,10 +127,14 @@ class HttpStream
     // запись в кэш идёт, только пока чтение шло подряд с нуля
     std::FILE* cacheFile = nullptr;
     std::string cacheTmp;
+    /// сколько байт fwrite действительно положил во временный файл
+    long long cacheWritten = 0;
     bool cacheAllowed = true;
     std::atomic_bool cacheComplete { false };
 
-    void closeCache(bool keep);
+    /// keep — сделать временный файл кэшем, если в нём ровно expectedSize
+    /// байт и он закрылся без ошибки; иначе файл удаляется.
+    void closeCache(bool keep, long long expectedSize = -1);
     /// Открывает временный файл кэша с нуля, отбрасывая прежнее содержимое.
     void restartCache();
 };
