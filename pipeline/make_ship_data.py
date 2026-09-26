@@ -65,6 +65,13 @@ def u32(v):
     return struct.pack("<I", v)
 
 
+def clamp_u16(v):
+    """Счётчики из рейтинга в поле u16: отрицательное число struct.pack не
+    упакует и уронит сборку посреди записи, а смысла у него всё равно нет —
+    это «не советуют», то есть ноль."""
+    return max(0, min(int(v or 0), 0xFFFF))
+
+
 def i64(v):
     return struct.pack("<q", v)
 
@@ -215,8 +222,8 @@ def main():
         catalog.write(s16(art))
         catalog.write(u16(min_p or 0))
         catalog.write(u16(max_p or 0))
-        catalog.write(u16(mentions or 0))
-        catalog.write(u16(min(score or 0, 65535)))  # счёт согласия ×10
+        catalog.write(u16(clamp_u16(mentions)))
+        catalog.write(u16(clamp_u16(score)))  # счёт согласия ×10
         catalog.write(u16(year or 0))
         # -1 — размер неизвестен: при сортировке такие уходят в конец, а ноль
         # встал бы в начало

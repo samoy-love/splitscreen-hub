@@ -445,12 +445,16 @@ def main():
     # Среднее геометрическое, а не сумма: игра, которую хвалят и редакции, и
     # люди в тредах, обгоняет ту, что набрала столько же в одном канале.
     emax = max(editorial.values()) if editorial else 1.0
-    cmax = max(community.values()) if community else 1.0
+    cmax = max(max(community.values()) if community else 1.0, 1e-9)
     rows = []
     for nsuid in set(editorial) | set(community):
         e = 100 * editorial.get(nsuid, 0.0) / emax
-        c = 100 * community.get(nsuid, 0.0) / cmax
-        score = math.sqrt((e + SMOOTH) * (c + SMOOTH)) - SMOOTH
+        # NEG_VOTE может увести сумму канала ниже нуля: игру ругали чаще, чем
+        # советовали. Минус здесь значит «никто не советует» — то же, что ноль;
+        # ниже нуля корень падает с ValueError, а счёт не лезет в u16
+        # catalog.bin.
+        c = max(0.0, 100 * community.get(nsuid, 0.0) / cmax)
+        score = max(0.0, math.sqrt((e + SMOOTH) * (c + SMOOTH)) - SMOOTH)
         rows.append((score, e, c, len(families[nsuid]), titles[nsuid], nsuid))
 
     rows.sort(key=lambda r: -r[0])
