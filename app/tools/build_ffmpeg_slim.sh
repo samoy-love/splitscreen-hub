@@ -11,15 +11,16 @@
 #   --disable-network        — файл качает curl, ffmpeg сеть не нужна
 #   --disable-libass/-freetype/-fribidi — субтитров нет
 #   --disable-libdav1d       — AV1 в трейлерах не встречается
-# Аппаратное декодирование (--enable-nvtegra) сохраняем: оно из патча
-# devkitPro и заметно разгружает процессор.
+#   без --enable-nvtegra     — аппаратный декодер из патча devkitPro требует
+#     --enable-gpl, а без него configure молча выключает nvtegra; к тому же
+#     плеер hwaccel не запрашивает и декодирует программно (README, «Сборка»)
 set -e
 
 # Точечный релиз ветки 7.1: они выходят ради исправлений безопасности, а
 # FFmpeg здесь разбирает mp4/h264/aac, пришедшие из сети.
 #
 # Выше ветки 7.1 не подняться в отрыве от devkitPro: сборка накладывает их
-# патч, и именно он даёт --enable-nvtegra, то есть аппаратное декодирование.
+# патч: это и есть порт FFmpeg под Switch (--enable-libnx).
 # Патч называется по ветке (ffmpeg-7.1.patch) и ложится на любой 7.1.x со
 # смещениями строк; для 8.x его нет. Поэтому версия исходников и версия
 # патча — разные переменные: точечный релиз меняет только VER.
@@ -97,7 +98,7 @@ if [ ! -f config.h ]; then
     --enable-parser=h264,aac,mpegaudio \
     --enable-demuxer=mov,mp4,m4v,h264,aac,mp3,matroska \
     --enable-protocol=file \
-    --enable-libnx --enable-nvtegra
+    --enable-libnx
 fi
 
 make -j"$(nproc)"

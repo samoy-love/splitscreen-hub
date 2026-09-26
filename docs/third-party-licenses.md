@@ -39,7 +39,7 @@ via `pl:u`; no copy of the font is distributed with the app.
 | Library | License | Source |
 |---|---|---|
 | [borealis](https://github.com/xfangfang/borealis) (fork by xfangfang) | Apache-2.0 | `app/lib/borealis` (submodule) |
-| [FFmpeg](https://ffmpeg.org/) 7.1.5 — libavformat, libavcodec, libswscale, libswresample, libavutil | **LGPL-2.1-or-later** — built without `--enable-gpl` / `--enable-nonfree`; h264, aac, mp3, pcm decoders only | built by `app/tools/build_ffmpeg_slim.sh` from FFmpeg 7.1.5 with the [devkitPro `switch-ffmpeg` patch for 7.1](https://github.com/devkitPro/pacman-packages) (`--enable-libnx --enable-nvtegra`) |
+| [FFmpeg](https://ffmpeg.org/) 7.1.5 — libavformat, libavcodec, libswscale, libswresample, libavutil | **LGPL-2.1-or-later** — built without `--enable-gpl` / `--enable-nonfree`; h264, aac, mp3, pcm decoders only | built by `app/tools/build_ffmpeg_slim.sh` from FFmpeg 7.1.5 with the [devkitPro `switch-ffmpeg` patch for 7.1](https://github.com/devkitPro/pacman-packages) (`--enable-libnx`) |
 | [libnx](https://github.com/switchbrew/libnx) | ISC | devkitPro |
 | [curl](https://curl.se/) | curl (MIT-style) | devkitPro `switch-curl` |
 | [Mbed TLS](https://github.com/Mbed-TLS/mbedtls) | Apache-2.0 | devkitPro `switch-mbedtls` |

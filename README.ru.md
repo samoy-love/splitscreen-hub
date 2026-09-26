@@ -304,7 +304,7 @@ pacman -S switch-curl switch-mbedtls switch-sdl2 ninja
 
 FFmpeg из pacman **не подходит**: сборка ждёт урезанный локальный
 `app/lib/ffmpeg-slim` (только h264 + aac, FFmpeg 7.1.5 — ветка 7.1
-единственная, для которой есть патч devkitPro с `--enable-nvtegra`). Пакет
+единственная, для которой есть патч devkitPro под Switch). Пакет
 `switch-ffmpeg` тянет полный набор кодеков и прибавляет к `.nro` больше десяти
 мегабайт. Патчи devkitPro скрипт берёт с зафиксированного коммита и перед
 сборкой сверяет sha256 исходников и обоих патчей.
