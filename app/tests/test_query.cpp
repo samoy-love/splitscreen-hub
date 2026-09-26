@@ -146,6 +146,31 @@ void testSearch()
     f.search = "чего-то нет";
     expect("ничего не нашлось", titles(catalogq::select(games, f, -1)), {});
 
+    // Кириллица: ключ считается побайтно по UTF-8, и тут легко ошибиться на
+    // границе «П/Р», где строчные переходят из D0 в D1.
+    check("кириллица в нижний регистр",
+          catalogq::searchKey("ПРИВЕТ, Мир") == "привет, мир");
+    check("вся азбука", catalogq::searchKey("АБВГДЕЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯ")
+                            == "абвгдежзийклмнопрстуфхцчшщъыьэюя");
+    check("ё читается как е",
+          catalogq::searchKey("Ёжик и ёлка") == "ежик и елка");
+    check("строчные и латиница не меняются",
+          catalogq::searchKey("марио kart 8") == "марио kart 8");
+    check("оборванный UTF-8 не роняет", catalogq::searchKey("\xD0") == "\xD0");
+
+    std::vector<catalogq::Brief> russian = {
+        game("Супер Марио"),
+        game("Ёжик в тумане"),
+    };
+
+    f.search = "марио";
+    expect("русский запрос без учёта регистра", titles(catalogq::select(russian, f, -1)),
+           { "Супер Марио" });
+
+    f.search = "ЕЖИК";
+    expect("запрос через е находит ё", titles(catalogq::select(russian, f, -1)),
+           { "Ёжик в тумане" });
+
     f.search.clear();
     // Порядок — по sortTitle, где артикль отброшен: «The Jackbox» встаёт на «j»,
     // между «battle» и «overcooked».
