@@ -61,7 +61,7 @@ build_native() {
         bash tools/build_ffmpeg_slim.sh
     fi
     cmake -B build -G Ninja -DPLATFORM_SWITCH=ON -DUSE_SDL2=ON -DCMAKE_BUILD_TYPE=Release
-    cmake --build build --target SplitScreenHub.nro
+    cmake --build build --target SplitScreenHub.nro -j "$BUILD_JOBS"
     ls -l build/SplitScreenHub.nro
 }
 
@@ -82,6 +82,12 @@ prefetch_ffmpeg() {
 fetch_data
 prefetch_ffmpeg
 
+# Число задач компилятора — по памяти, а не по ядрам (см. build_jobs.sh).
+# Считается здесь, до docker: внутри контейнера лимит раннера не виден.
+BUILD_JOBS="$(sh "$APP/tools/build_jobs.sh")"
+export BUILD_JOBS
+echo "задач компилятора: $BUILD_JOBS"
+
 if [ -d "${DEVKITPRO:-/opt/devkitpro}/devkitA64" ] && command -v cmake >/dev/null 2>&1; then
     build_native
 elif [ -x /c/devkitPro/msys2/usr/bin/bash ]; then
@@ -99,7 +105,7 @@ elif command -v docker >/dev/null 2>&1; then
     # выходила бы до chown ниже, и файлы root оставались бы в рабочем
     # каталоге раннера — ровно тогда, когда прогон и так красный.
     rc=0
-    docker run --rm -v "$ROOT:/work" -w /work "$IMAGE" bash -c '
+    docker run --rm -e BUILD_JOBS -v "$ROOT:/work" -w /work "$IMAGE" bash -c '
         set -e
         git config --global --add safe.directory "*"
         # Подмодули клонируются ИЗ КОНТЕЙНЕРА, и smart-протокол git по HTTP/2
