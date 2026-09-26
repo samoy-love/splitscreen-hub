@@ -66,17 +66,26 @@ def main():
         games = json.load(f)
     have = {g.get("nsuid") for g in games}
 
-    found = []
+    # Поиск идёт поштучно, по запросу на название. Сбой одного запроса (post()
+    # уже повторил временные ошибки) не должен выбрасывать всё найденное до
+    # него: запоминаем и идём дальше, найденное дописываем в любом случае.
+    found, errors = [], []
     for title in wanted_titles():
-        hit = search(title)
+        try:
+            hit = search(title)
+        except Exception as e:  # noqa: BLE001
+            errors.append(f"{title}: {type(e).__name__}: {e}")
+            continue
         if hit and hit.get("nsuid") and hit["nsuid"] not in have:
             found.append(hit)
             have.add(hit["nsuid"])
             print(f"  добавляем: {hit['title'][:46]}")
 
     if not found:
+        if errors:
+            return report_errors(errors)
         print("перечисление ничего не пропустило")
-        return
+        return 0
 
     print(f"\nнедостающих игр: {len(found)}, забираем карточки")
     products, failed = F.fetch_products([h["nsuid"] for h in found], batch=25)
@@ -84,14 +93,28 @@ def main():
 
     rows = F.build_rows(found, products, failed)
     games.extend(rows)
-    with open(SOURCE, "w", encoding="utf-8") as f:
+    # через временный файл: оборванная запись испортила бы весь каталог, а не
+    # только добор
+    tmp = SOURCE + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
         json.dump(games, f, ensure_ascii=False, indent=1)
+    os.replace(tmp, SOURCE)
 
     known = [r for r in rows if r["same_screen_max"]]
     print(f"\nдописано в {os.path.basename(SOURCE)}: {len(rows)}, из них с числом игроков {len(known)}")
     for r in known:
         print(f"  {r['same_screen_min']}-{r['same_screen_max']}  {r['title'][:46]}")
+    return report_errors(errors)
+
+
+def report_errors(errors):
+    if not errors:
+        return 0
+    print(f"\nНЕ ПРОВЕРЕНО {len(errors)} названий — запустите ещё раз:", file=sys.stderr)
+    for e in errors:
+        print(f"  {e}", file=sys.stderr)
+    return 1
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
