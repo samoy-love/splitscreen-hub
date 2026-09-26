@@ -146,6 +146,29 @@ def detail_record(row, tr, genres, shots, videos):
     return body
 
 
+def write_together(files):
+    """Пишет каждый файл во временный рядом и подменяет все разом.
+
+    Сначала записываются все .tmp: если не хватило места или прав, прежние
+    файлы остаются нетронутыми. os.replace атомарен для каждого файла; между
+    двумя подменами окно в микросекунды, а не всё время сборки."""
+    tmps = []
+    try:
+        for path, data in files.items():
+            tmp = path + ".tmp"
+            tmps.append(tmp)
+            with open(tmp, "wb") as f:
+                f.write(data)
+                f.flush()
+                os.fsync(f.fileno())
+        for path in files:
+            os.replace(path + ".tmp", path)
+    finally:
+        for tmp in tmps:
+            if os.path.exists(tmp):
+                os.remove(tmp)
+
+
 def main():
     db = sqlite3.connect(SOURCE)
 
@@ -198,9 +221,6 @@ def main():
         offsets.append((details.tell(), len(blob), len(body)))
         details.write(blob)
 
-    with open(DETAILS, "wb") as f:
-        f.write(details.getvalue())
-
     # --- catalog.bin --------------------------------------------------------
     catalog = io.BytesIO()
     catalog.write(CATALOG_MAGIC)
@@ -238,10 +258,13 @@ def main():
         catalog.write(u32(size))
         catalog.write(u32(raw))
 
-    with open(CATALOG, "wb") as f:
-        f.write(catalog.getvalue())
-
     db.close()
+
+    # Файлы ссылаются друг на друга: catalog.bin хранит смещения записей в
+    # details.bin. Поэтому оба собираются в памяти целиком и подменяются
+    # только вместе в самом конце — падение посреди сборки не должно оставить
+    # новый details.bin рядом со старым catalog.bin.
+    write_together({DETAILS: details.getvalue(), CATALOG: catalog.getvalue()})
 
     raw_total = sum(len(b) for b in bodies)
     packed_total = sum(len(b) for b in packed)
