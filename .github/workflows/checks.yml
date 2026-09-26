@@ -21,11 +21,16 @@ jobs:
   checks:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      # Сторонние экшены закреплены за полным SHA коммита, а не за тегом: тег
+      # можно передвинуть, и тогда в CI молча поедет чужой код. Версия в
+      # комментарии — для человека и для dependabot, который поднимает SHA
+      # вместе с ней (.github/dependabot.yml). Свой deploy-kit ниже идёт с
+      # @main намеренно: это общий пайплайн владельца для всех репозиториев.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           submodules: recursive
 
-      - uses: actions/setup-python@v7
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.11"
 
@@ -40,7 +45,7 @@ jobs:
   commits:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
 
