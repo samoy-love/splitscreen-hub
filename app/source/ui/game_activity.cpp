@@ -503,7 +503,10 @@ int GameActivity::fillTrailerButton(std::vector<std::string> videos)
 
 void GameActivity::openTrailer()
 {
-    if (trailerUrl.empty())
+    // Сеть уже ждём по прошлому нажатию. Второе ставило бы в очередь ещё одно
+    // ожидание, и поверх карточки открывались бы два плеера подряд, а подписью
+    // кнопки запомнилось бы «Соединяемся…» вместо настоящей.
+    if (trailerUrl.empty() || waitingNetwork)
         return;
 
     // Сеть могла ещё не подняться, если нажали сразу после запуска. Ждём её
@@ -519,6 +522,7 @@ void GameActivity::openTrailer()
     // «Соединяемся…» до самого закрытия карточки.
     const std::string caption = trailerButton->getText();
     trailerButton->setText("hub/game/connecting"_i18n);
+    waitingNetwork = true;
 
     auto flag       = alive;
     auto* self      = this;
@@ -527,7 +531,13 @@ void GameActivity::openTrailer()
     tasks::io([flag, self, url, caption]() {
         const bool ok = net::waitReady(5000);
         brls::sync([flag, self, url, caption, ok]() {
-            if (*flag && self->trailerButton)
+            // Карточку за это время могли закрыть. Плеер тогда открылся бы
+            // поверх того экрана, куда из неё ушли, — а его уже не ждут.
+            if (!*flag)
+                return;
+
+            self->waitingNetwork = false;
+            if (self->trailerButton)
                 self->trailerButton->setText(caption);
 
             if (ok)
