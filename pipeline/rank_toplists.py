@@ -135,6 +135,9 @@ ALIASES = {
     "diablo3": "Diablo III: Eternal Collection",
     "diabloiii": "Diablo III: Eternal Collection",
     "snipperclips": "Snipperclips – Cut it out, together!",
+    # Plus — то же издание с добавленными уровнями и отдельной покупкой;
+    # в каталоге оно одной карточкой с базовой игрой.
+    "snipperclipspluscutitouttogether": "Snipperclips – Cut it out, together!",
     "mariowonder": "Super Mario Bros. Wonder",
     "unravel2": "Unravel Two",
     "raymanlegends": "Rayman Legends Definitive Edition",
