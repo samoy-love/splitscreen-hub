@@ -52,9 +52,17 @@ def optimize_jpeg(data):
         return data  # не JPEG или битый файл — пусть решает вызывающий
 
 
+# В /image/fetch/ за трансформациями идёт адрес исходной картинки — открытый
+# (https://...) или закодированный (https%3A%2F%2F...). Снимаем сегменты
+# трансформаций до него. Прежнее [^h]* обрывалось на первой «h» и ломалось на
+# трансформации вроде h_300 или c_thumb: остаток трансформации приклеивался к
+# нашей, и Cloudinary отдавал ошибку или полноразмерный файл.
+FETCH_TRANSFORMS = re.compile(r"/image/fetch/(?:(?!https?(?::|%3A))[^/]+/)*", re.I)
+
+
 def art_url(url):
     if "/image/fetch/" in url:
-        return re.sub(r"/image/fetch/[^h]*", f"/image/fetch/{TRANSFORM}/", url)
+        return FETCH_TRANSFORMS.sub(f"/image/fetch/{TRANSFORM}/", url, count=1)
     return re.sub(r"/image/upload/(?:(?!store)[^/]+/)*", f"/image/upload/{TRANSFORM}/", url)
 
 
