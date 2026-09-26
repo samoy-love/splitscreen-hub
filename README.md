@@ -254,7 +254,7 @@ descriptions sit in the same rows. Instead
 - `catalog.bin` (~0.5 MB) — everything the grid shows. Read in full at startup;
   filtering and sorting are then an in-memory scan taking milliseconds;
 - `details.bin` (~5 MB) — card texts and links, one record per game, read by
-  offset. Records are zlib-compressed with a shared 64 KB dictionary: alone they
+  offset. Records are zlib-compressed with a shared 32 KB dictionary: alone they
   halve, with the dictionary they shrink almost threefold, and each still
   inflates independently.
 
