@@ -21,6 +21,7 @@
 
 import concurrent.futures
 import csv
+import http.client
 import json
 import os
 import re
@@ -42,12 +43,33 @@ ONE_CONSOLE = "Play together on one console"
 PLATFORMS = ["Nintendo Switch"]
 
 
+POST_ATTEMPTS = 4
+POST_BACKOFF = 2.0  # секунды перед второй попыткой, дальше вдвое больше
+
+
+def is_transient(exc):
+    """Сбой, который может пройти сам: 5xx, 429, таймаут, обрыв соединения.
+
+    4xx — ответ по существу (не тот запрос, нет доступа), повтор даст то же."""
+    if isinstance(exc, urllib.error.HTTPError):
+        return exc.code >= 500 or exc.code == 429
+    return isinstance(exc, (urllib.error.URLError, TimeoutError, ConnectionError,
+                            http.client.HTTPException))
+
+
 def post(url, payload, headers):
-    req = urllib.request.Request(
-        url, data=json.dumps(payload).encode(), headers=headers, method="POST"
-    )
-    with urllib.request.urlopen(req, timeout=60) as r:
-        return json.load(r)
+    """POST с повторами. Перечисление Algolia — сотни запросов подряд, и
+    без повторов один случайный 503 ронял весь прогон на середине."""
+    data = json.dumps(payload).encode()
+    for attempt in range(POST_ATTEMPTS):
+        req = urllib.request.Request(url, data=data, headers=headers, method="POST")
+        try:
+            with urllib.request.urlopen(req, timeout=60) as r:
+                return json.load(r)
+        except Exception as e:  # noqa: BLE001
+            if attempt == POST_ATTEMPTS - 1 or not is_transient(e):
+                raise
+            time.sleep(POST_BACKOFF * 2 ** attempt)
 
 
 def algolia(payload, index="store_game_en_us"):
