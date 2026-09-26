@@ -15,6 +15,7 @@ import json
 import os
 import re
 import sqlite3
+import sys
 from datetime import date
 
 from paths import CATALOG_DB, LOCAL_MULTIPLAYER, OVERRIDES, TOPLISTS_DB, TRANSLATIONS_DB
@@ -116,10 +117,21 @@ SIDECARS = {
 
 
 def merge_sidecars(db):
+    """Подмешивает файлы-спутники. Возвращает список ошибок.
+
+    Нет файла — нормально: каталог соберётся с английскими текстами и без
+    рейтинга. А вот файл есть, но не читается (другая схема, битый, чужая
+    таблица) — это ошибка сборки, а не повод молча выпустить каталог без
+    переводов и сортировки «по подборкам»."""
+    errors = []
     for path, (table, columns) in SIDECARS.items():
         if not os.path.exists(path):
             continue
-        db.execute("ATTACH DATABASE ? AS side", (path,))
+        try:
+            db.execute("ATTACH DATABASE ? AS side", (path,))
+        except sqlite3.Error as e:
+            errors.append(f"{os.path.basename(path)}: {e}")
+            continue
         try:
             cur = db.execute(
                 f"INSERT OR REPLACE INTO {table} ({columns})"
@@ -128,11 +140,12 @@ def merge_sidecars(db):
             print(f"  подмешано из {os.path.basename(path)}: {cur.rowcount}")
             cur.close()
         except sqlite3.Error as e:
-            print(f"  {os.path.basename(path)}: пропущен, {e}")
+            errors.append(f"{os.path.basename(path)}: {e}")
         # без коммита открытая транзакция держит присоединённый файл и
         # DETACH падает с «database side is locked»
         db.commit()
         db.execute("DETACH DATABASE side")
+    return errors
 
 # Серии переизданий: определяем по названию, а не по издателю. HAMSTER выпускает
 # только их, но SEGA — и переиздания, и обычные игры, так что признак по
@@ -295,7 +308,7 @@ def main():
     for prefix, pid in prefixes.items():
         db.execute("INSERT INTO media_prefix VALUES (?,?)", (pid, prefix))
 
-    merge_sidecars(db)
+    sidecar_errors = merge_sidecars(db)
 
     # mentions — число независимых источников, а не только редакционных
     # подборок: игру могли обсуждать в пяти тредах и не назвать ни в одном
@@ -332,6 +345,14 @@ def main():
     db.close()
     print(f"\n{os.path.basename(DB)}: {os.path.getsize(DB) / 1024 / 1024:.1f} МБ")
 
+    if sidecar_errors:
+        print("\nНЕ ПОДМЕШАНО — каталог без этих данных выпускать нельзя:",
+              file=sys.stderr)
+        for e in sidecar_errors:
+            print(f"  {e}", file=sys.stderr)
+        return 1
+    return 0
+
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

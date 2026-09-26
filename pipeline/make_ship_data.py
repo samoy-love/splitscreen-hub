@@ -35,9 +35,11 @@ CATALOG_MAGIC = b"SSHC"
 DETAILS_MAGIC = b"SSHD"
 VERSION = 2
 
-# 64 КБ словаря — предел zlib (окно 32 КБ учитывает только хвост, но больший
-# буфер не мешает). Больше брать некуда, меньше — заметно хуже сжатие.
-DICT_SIZE = 64 * 1024
+# Словарь ровно в окно deflate. И deflateSetDictionary, и inflateSetDictionary
+# из длинного словаря берут только последние 32 КБ, так что всё, что длиннее,
+# лежало в details.bin мёртвым грузом: сжатые записи с 32 КБ и с 64 КБ
+# совпадают байт в байт. Меньше — заметно хуже сжатие.
+DICT_SIZE = 32 * 1024
 DICT_SAMPLES = 300
 
 # Отметка nsuid внутри хвоста адреса — так же, как в базе.
@@ -63,6 +65,13 @@ def u16(v):
 
 def u32(v):
     return struct.pack("<I", v)
+
+
+def clamp_u16(v):
+    """Счётчики из рейтинга в поле u16: отрицательное число struct.pack не
+    упакует и уронит сборку посреди записи, а смысла у него всё равно нет —
+    это «не советуют», то есть ноль."""
+    return max(0, min(int(v or 0), 0xFFFF))
 
 
 def i64(v):
@@ -139,6 +148,29 @@ def detail_record(row, tr, genres, shots, videos):
     return body
 
 
+def write_together(files):
+    """Пишет каждый файл во временный рядом и подменяет все разом.
+
+    Сначала записываются все .tmp: если не хватило места или прав, прежние
+    файлы остаются нетронутыми. os.replace атомарен для каждого файла; между
+    двумя подменами окно в микросекунды, а не всё время сборки."""
+    tmps = []
+    try:
+        for path, data in files.items():
+            tmp = path + ".tmp"
+            tmps.append(tmp)
+            with open(tmp, "wb") as f:
+                f.write(data)
+                f.flush()
+                os.fsync(f.fileno())
+        for path in files:
+            os.replace(path + ".tmp", path)
+    finally:
+        for tmp in tmps:
+            if os.path.exists(tmp):
+                os.remove(tmp)
+
+
 def main():
     db = sqlite3.connect(SOURCE)
 
@@ -191,9 +223,6 @@ def main():
         offsets.append((details.tell(), len(blob), len(body)))
         details.write(blob)
 
-    with open(DETAILS, "wb") as f:
-        f.write(details.getvalue())
-
     # --- catalog.bin --------------------------------------------------------
     catalog = io.BytesIO()
     catalog.write(CATALOG_MAGIC)
@@ -215,8 +244,8 @@ def main():
         catalog.write(s16(art))
         catalog.write(u16(min_p or 0))
         catalog.write(u16(max_p or 0))
-        catalog.write(u16(mentions or 0))
-        catalog.write(u16(min(score or 0, 65535)))  # счёт согласия ×10
+        catalog.write(u16(clamp_u16(mentions)))
+        catalog.write(u16(clamp_u16(score)))  # счёт согласия ×10
         catalog.write(u16(year or 0))
         # -1 — размер неизвестен: при сортировке такие уходят в конец, а ноль
         # встал бы в начало
@@ -231,10 +260,13 @@ def main():
         catalog.write(u32(size))
         catalog.write(u32(raw))
 
-    with open(CATALOG, "wb") as f:
-        f.write(catalog.getvalue())
-
     db.close()
+
+    # Файлы ссылаются друг на друга: catalog.bin хранит смещения записей в
+    # details.bin. Поэтому оба собираются в памяти целиком и подменяются
+    # только вместе в самом конце — падение посреди сборки не должно оставить
+    # новый details.bin рядом со старым catalog.bin.
+    write_together({DETAILS: details.getvalue(), CATALOG: catalog.getvalue()})
 
     raw_total = sum(len(b) for b in bodies)
     packed_total = sum(len(b) for b in packed)

@@ -254,7 +254,7 @@ descriptions sit in the same rows. Instead
 - `catalog.bin` (~0.5 MB) — everything the grid shows. Read in full at startup;
   filtering and sorting are then an in-memory scan taking milliseconds;
 - `details.bin` (~5 MB) — card texts and links, one record per game, read by
-  offset. Records are zlib-compressed with a shared 64 KB dictionary: alone they
+  offset. Records are zlib-compressed with a shared 32 KB dictionary: alone they
   halve, with the dictionary they shrink almost threefold, and each still
   inflates independently.
 
@@ -274,6 +274,7 @@ python pipeline/build_db.py                  # again: merges ranking and transla
 python pipeline/download_art.py              # 240x240 covers -> app/resources/art/
 python pipeline/verify_db.py                 # data invariants
 python pipeline/make_ship_data.py            # catalog.bin and details.bin -> app/resources/
+python pipeline/verify_ship_data.py          # packed files read back exactly as the console reads them
 ```
 
 `build_db.py` runs twice: `rank_toplists.py` matches list titles against the
@@ -348,6 +349,7 @@ software decoder is enough for 30–60-second trailers.
 python app/tools/check_xml.py    # layouts against attributes borealis understands
 bash   app/tools/run_tests.sh    # pure-function tests, plain g++
 python pipeline/verify_db.py     # catalog.db invariants before packing
+python pipeline/verify_ship_data.py  # catalog.bin and details.bin as catalog.cpp sees them
 ```
 
 CI runs the first two on every push. On Windows run the tests from the msys2

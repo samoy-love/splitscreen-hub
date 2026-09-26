@@ -339,14 +339,21 @@ def norm(title):
 
 def load_catalog():
     """Два индекса по каталогу: точное нормализованное название и его первые
-    14 знаков — «Overcooked! 2» в подборке против «Overcooked 2: ...» в eShop."""
+    14 знаков — «Overcooked! 2» в подборке против «Overcooked 2: ...» в eShop.
+
+    Префикс — догадка, и верна она только когда однозначна: под «teenagemutant»
+    в каталоге пять разных игр, под «supermonkeyba» — три. Раньше бралась
+    первая попавшаяся строка SELECT без ORDER BY, то есть голос уходил той
+    игре, что физически раньше лежит в базе. Поэтому в prefix хранятся все
+    кандидаты, а resolve() в rank_toplists.py принимает только единственного;
+    неоднозначное название разрешается явным ALIASES или не засчитывается."""
     db = sqlite3.connect(CATALOG)
-    rows = db.execute("SELECT nsuid, title FROM games").fetchall()
+    rows = db.execute("SELECT nsuid, title FROM games ORDER BY nsuid").fetchall()
     db.close()
 
     exact, prefix = {}, {}
     for nsuid, title in rows:
         n = norm(title)
         exact.setdefault(n, (nsuid, title))
-        prefix.setdefault(n[:14], (nsuid, title))
+        prefix.setdefault(n[:14], []).append((nsuid, title))
     return exact, prefix

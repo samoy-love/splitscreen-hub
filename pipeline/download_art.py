@@ -20,11 +20,12 @@ import sys
 import threading
 import urllib.request
 
-from paths import ART_DIR, CATALOG_DB, LOCAL_MULTIPLAYER
+from paths import ART_DIR, ART_SOURCES, CATALOG_DB, LOCAL_MULTIPLAYER
 
 DB = CATALOG_DB
 SOURCE = LOCAL_MULTIPLAYER
 OUT_DIR = ART_DIR
+SOURCES_FILE = ART_SOURCES
 TRANSFORM = "w_240,q_70,f_jpg"
 WORKERS = 8
 MIN_BYTES = 500  # меньше — почти наверняка заглушка, а не обложка
@@ -52,9 +53,17 @@ def optimize_jpeg(data):
         return data  # не JPEG или битый файл — пусть решает вызывающий
 
 
+# В /image/fetch/ за трансформациями идёт адрес исходной картинки — открытый
+# (https://...) или закодированный (https%3A%2F%2F...). Снимаем сегменты
+# трансформаций до него. Прежнее [^h]* обрывалось на первой «h» и ломалось на
+# трансформации вроде h_300 или c_thumb: остаток трансформации приклеивался к
+# нашей, и Cloudinary отдавал ошибку или полноразмерный файл.
+FETCH_TRANSFORMS = re.compile(r"/image/fetch/(?:(?!https?(?::|%3A))[^/]+/)*", re.I)
+
+
 def art_url(url):
     if "/image/fetch/" in url:
-        return re.sub(r"/image/fetch/[^h]*", f"/image/fetch/{TRANSFORM}/", url)
+        return FETCH_TRANSFORMS.sub(f"/image/fetch/{TRANSFORM}/", url, count=1)
     return re.sub(r"/image/upload/(?:(?!store)[^/]+/)*", f"/image/upload/{TRANSFORM}/", url)
 
 
@@ -68,23 +77,47 @@ def load_targets():
                 if g.get("nsuid") in wanted and g.get("box_art")}
 
 
+def load_sources():
+    try:
+        with open(SOURCES_FILE, encoding="utf-8") as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return {}
+
+
+def save_sources(sources):
+    tmp = SOURCES_FILE + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(sources, f, ensure_ascii=False, indent=0, sort_keys=True)
+    os.replace(tmp, SOURCES_FILE)
+
+
 def main():
     os.makedirs(OUT_DIR, exist_ok=True)
     targets = load_targets()
 
+    # Какой адрес обложки скачан в каждый файл. Издатель меняет обложку —
+    # у неё меняется адрес (в нём хеш), и файл надо перекачать; раньше
+    # скачанный однажды файл не обновлялся никогда. Файлам, скачанным до
+    # появления этого списка, засчитывается текущий адрес: перекачивать все
+    # три с половиной тысячи обложек ради неизвестности незачем.
+    sources = load_sources()
+    for n, u in targets.items():
+        if n not in sources and os.path.exists(os.path.join(OUT_DIR, f"{n}.jpg")):
+            sources[n] = u
+
     todo = [(n, u) for n, u in targets.items()
-            if not os.path.exists(os.path.join(OUT_DIR, f"{n}.jpg"))]
+            if sources.get(n) != u or not os.path.exists(os.path.join(OUT_DIR, f"{n}.jpg"))]
     print(f"обложек всего {len(targets)}, качаем {len(todo)}")
-    if not todo:
-        return report(targets)
 
     lock = threading.Lock()
     done = [0, 0]
+    errors = {}
 
     def fetch(item):
         nsuid, url = item
         path = os.path.join(OUT_DIR, f"{nsuid}.jpg")
-        ok = False
+        reason = None
         for _ in range(3):
             try:
                 req = urllib.request.Request(art_url(url), headers={"User-Agent": "Mozilla/5.0"})
@@ -95,20 +128,49 @@ def main():
                     with open(tmp, "wb") as f:
                         f.write(optimize_jpeg(data))
                     os.replace(tmp, path)
-                    ok = True
+                    reason = None
+                else:
+                    reason = f"ответ {len(data)} байт — заглушка, а не обложка"
                 break
-            except Exception:  # noqa: BLE001
+            except Exception as e:  # noqa: BLE001
+                reason = f"{type(e).__name__}: {e}"
                 continue
         with lock:
             done[0] += 1
-            done[1] += not ok
+            if reason:
+                done[1] += 1
+                errors[nsuid] = reason
+            else:
+                sources[nsuid] = url
             if done[0] % 200 == 0 or done[0] == len(todo):
                 print(f"  {done[0]}/{len(todo)}, не скачалось {done[1]}")
 
-    with concurrent.futures.ThreadPoolExecutor(WORKERS) as pool:
-        list(pool.map(fetch, todo))
+    if todo:
+        with concurrent.futures.ThreadPoolExecutor(WORKERS) as pool:
+            list(pool.map(fetch, todo))
 
-    return report(targets)
+    save_sources({n: u for n, u in sources.items() if n in targets})
+    clean_up()
+    return report(targets, errors)
+
+
+def clean_up():
+    """Убирает из art/ всё, что не обложка игры из базы.
+
+    Каталог копит мусор: обложки игр, выпавших из базы, и .tmp от
+    оборванных загрузок. Всё это уезжает в бандл данных и в romfs .nro, так
+    что оставлять его «на всякий случай» — платить местом за ничто."""
+    db = sqlite3.connect(DB)
+    wanted = {r[0] for r in db.execute(
+        "SELECT box_art_file FROM games WHERE box_art_file IS NOT NULL")}
+    db.close()
+    stray = sorted(f for f in os.listdir(OUT_DIR)
+                   if f not in wanted and os.path.isfile(os.path.join(OUT_DIR, f)))
+    for f in stray:
+        os.remove(os.path.join(OUT_DIR, f))
+    if stray:
+        print(f"удалено лишних файлов: {len(stray)} ({', '.join(stray[:5])}"
+              f"{', …' if len(stray) > 5 else ''})")
 
 
 def missing_titles(targets):
@@ -124,7 +186,8 @@ def missing_titles(targets):
     return [(n, names.get(n, "?")) for n in gone]
 
 
-def report(targets):
+def report(targets, errors=None):
+    errors = errors or {}
     files = [f for f in os.listdir(OUT_DIR) if f.endswith(".jpg")]
     total = sum(os.path.getsize(os.path.join(OUT_DIR, f)) for f in files)
     avg = total / len(files) if files else 0
@@ -140,8 +203,16 @@ def report(targets):
     if gone:
         print(f"\nБЕЗ ОБЛОЖКИ: {len(gone)}", file=sys.stderr)
         for nsuid, title in gone:
-            print(f"  {nsuid}  {title}", file=sys.stderr)
+            why = errors.get(nsuid)
+            print(f"  {nsuid}  {title}{('  — ' + why) if why else ''}", file=sys.stderr)
         print("Повторный запуск скачает только их.", file=sys.stderr)
+    # Обновление не удалось, но прежняя обложка на месте: не провал, однако
+    # знать о нём надо — следующий запуск попробует снова.
+    stale = sorted(n for n in errors if n not in dict(gone))
+    if stale:
+        print(f"\nНЕ ОБНОВИЛИСЬ (оставлены прежние): {len(stale)}")
+        for n in stale:
+            print(f"  {n}  {errors[n]}")
     return len(gone)
 
 
