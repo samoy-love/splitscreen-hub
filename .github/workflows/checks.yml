@@ -1,23 +1,41 @@
 # Проверки, которым не нужны ни консоль, ни тулчейн devkitPro: разметка против
 # атрибутов, которые понимает borealis, тесты чистых функций и сообщения
 # коммитов без упоминаний ИИ (правило из CLAUDE.md; локально его ловит хук
-# .githooks/commit-msg, но хук не переносится клоном — здесь страховка).
+# .githooks/commit-msg, но хук не переносится клоном — здесь страховка тем
+# же самым хуком).
 name: checks
 
 on:
   push:
+  # edited — к типам по умолчанию: заголовок и описание PR проверяются
+  # (задача commits), а их правят уже после открытия. Без edited подпись,
+  # дописанная в описание позже, дошла бы до сквош-коммита непроверенной.
   pull_request:
+    types: [opened, synchronize, reopened, edited]
   workflow_dispatch:
+
+# Проверкам нужно только читать код. Без явного блока токен получает права по
+# умолчанию из настроек репозитория, а они бывают и на запись — тогда любой
+# шаг, включая сторонний экшен, может пушить в репозиторий от имени CI.
+# Переиспользуемый infra-hygiene.yml из deploy-kit сам просит ровно
+# contents: read, так что больше давать и незачем.
+permissions:
+  contents: read
 
 jobs:
   checks:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      # Сторонние экшены закреплены за полным SHA коммита, а не за тегом: тег
+      # можно передвинуть, и тогда в CI молча поедет чужой код. Версия в
+      # комментарии — для человека и для dependabot, который поднимает SHA
+      # вместе с ней (.github/dependabot.yml). Свой deploy-kit ниже идёт с
+      # @main намеренно: это общий пайплайн владельца для всех репозиториев.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           submodules: recursive
 
-      - uses: actions/setup-python@v7
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.11"
 
@@ -32,23 +50,61 @@ jobs:
   commits:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
 
+      # Шаблонов здесь нет: каждое сообщение прогоняется через тот же
+      # .githooks/commit-msg, что стоит у разработчика локально. Раньше список
+      # был продублирован в этом шаге, и две копии регулярки обязаны были
+      # совпадать только на честном слове. Хук берёт файл, поэтому сообщение
+      # каждого коммита пишется во временный файл — ровно как это делает git.
+      #
+      # Значения из контекста github передаются через env, а не подставляются
+      # в скрипт выражениями: подстановка идёт в текст скрипта до запуска
+      # оболочки, и имя ветки с кавычками стало бы кодом.
       - name: Сообщения коммитов без упоминаний ИИ
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE_REF: ${{ github.base_ref }}
         run: |
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            RANGE="origin/${{ github.base_ref }}..HEAD"
+          if [ "$EVENT" = "pull_request" ]; then
+            RANGE="origin/$BASE_REF..HEAD"
           else
             RANGE="HEAD"
           fi
-          BAD=$(git log "$RANGE" --format='%H %B' \
-            | grep -iE '^Co-[Aa]uthored-[Bb]y:.*(claude|anthropic|copilot|gpt)|(generated|created|written) with .*(claude|copilot|chatgpt)|🤖' \
-            || true)
-          if [ -n "$BAD" ]; then
-            echo "::error::в сообщениях коммитов есть упоминания ИИ — см. CLAUDE.md"
-            echo "$BAD"
+          msg=$(mktemp)
+          bad=0
+          for sha in $(git rev-list "$RANGE"); do
+            git log -1 --format=%B "$sha" > "$msg"
+            if ! sh .githooks/commit-msg "$msg"; then
+              echo "::error::упоминание ИИ в коммите $sha — см. CLAUDE.md"
+              git log -1 --format='  %h %s' "$sha"
+              bad=1
+            fi
+          done
+          [ "$bad" = 0 ] || exit 1
+          echo "чисто"
+
+      # Сквош-мерж собирает коммит в main из заголовка и описания PR, а не из
+      # сообщений коммитов ветки: чистая ветка с подписью агента в описании
+      # PR дала бы грязный коммит в main, который проверка выше уже не
+      # увидит. Поэтому заголовок и описание проверяются тем же хуком как
+      # будущее сообщение коммита.
+      #
+      # Через env, а не ${{ }} в скрипте, — тем более здесь: заголовок и
+      # описание пишет автор PR, и подстановка в текст скрипта отдала бы ему
+      # выполнение команд на раннере.
+      - name: Заголовок и описание PR без упоминаний ИИ
+        if: github.event_name == 'pull_request'
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          msg=$(mktemp)
+          printf '%s\n\n%s\n' "$PR_TITLE" "$PR_BODY" > "$msg"
+          if ! sh .githooks/commit-msg "$msg"; then
+            echo "::error::упоминание ИИ в заголовке или описании PR — см. CLAUDE.md"
             exit 1
           fi
           echo "чисто"
