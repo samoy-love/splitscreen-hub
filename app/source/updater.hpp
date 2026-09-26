@@ -52,8 +52,10 @@ void check(std::function<void(bool available, const Info& info, const std::strin
 
 /// Качает и сверяет .nro; результат ждёт подмены рядом с приложением. onDone
 /// получает ok и текст: версию при успехе, код ошибки при провале
-/// («download», «checksum», «no self path»). Одновременно идёт не больше
-/// одной закачки.
+/// («download», «checksum» — размер или сумма не сошлись, «no checksum» — в
+/// манифесте нет sha256, «hash» — сумму не удалось посчитать, «mark»,
+/// «no self path»). Без сверенной суммы файл не ставится никогда: скачанное
+/// удаляется. Одновременно идёт не больше одной закачки.
 void install(const Info& info, std::function<void(const Progress&)> onProgress,
              std::function<void(bool ok, const std::string& message)> onDone);
 

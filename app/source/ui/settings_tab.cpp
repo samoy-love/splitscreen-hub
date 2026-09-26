@@ -156,6 +156,8 @@ void SettingsTab::installUpdate()
                     updateStatus->setText("hub/update/failed_download"_i18n);
                 else if (message == "checksum")
                     updateStatus->setText("hub/update/failed_checksum"_i18n);
+                else if (message == "no checksum" || message == "hash")
+                    updateStatus->setText("hub/update/failed_unverified"_i18n);
                 else
                     updateStatus->setText(brls::getStr("hub/update/failed_generic", message));
                 updateButton->setVisibility(brls::Visibility::VISIBLE);

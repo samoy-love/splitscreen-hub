@@ -28,6 +28,7 @@
     "restart": "Restart now",
     "failed_download": "Download failed — check the connection and try again",
     "failed_checksum": "The downloaded file is damaged. Try again",
+    "failed_unverified": "Could not verify the downloaded file, so it was not installed",
     "failed_generic": "Update failed: {}",
     "failed": "Update failed: {}"
   },

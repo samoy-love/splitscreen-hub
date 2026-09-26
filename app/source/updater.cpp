@@ -49,7 +49,8 @@ long long fileSize(const std::string& path)
     return ::stat(path.c_str(), &st) == 0 ? static_cast<long long>(st.st_size) : -1;
 }
 
-/// sha256 файла шестнадцатеричной строкой; пусто, если считать нечем.
+/// sha256 файла шестнадцатеричной строкой в нижнем регистре; пусто, если
+/// считать нечем или файл не прочитался до конца.
 std::string fileSha256(const std::string& path)
 {
 #ifdef __SWITCH__
@@ -63,7 +64,15 @@ std::string fileSha256(const std::string& path)
     size_t n;
     while ((n = std::fread(buf, 1, sizeof buf, f)) > 0)
         mbedtls_sha256_update_ret(&ctx, buf, n);
+    // Ошибка чтения посреди файла дала бы сумму его начала — это не «не
+    // сошлось», а «не посчитали», и ответ должен быть пустым.
+    const bool readFailed = std::ferror(f) != 0;
     std::fclose(f);
+    if (readFailed)
+    {
+        mbedtls_sha256_free(&ctx);
+        return {};
+    }
     unsigned char out[32];
     mbedtls_sha256_finish_ret(&ctx, out);
     mbedtls_sha256_free(&ctx);
@@ -75,6 +84,65 @@ std::string fileSha256(const std::string& path)
     (void)path;
     return {};
 #endif
+}
+
+/// Сумма из манифеста в том виде, в каком её считает fileSha256(): ровно 64
+/// шестнадцатеричных знака в нижнем регистре. Пусто, если это не sha256 —
+/// регистр в манифесте нам не указ, а вот обрезанная или чужая строка должна
+/// остановить обновление, а не пройти сравнение по случайности.
+std::string normalizeSha256(const std::string& value)
+{
+    if (value.size() != 64)
+        return {};
+    std::string out(value);
+    for (char& c : out)
+    {
+        if (c >= 'A' && c <= 'F')
+            c = static_cast<char>(c - 'A' + 'a');
+        else if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')))
+            return {};
+    }
+    return out;
+}
+
+/// Метка «сверено»: одна строка «sha256=<64 знака> size=<байт>». Ключи в
+/// самой строке — чтобы метку, записанную прежними сборками (там сумма могла
+/// оказаться пустой, и строка начиналась с пробела), нельзя было прочитать
+/// как годную: такая не разбирается, и файл при подмене считается чужим.
+bool writeMark(const std::string& path, const std::string& sha, long long size)
+{
+    FILE* f = std::fopen(path.c_str(), "w");
+    if (!f)
+        return false;
+    const bool written = std::fprintf(f, "sha256=%s size=%lld\n", sha.c_str(), size) > 0;
+    return std::fclose(f) == 0 && written;
+}
+
+bool readMark(const std::string& path, std::string& sha, long long& size)
+{
+    FILE* f = std::fopen(path.c_str(), "r");
+    if (!f)
+        return false;
+    char line[160] = {};
+    const bool got = std::fgets(line, sizeof line, f) != nullptr;
+    std::fclose(f);
+    if (!got)
+        return false;
+
+    char hex[65] = {};
+    long long n  = -1;
+    int consumed = 0;
+    if (std::sscanf(line, "sha256=%64[0-9a-f] size=%lld%n", hex, &n, &consumed) != 2)
+        return false;
+    // После размера — только перевод строки: хвост означает, что метка чужая
+    // или испорчена.
+    for (const char* rest = line + consumed; *rest; rest++)
+        if (*rest != '\n' && *rest != '\r')
+            return false;
+
+    sha  = normalizeSha256(hex);
+    size = n;
+    return !sha.empty() && size > 0;
 }
 
 }  // namespace
@@ -199,29 +267,49 @@ void install(const Info& info, std::function<void(const Progress&)> onProgress,
 
         // Сумма — единственное, что отличает целый файл от оборванного на
         // полпути или подменённого по дороге: TLS мы не проверяем (см. net).
-        if (!info.sha256.empty())
+        // Поэтому без неё не ставим ничего: ни когда её нет в манифесте, ни
+        // когда её не удалось посчитать. Прежде в обоих случаях проверка
+        // молча пропускалась, и непроверенный файл уходил в подмену.
+        auto reject = [&tmp, &finish](const std::string& code) {
+            std::remove(tmp.c_str());
+            finish(false, code);
+        };
+
+        const std::string expected = normalizeSha256(info.sha256);
+        if (expected.empty())
         {
-            const std::string got = fileSha256(tmp);
-            if (!got.empty() && got != info.sha256)
-            {
-                std::remove(tmp.c_str());
-                brls::Logger::error("updater: сумма не сошлась: {} вместо {}", got, info.sha256);
-                return finish(false, "checksum");
-            }
+            brls::Logger::error("updater: в манифесте нет годной суммы: «{}»", info.sha256);
+            return reject("no checksum");
+        }
+
+        // Размер из манифеста сверяем отдельно и раньше суммы: оборванная
+        // закачка видна сразу, без чтения всего файла.
+        const long long got = fileSize(tmp);
+        if (info.size > 0 && got != info.size)
+        {
+            brls::Logger::error("updater: размер не сошёлся: {} вместо {}", got, info.size);
+            return reject("checksum");
+        }
+
+        const std::string actual = fileSha256(tmp);
+        if (actual.empty())
+        {
+            brls::Logger::error("updater: сумму {} посчитать не удалось", tmp);
+            return reject("hash");
+        }
+        if (actual != expected)
+        {
+            brls::Logger::error("updater: сумма не сошлась: {} вместо {}", actual, expected);
+            return reject("checksum");
         }
 
         // Метка «сверено»: без неё файл .new при старте считается обрывком и
         // удаляется. Внутри — сумма и размер, размер сверяется ещё раз перед
         // самой подменой.
-        if (FILE* ok = std::fopen(okPath(self).c_str(), "w"))
+        if (!writeMark(okPath(self), actual, got))
         {
-            std::fprintf(ok, "%s %lld\n", info.sha256.c_str(), fileSize(tmp));
-            std::fclose(ok);
-        }
-        else
-        {
-            std::remove(tmp.c_str());
-            return finish(false, "mark");
+            std::remove(okPath(self).c_str());
+            return reject("mark");
         }
 
         finish(true, info.version);
@@ -244,17 +332,12 @@ bool applyPending(std::string& error)
     }
     const std::string tmp = newPath(self), ok = okPath(self), old = oldPath(self);
 
+    std::string sha;
     long long expected = -1;
-    if (FILE* f = std::fopen(ok.c_str(), "r"))
+    if (!readMark(ok, sha, expected) || fileSize(tmp) != expected)
     {
-        char sha[80] = {};
-        if (std::fscanf(f, "%79s %lld", sha, &expected) != 2)
-            expected = -1;
-        std::fclose(f);
-    }
-    if (expected <= 0 || fileSize(tmp) != expected)
-    {
-        // Метка есть, а файл не тот — недописан или подменён. Не рискуем.
+        // Метка есть, а файл не тот — недописан или подменён; или метка не
+        // читается, то есть сверка не доказана. Не рискуем.
         std::remove(tmp.c_str());
         std::remove(ok.c_str());
         error = "size";
