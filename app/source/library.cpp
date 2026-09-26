@@ -43,48 +43,111 @@ std::mutex writeMutex;
 std::atomic<uint64_t> snapshotCounter{0};
 uint64_t lastWritten = 0;  // под writeMutex
 
+bool exists(const std::string& path)
+{
+    struct stat st {};
+    return ::stat(path.c_str(), &st) == 0;
+}
+
+/// Содержимое файла библиотеки, разобранное целиком. Поля заполняются только
+/// при успешном разборе: наполовину прочитанный файл не должен смешаться с
+/// тем, что уже в памяти.
+struct Parsed
+{
+    std::vector<std::string> favs;
+    std::vector<std::string> hidden;
+    std::string lang;
+    std::map<std::string, std::vector<std::string>> folders;
+};
+
+/// false и причина в why — файла нет, он пуст или это не наш JSON.
+bool parseFile(const std::string& path, Parsed& out, std::string& why)
+{
+    std::ifstream in(path);
+    if (!in.good())
+    {
+        why = "не открылся";
+        return false;
+    }
+
+    try
+    {
+        json j;
+        in >> j;
+        Parsed p;
+        p.favs   = j.value("favorites", std::vector<std::string>{});
+        p.hidden = j.value("hidden", std::vector<std::string>{});
+        p.lang   = j.value("language", std::string());
+        for (auto& [name, items] : j.value("folders", json::object()).items())
+            p.folders[name] = items.get<std::vector<std::string>>();
+        out = std::move(p);
+        return true;
+    }
+    catch (const std::exception& e)
+    {
+        why = e.what();
+        return false;
+    }
+}
+
 }  // namespace
 
 bool Library::load(const std::string& path)
 {
     file = path;
 
-    std::ifstream in(file);
-    if (!in.good())
-    {
-        // основного файла нет — возможно, консоль выключили ровно между
-        // переименованиями в writeFile(); тогда целая копия лежит рядом
-        const std::string backup = file + ".bak";
-        std::ifstream fallback(backup);
-        if (fallback.good())
-        {
-            brls::Logger::warning("Библиотека восстановлена из {}", backup);
-            std::rename(backup.c_str(), file.c_str());
-            in.close();
-            in.open(file);
-        }
-    }
-    if (!in.good())
+    const std::string backup = file + ".bak";
+    const bool haveMain      = exists(file);
+    const bool haveBackup    = exists(backup);
+    if (!haveMain && !haveBackup)
         return true;  // библиотеки ещё нет — это нормально при первом запуске
 
-    try
+    // Основной файл, а если он не читается — предыдущая версия из .bak.
+    // Основного может не быть: консоль выключили ровно между переименованиями
+    // в writeFile(). А может он быть и испорчен — обрезан или пуст. Раньше в
+    // этом случае библиотека становилась пустой, и первое же изменение
+    // записывало пустоту поверх, унося заодно и целую копию.
+    Parsed parsed;
+    std::string why;
+    bool loaded     = false;
+    bool mainBroken = false;
+    if (haveMain)
     {
-        json j;
-        in >> j;
-        favs   = j.value("favorites", std::vector<std::string>{});
-        hidden = j.value("hidden", std::vector<std::string>{});
-        lang   = j.value("language", std::string());
-        for (auto& [name, items] : j.value("folders", json::object()).items())
-            folders[name] = items.get<std::vector<std::string>>();
+        loaded     = parseFile(file, parsed, why);
+        mainBroken = !loaded;
+        if (mainBroken)
+            brls::Logger::error("Библиотека {} не читается: {}", file, why);
     }
-    catch (const std::exception& e)
+    if (!loaded && haveBackup)
     {
-        brls::Logger::error("Библиотека повреждена, начинаем с пустой: {}", e.what());
-        favs.clear();
-        folders.clear();
-        hidden.clear();
+        loaded = parseFile(backup, parsed, why);
+        if (loaded)
+            brls::Logger::warning("Библиотека восстановлена из {}", backup);
+        else
+            brls::Logger::error("Копия библиотеки {} не читается: {}", backup, why);
+    }
+
+    // Испорченный основной файл отодвигаем в сторону, а не оставляем на месте:
+    // следующая запись убрала бы его в .bak, а тот — затёрла бы целую копию.
+    // Под именем .corrupt его хотя бы можно достать с карты руками.
+    if (mainBroken)
+    {
+        const std::string corrupt = file + ".corrupt";
+        std::remove(corrupt.c_str());
+        if (std::rename(file.c_str(), corrupt.c_str()) == 0)
+            brls::Logger::warning("Испорченная библиотека сохранена как {}", corrupt);
+    }
+
+    if (!loaded)
+    {
+        brls::Logger::error("Библиотека повреждена, начинаем с пустой");
         return false;
     }
+
+    favs    = std::move(parsed.favs);
+    hidden  = std::move(parsed.hidden);
+    lang    = std::move(parsed.lang);
+    folders = std::move(parsed.folders);
 
     brls::Logger::info("библиотека: загружена из {} — избранного {}, папок {}, скрыто {}", file,
                        favs.size(), folders.size(), hidden.size());
@@ -144,9 +207,15 @@ void Library::writeFile(const std::string& path, const std::string& json, uint64
             return;
         }
         out << json;
-        if (!out.good())
+        // Проверять good() до close() мало: данные уходят на карту при сбросе
+        // буфера, то есть в close(), и ошибка записи — кончилось место, вынули
+        // карту — видна только после него. Иначе обрезанный .tmp лёг бы поверх
+        // целого файла.
+        out.close();
+        if (out.fail())
         {
             brls::Logger::error("Библиотека записалась не полностью");
+            std::remove(tmp.c_str());
             return;
         }
     }
@@ -154,10 +223,23 @@ void Library::writeFile(const std::string& path, const std::string& json, uint64
     // На FAT переименование поверх существующего файла не работает, поэтому
     // просто снести старый и переименовать нельзя: между двумя вызовами файла
     // не существует вовсе, и выдернутая в этот момент консоль унесла бы всю
-    // библиотеку. Держим предыдущую версию под .bak до успешной замены.
+    // библиотеку. Предыдущая версия уходит в .bak и там остаётся: если новая
+    // окажется испорченной, load() возьмёт её. Если основного файла нет (его
+    // отодвинули как испорченный), .bak — единственная целая копия, и её
+    // не трогаем.
     const std::string backup = path + ".bak";
-    std::remove(backup.c_str());
-    const bool hadFile = std::rename(path.c_str(), backup.c_str()) == 0;
+    bool hadFile             = false;
+    if (exists(path))
+    {
+        std::remove(backup.c_str());
+        if (std::rename(path.c_str(), backup.c_str()) != 0)
+        {
+            brls::Logger::error("Не удалось отложить прежнюю библиотеку в {}", backup);
+            std::remove(tmp.c_str());
+            return;
+        }
+        hadFile = true;
+    }
 
     if (std::rename(tmp.c_str(), path.c_str()) != 0)
     {
@@ -166,8 +248,6 @@ void Library::writeFile(const std::string& path, const std::string& json, uint64
             std::rename(backup.c_str(), path.c_str());  // возвращаем как было
         return;
     }
-
-    std::remove(backup.c_str());
 }
 
 bool Library::isFavorite(const std::string& nsuid) const
