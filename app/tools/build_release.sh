@@ -67,16 +67,12 @@ build_native() {
 
 # Исходники FFmpeg и патчи devkitPro — тоже с хоста, если урезанной сборки
 # ещё нет: build_ffmpeg_slim.sh качает их сам, но не из контейнера на
-# раннере (см. ниже). Адреса и версия — из самого build_ffmpeg_slim.sh.
+# раннере (см. ниже). Качает и сверяет суммы он же, в режиме --fetch-only:
+# адреса, версии и суммы живут в одном файле, и выдёргивать их отсюда grep'ом
+# значило бы продублировать проверку или тихо её потерять.
 prefetch_ffmpeg() {
     [ -f "$APP/lib/ffmpeg-slim/lib/libavcodec.a" ] && return 0
-    local ver base work
-    ver="$(grep -m1 '^VER=' "$APP/tools/build_ffmpeg_slim.sh" | cut -d= -f2-)"
-    base="$(grep -m1 '^BASE=' "$APP/tools/build_ffmpeg_slim.sh" | cut -d= -f2- | tr -d '"')"
-    work="$APP/build-ffmpeg"; mkdir -p "$work"
-    [ -f "$work/ffmpeg-$ver.tar.xz" ] || curl -fsSL --retry 3 --connect-timeout 20 -o "$work/ffmpeg-$ver.tar.xz" "https://ffmpeg.org/releases/ffmpeg-$ver.tar.xz"
-    [ -f "$work/ffmpeg-$ver.patch" ]  || curl -fsSL --retry 3 --connect-timeout 20 -o "$work/ffmpeg-$ver.patch" "$base/ffmpeg-$ver.patch"
-    [ -f "$work/tls.patch" ]          || curl -fsSL --retry 3 --connect-timeout 20 -o "$work/tls.patch" "$base/tls.patch"
+    bash "$APP/tools/build_ffmpeg_slim.sh" --fetch-only
 }
 
 # Всё, что тянется из сети, скачивается здесь, до выбора окружения, — с

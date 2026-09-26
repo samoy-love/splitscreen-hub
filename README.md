@@ -305,9 +305,11 @@ pacman -S switch-curl switch-mbedtls switch-sdl2 ninja
 ```
 
 FFmpeg from pacman **does not fit**: the build expects a trimmed local
-`app/lib/ffmpeg-slim` (h264 + aac only, version 7.1 — the only one with a
-devkitPro patch that has `--enable-nvtegra`). The `switch-ffmpeg` package pulls
-the full codec set and adds over ten megabytes to the `.nro`.
+`app/lib/ffmpeg-slim` (h264 + aac only, FFmpeg 7.1.5 — the 7.1 branch is the
+only one with a devkitPro patch that has `--enable-nvtegra`). The
+`switch-ffmpeg` package pulls the full codec set and adds over ten megabytes to
+the `.nro`. The script pins the devkitPro patches to a commit and checks the
+sha256 of the sources and both patches before building.
 
 ```bash
 bash app/tools/build_ffmpeg_slim.sh
