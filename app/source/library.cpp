@@ -78,7 +78,12 @@ bool parseFile(const std::string& path, Parsed& out, std::string& why)
         p.favs   = j.value("favorites", std::vector<std::string>{});
         p.hidden = j.value("hidden", std::vector<std::string>{});
         p.lang   = j.value("language", std::string());
-        for (auto& [name, items] : j.value("folders", json::object()).items())
+        // Объект папок — в переменную: value() возвращает временный json, а
+        // items() — лишь ссылку на него. В заголовке цикла временный объект
+        // умирает раньше, чем начинается обход, и папки читались бы из
+        // освобождённой памяти.
+        const json folders = j.value("folders", json::object());
+        for (auto& [name, items] : folders.items())
             p.folders[name] = items.get<std::vector<std::string>>();
         out = std::move(p);
         return true;
