@@ -278,6 +278,15 @@ int main(int argc, char* argv[])
         fonts::useConsoleFont();
         brls::Application::setGlobalQuit(true);
 
+        // Текстуры обложек принадлежат контексту nanovg, а его borealis
+        // уничтожает сама, ещё внутри mainLoop(): последний виток цикла зовёт
+        // Application::exit(), и тот удаляет платформу вместе с видеоконтекстом.
+        // После выхода из цикла освобождать их уже не во что — вызов шёл по
+        // освобождённой памяти и мог уронить приложение раньше, чем дело дойдёт
+        // до подмены скачанного обновления. Событие выхода срабатывает в самом
+        // начале exit(), пока контекст ещё жив.
+        brls::Application::getExitEvent()->subscribe([]() { covers::clear(); });
+
         step("threads");
         tasks::start();
 
@@ -456,8 +465,9 @@ int main(int argc, char* argv[])
 
         step("shutdown");
         perf::report();
-        // До остановки borealis: текстуры принадлежат её контексту nanovg.
-        covers::clear();
+        // Отсюда и ниже borealis уже остановлена и её платформы нет: ни nanovg,
+        // ни видов, ни brls::sync. Обложки освобождены по событию выхода (см.
+        // выше), а трогать здесь можно только собственные потоки, сеть и файлы.
         tasks::stop();
         net::shutdown();
         step("done");
