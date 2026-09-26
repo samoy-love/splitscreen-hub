@@ -11,7 +11,7 @@ import os
 import sqlite3
 import sys
 
-from paths import ART_DIR, CATALOG_DB
+from paths import ART_DIR, CATALOG_DB, TOPLISTS_DB, TRANSLATIONS_DB
 
 DB = CATALOG_DB
 
@@ -74,6 +74,48 @@ def main():
     check("есть nsuid и название", bool(row[0]) and bool(row[1]))
     check("min <= max", row[3] <= row[4], f"{row[3]}–{row[4]}")
 
+    print("\nЧисло игроков осмысленно у всех строк, а не только у первой:")
+    bad = db.execute("SELECT title, same_screen_min, same_screen_max FROM games"
+                     " WHERE same_screen_min < 1 OR same_screen_min > same_screen_max"
+                     " LIMIT 5").fetchall()
+    check("1 <= min <= max", not bad,
+          "; ".join(f"{t} {a}–{b}" for t, a, b in bad))
+
+    print("\nЗначения помещаются в поля catalog.bin и details.bin:")
+    # Ширины — из make_ship_data.py. Упаковщик сам их не проверяет: u8 и u16
+    # через struct.pack падают на переполнении посреди сборки, а счётчик,
+    # обрезанный по модулю, дал бы на консоли не те жанры и снимки.
+    for col in ("same_screen_min", "same_screen_max", "mentions", "score", "release_year"):
+        lo, hi = db.execute(f"SELECT min(coalesce({col}, 0)), max(coalesce({col}, 0))"
+                            " FROM games").fetchone()
+        check(f"{col} в u16: {lo}..{hi}", 0 <= lo and hi <= 0xFFFF)
+    # Счёт согласия — score рейтинга ×10, а рейтинг нормирован на 100.
+    hi = db.execute("SELECT max(score) FROM games").fetchone()[0] or 0
+    check(f"score не больше 1000: {hi}", hi <= 1000)
+    kinds = db.execute("SELECT count(DISTINCT genre) FROM genres").fetchone()[0]
+    check(f"жанров всего {kinds}, номер жанра — u8", kinds <= 256)
+    for label, sql in (
+        ("жанров у игры", "SELECT nsuid, count(*) FROM genres GROUP BY nsuid"),
+        ("скриншотов у игры", "SELECT nsuid, count(*) FROM media WHERE kind = 'image'"
+                              " GROUP BY nsuid"),
+        ("роликов у игры", "SELECT nsuid, count(*) FROM media WHERE kind = 'video'"
+                           " GROUP BY nsuid"),
+    ):
+        most = db.execute(sql + " ORDER BY 2 DESC LIMIT 1").fetchone()
+        n = most[1] if most else 0
+        check(f"{label} не больше 255 (u8): максимум {n}", n <= 255,
+              most[0] if most and n > 255 else "")
+
+    print("\nФайлы-спутники подмешались:")
+    # build_db.py без файла собирает каталог без него — это законно. Но если
+    # файл есть, а таблица пустая, данные потерялись по дороге.
+    for path, table in ((TRANSLATIONS_DB, "translations"), (TOPLISTS_DB, "ranking")):
+        if not os.path.exists(path):
+            print(f"  [    ] {os.path.basename(path)} нет — {table} не проверяется")
+            continue
+        n = db.execute(f"SELECT count(*) FROM {table}").fetchone()[0]
+        check(f"{table}: {n} строк", n > 0)
+
     print("\nПереиздания аркад скрыты по умолчанию:")
     retro = db.execute("SELECT count(*) FROM games WHERE is_retro = 1").fetchone()[0]
     check(f"помечено ретро: {retro}", retro > 400)
@@ -133,6 +175,12 @@ def main():
     need = [r[0] for r in db.execute("SELECT box_art_file FROM games WHERE box_art_file IS NOT NULL")]
     missing = [f for f in need if not os.path.exists(os.path.join(art_dir, f))]
     check(f"файлов не хватает: {len(missing)}", not missing)
+    # Лишнее в art/ тоже уезжает в бандл и в romfs .nro: обложки выпавших из
+    # каталога игр и недокачанные .tmp.
+    wanted = set(need)
+    stray = sorted(f for f in os.listdir(art_dir) if f not in wanted) \
+        if os.path.isdir(art_dir) else []
+    check(f"лишних файлов: {len(stray)}", not stray, ", ".join(stray[:5]))
     present = [f for f in need[:200] if f not in missing]
     if present:
         avg = sum(os.path.getsize(os.path.join(art_dir, f)) for f in present) / len(present) / 1024
