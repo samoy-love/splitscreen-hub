@@ -75,6 +75,9 @@ class GameActivity : public brls::Activity
     /// Кнопка трейлера создаётся кодом и встаёт первой в полосе медиа рядом со
     /// скриншотами, поэтому её нет в разметке.
     brls::Button* trailerButton = nullptr;
+    /// Идёт ожидание сети перед трейлером. Повторные нажатия в это время
+    /// игнорируются — см. openTrailer().
+    bool waitingNetwork = false;
 
     /// Ставит плитки трейлеров и возвращает, сколько мест они заняли.
     int fillTrailerButton(std::vector<std::string> videos);

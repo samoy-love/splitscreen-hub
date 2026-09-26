@@ -67,6 +67,13 @@ class LibraryTab : public brls::Box
 
     /// Вкладка может закрыться, пока список читается.
     std::shared_ptr<std::atomic_bool> alive = std::make_shared<std::atomic_bool>(true);
+
+    /// Номер последнего запрошенного чтения раздела. Результат с чужим номером
+    /// выбрасывается — см. showSelection(). shared_ptr по той же причине, что и
+    /// CatalogTab::queryGeneration: рабочий поток сверяет номер без
+    /// синхронизации с разрушением вкладки.
+    std::shared_ptr<std::atomic<unsigned long long>> showGeneration
+        = std::make_shared<std::atomic<unsigned long long>>(0);
     void promptNewFolder();
     void promptRename();
     void confirmRemove();

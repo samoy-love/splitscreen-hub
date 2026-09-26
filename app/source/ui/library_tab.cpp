@@ -265,7 +265,14 @@ void LibraryTab::showSelection()
     auto flag  = alive;
     auto* self = this;
 
-    tasks::io([flag, self, ids]() {
+    // Номер чтения. Пул io в несколько потоков, и если быстро перейти из папки
+    // в папку, прежнее чтение может закончиться позже нового: в сетке
+    // оказалась бы прежняя папка, а selected и X работали бы уже с новой.
+    // Устаревший результат просто выбрасываем, как в CatalogTab::reload().
+    auto counter                        = showGeneration;
+    const unsigned long long generation = ++(*counter);
+
+    tasks::io([flag, self, ids, counter, generation]() {
         AppState& state = AppState::get();
         std::vector<Game> games;
         games.reserve(ids.size());
@@ -279,11 +286,12 @@ void LibraryTab::showSelection()
             games.push_back(std::move(g));
         }
 
-        if (!*flag)
+        if (!*flag || *counter != generation)
             return;
 
-        brls::sync([flag, self, games = std::move(games)]() mutable {
-            if (*flag)
+        brls::sync([flag, self, counter, generation, games = std::move(games)]() mutable {
+            // Между рабочим потоком и этим кадром раздел тоже могли сменить.
+            if (*flag && *counter == generation)
                 self->applyGames(std::move(games));
         });
     });

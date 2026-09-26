@@ -9,8 +9,50 @@ std::string searchKey(const std::string& text)
 {
     std::string out;
     out.reserve(text.size());
-    for (char c : text)
-        out += (c >= 'A' && c <= 'Z') ? char(c - 'A' + 'a') : c;
+
+    // Кириллицу разбираем по байтам UTF-8: вся она лежит в двухбайтных
+    // D0 xx и D1 xx, и заводить ради неё локаль или ICU незачем.
+    for (size_t i = 0; i < text.size(); i++)
+    {
+        const unsigned char c = static_cast<unsigned char>(text[i]);
+
+        if (c >= 'A' && c <= 'Z')
+        {
+            out += char(c - 'A' + 'a');
+            continue;
+        }
+
+        if ((c == 0xD0 || c == 0xD1) && i + 1 < text.size())
+        {
+            const unsigned char n = static_cast<unsigned char>(text[i + 1]);
+
+            // Ё и ё сводим к е: букву ё почти никто не набирает, и «ежик» должен
+            // находить «Ёжик». Ключ из названия и ключ из запроса считает одна и
+            // та же функция, так что сравнение от этого не разъезжается.
+            if ((c == 0xD0 && n == 0x81) || (c == 0xD1 && n == 0x91))
+            {
+                out += "\xD0\xB5";  // е
+                i++;
+                continue;
+            }
+            if (c == 0xD0 && n >= 0x90 && n <= 0x9F)  // А–П → а–п
+            {
+                out += char(0xD0);
+                out += char(n + 0x20);
+                i++;
+                continue;
+            }
+            if (c == 0xD0 && n >= 0xA0 && n <= 0xAF)  // Р–Я → р–я
+            {
+                out += char(0xD1);
+                out += char(n - 0x20);
+                i++;
+                continue;
+            }
+        }
+
+        out += char(c);
+    }
     return out;
 }
 
