@@ -24,7 +24,7 @@ permissions:
 
 jobs:
   checks:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, home]
     steps:
       # Сторонние экшены закреплены за полным SHA коммита, а не за тегом: тег
       # можно передвинуть, и тогда в CI молча поедет чужой код. Версия в
@@ -48,7 +48,7 @@ jobs:
         run: bash tools/run_tests.sh
 
   commits:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, home]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
